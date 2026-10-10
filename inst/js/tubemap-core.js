@@ -1,5 +1,5 @@
 /*
- * @jbrowse/tubemap-core 0.2.4 (v0.2.4-1-gba4f215), bundled by tools/bridge.js
+ * @jbrowse/tubemap-core 0.2.5, bundled by tools/bridge.js
  *
  * MIT License
  *
@@ -24,7 +24,7 @@
  * SOFTWARE.
  */
 (() => {
-  // ../tubemap-core/esm/types.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@0.2.5/node_modules/@jbrowse/tubemap-core/esm/types.js
   function emptyTrackShapes() {
     return {
       rectangles: [],
@@ -34,7 +34,7 @@
     };
   }
 
-  // ../tubemap-core/esm/panSN.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@0.2.5/node_modules/@jbrowse/tubemap-core/esm/panSN.js
   var NOT_SAMPLES = /* @__PURE__ */ new Set(["_gbwt_ref", "unknown"]);
   function parsePanSN(name) {
     const [sample, haplotype, contig] = name?.split("#") ?? [];
@@ -44,7 +44,7 @@
     return { sample, haplotype: Number(haplotype), contig };
   }
 
-  // ../tubemap-core/esm/layout.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@0.2.5/node_modules/@jbrowse/tubemap-core/esm/layout.js
   var DEBUG = false;
   function debugLog(...args) {
     if (DEBUG) {
@@ -2112,7 +2112,7 @@
     return successor !== 0 && soleNeighbor(pred, successor) !== 0;
   }
 
-  // ../tubemap-core/esm/geometry.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@0.2.5/node_modules/@jbrowse/tubemap-core/esm/geometry.js
   function groupBy2(items, key) {
     const groups = /* @__PURE__ */ new Map();
     for (const item of items) {
@@ -2290,7 +2290,7 @@
     return d;
   }
 
-  // ../tubemap-core/esm/mismatches.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@0.2.5/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
   function readMismatches(layout) {
     const { nodes, nodeMap } = layout;
     const out = [];

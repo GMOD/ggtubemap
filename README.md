@@ -118,17 +118,30 @@ ggsave("tubemap.pdf", autoplot(tm), width = size[["width"]],
 
 ## Development
 
-The layout bundle `inst/js/tubemap-core.js` is built from `tools/bridge.js`
-and tracked in git, so installing the package needs no Node. To rebuild it
-against the sibling `../tubemap-core` checkout:
+The layout bundle `inst/js/tubemap-core.js` is tracked in git, so installing
+the package needs no Node. It is built by `pnpm bundle` from `tools/bridge.js`
+and the `@jbrowse/tubemap-core` release pinned in `package.json`, and its
+header names that version.
+
+`pnpm update-core [version]` moves to a release, the latest by default: it pins
+it, rebuilds the bundle, and copies that release's goldens into
+`tests/testthat/golden` and its example graphs into `inst/extdata`. The
+goldens come from tubemap-core's own test suite, so `devtools::test()` checks
+that QuickJS lays out exactly as Node does for the release bundled.
+
+The `Update tubemap-core` workflow runs this every day, and on demand from the
+Actions tab, committing to main when R CMD check passes. The `Check` workflow
+runs R CMD check on every push and fails if `pnpm bundle` would change the
+tracked bundle.
+
+To try unreleased core changes, bundle from a checkout's source instead:
 
 ```sh
 pnpm install
-pnpm bundle
+tools/bundle.sh ../tubemap-core
 ```
 
-Its header names the core version and commit it was built from.
-`tests/testthat/golden` holds goldens copied from tubemap-core's own test
-suite, so `devtools::test()` checks that QuickJS lays out exactly as Node does.
+The header then names the checkout's commit; `pnpm bundle` puts the release
+back.
 
 `tools/readme-figures.R` regenerates the figures above.

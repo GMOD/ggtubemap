@@ -6,3 +6,5 @@
 ^tools$
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^\.github$
+^\.git$

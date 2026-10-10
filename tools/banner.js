@@ -1,19 +1,20 @@
-// The bundle's header: the core version it carries and that version's license
+// The bundle's header: the core version it carries and that version's license.
+// A checkout can run ahead of its version, so one given as an argument is
+// named by its commit too.
 import { execFileSync } from 'node:child_process'
-import { readFileSync, realpathSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 
-const dir = new URL('../node_modules/@jbrowse/tubemap-core/', import.meta.url)
+const checkout = process.argv[2]
+const dir = checkout
+  ? pathToFileURL(`${checkout}/`)
+  : new URL('../node_modules/@jbrowse/tubemap-core/', import.meta.url)
 const { version } = JSON.parse(readFileSync(new URL('package.json', dir), 'utf8'))
-// a linked checkout can run ahead of its version, so name the commit too
-let commit = ''
-try {
-  commit = ` (${execFileSync(
-    'git',
-    ['-C', realpathSync(fileURLToPath(dir)), 'describe', '--tags', '--always', '--dirty'],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
-  ).trim()})`
-} catch {}
+const commit = checkout
+  ? ` (${execFileSync('git', ['-C', checkout, 'describe', '--tags', '--always', '--dirty'], {
+      encoding: 'utf8',
+    }).trim()})`
+  : ''
 const license = readFileSync(new URL('LICENSE', dir), 'utf8')
   .trim()
   .split('\n')

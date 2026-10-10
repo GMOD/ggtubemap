@@ -1,0 +1,70 @@
+name: Update tubemap-core
+
+# Takes each @jbrowse/tubemap-core release as it comes out: pins it, rebuilds
+# the bundle, refreshes that release's goldens and example graphs, and commits
+# to main once R CMD check passes. A failing check leaves main alone and fails
+# the run, so the next run tries again.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'tubemap-core version, latest by default'
+        required: false
+
+concurrency: update-core
+
+jobs:
+  update:
+    name: Bundle the latest release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+          cache: pnpm
+      - name: Find the release to take
+        id: release
+        run: |
+          pinned=$(node -p "require('./package.json').devDependencies['@jbrowse/tubemap-core']")
+          wanted=${INPUT_VERSION:-$(npm view @jbrowse/tubemap-core version)}
+          echo "pinned $pinned, wanted $wanted"
+          echo "version=$wanted" >> "$GITHUB_OUTPUT"
+          if [ "$pinned" != "$wanted" ]; then echo "update=true" >> "$GITHUB_OUTPUT"; fi
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+      - if: steps.release.outputs.update
+        run: pnpm install --frozen-lockfile
+      - if: steps.release.outputs.update
+        run: pnpm update-core "$VERSION"
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+      - if: steps.release.outputs.update
+        uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          use-public-rspm: true
+      - if: steps.release.outputs.update
+        uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+      - if: steps.release.outputs.update
+        uses: r-lib/actions/check-r-package@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          args: 'c("--no-manual")'
+          error-on: '"note"'
+      - if: steps.release.outputs.update
+        name: Commit to main
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json pnpm-lock.yaml inst tests
+          git commit -m "Bundle @jbrowse/tubemap-core $VERSION"
+          git push origin HEAD:main
+        env:
+          VERSION: ${{ steps.release.outputs.version }}

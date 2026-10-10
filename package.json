@@ -6,10 +6,11 @@
   "type": "module",
   "packageManager": "pnpm@11.15.1",
   "scripts": {
-    "bundle": "esbuild tools/bridge.js --bundle --format=iife --target=es2020 --legal-comments=inline --banner:js=\"$(node tools/banner.js)\" --outfile=inst/js/tubemap-core.js"
+    "bundle": "tools/bundle.sh",
+    "update-core": "tools/update-core.sh"
   },
   "devDependencies": {
-    "@jbrowse/tubemap-core": "link:../tubemap-core",
+    "@jbrowse/tubemap-core": "0.2.5",
     "esbuild": "^0.28.2"
   }
 }
