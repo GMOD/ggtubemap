@@ -145,3 +145,20 @@ The header then names the checkout's commit; `pnpm bundle` puts the release
 back.
 
 `tools/readme-figures.R` regenerates the figures above.
+
+## See also
+
+- [@jbrowse/tubemap-core](https://github.com/GMOD/tubemap-core) -
+  sequenceTubeMap's layout, without the DOM
+- [ggbandage](https://github.com/GMOD/ggbandage) - Bandage-style graph figures
+  as ggplot2 layers
+- [jbrowse-plugin-graphgenomeviewer](https://github.com/GMOD/jbrowse-plugin-graphgenomeviewer) -
+  JBrowse 2 plugin that browses these graphs by locus
+- [sequenceTubeMap, MemPanG26 edition](https://github.com/cmdcolin/sequenceTubeMap) -
+  our fork of the tube map app
+- [BandageJS](https://github.com/cmdcolin/BandageJS) - standalone page for GFA
+  and gbz-base graphs
+
+Tutorials on [jbrowse.org](https://jbrowse.org/jb2/docs/tutorials/)
+
+- [HPRC part 1: graph alleles and haplotypes](https://jbrowse.org/jb2/docs/tutorials/pangenome_hprc/)
