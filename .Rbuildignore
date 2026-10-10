@@ -1,0 +1,8 @@
+^\.claude$
+^node_modules$
+^package\.json$
+^pnpm-lock\.yaml$
+^pnpm-workspace\.yaml$
+^tools$
+^.*\.Rproj$
+^\.Rproj\.user$

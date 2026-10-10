@@ -1,0 +1,31 @@
+Package: ggtubemap
+Title: Pangenome Tube Maps in 'ggplot2'
+Version: 0.1.0
+Authors@R: c(
+    person("Colin", "Diesh", email = "colin.diesh@gmail.com",
+           role = c("aut", "cre", "cph")),
+    person("Wolfgang", "Beyer", role = "cph",
+           comment = "sequenceTubeMap layout, bundled in inst/js")
+  )
+Description: Draws pangenome graphs as tube maps, the view of
+    'sequenceTubeMap', with 'ggplot2'. The layout runs from the
+    '@jbrowse/tubemap-core' JavaScript library in an embedded 'QuickJS'
+    engine, and every tube, node and base comes back as polygons and text
+    that 'ggplot2' layers draw, so tube maps take scales, themes and vector
+    output like any other plot.
+License: MIT + file LICENSE
+URL: https://github.com/GMOD/ggtubemap
+Depends:
+    R (>= 4.4.0)
+Imports:
+    ggplot2 (>= 3.5.0),
+    grDevices,
+    grid,
+    jsonlite,
+    QuickJSR
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.0.0

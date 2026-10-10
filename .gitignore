@@ -1,0 +1,5 @@
+node_modules/
+.Rproj.user/
+.Rhistory
+.claude/settings.local.json
+.claude/worktrees/

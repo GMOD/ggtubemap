@@ -1,0 +1,15 @@
+{
+  "name": "ggtubemap-js",
+  "private": true,
+  "description": "Builds inst/js/tubemap-core.js, the layout bundle the R package evaluates in QuickJS",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.15.1",
+  "scripts": {
+    "bundle": "esbuild tools/bridge.js --bundle --format=iife --target=es2020 --legal-comments=inline --banner:js=\"$(node tools/banner.js)\" --outfile=inst/js/tubemap-core.js"
+  },
+  "devDependencies": {
+    "@jbrowse/tubemap-core": "link:../tubemap-core",
+    "esbuild": "^0.28.2"
+  }
+}
