@@ -156,9 +156,8 @@ back.
   JBrowse 2 plugin that browses these graphs by locus
 - [sequenceTubeMap, MemPanG26 edition](https://github.com/cmdcolin/sequenceTubeMap) -
   our fork of the tube map app
-- [BandageJS](https://github.com/cmdcolin/BandageJS) - standalone page for GFA
-  and gbz-base graphs
 
 Tutorials on [jbrowse.org](https://jbrowse.org/jb2/docs/tutorials/)
 
 - [HPRC part 1: graph alleles and haplotypes](https://jbrowse.org/jb2/docs/tutorials/pangenome_hprc/)
+
