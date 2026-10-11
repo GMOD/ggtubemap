@@ -42,7 +42,7 @@ tm <- tubemap_layout(g, node_width = "compressed")
 
 ### Colour by anything
 
-Each shape row carries its track's `name`, `strand`, `mapping_quality`,
+Each shape row has its track's `name`, `strand`, `mapping_quality`,
 `sample_name`, `read_group` and `freq`. Add a column and map it:
 
 ```r
