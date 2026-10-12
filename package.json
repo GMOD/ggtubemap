@@ -10,7 +10,7 @@
     "update-core": "tools/update-core.sh"
   },
   "devDependencies": {
-    "@jbrowse/tubemap-core": "0.2.5",
+    "@jbrowse/tubemap-core": "1.1.0",
     "esbuild": "^0.28.2"
   }
 }

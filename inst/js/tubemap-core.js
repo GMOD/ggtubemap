@@ -1,5 +1,5 @@
 /*
- * @jbrowse/tubemap-core 0.2.5, bundled by tools/bridge.js
+ * @jbrowse/tubemap-core 1.1.0, bundled by tools/bridge.js
  *
  * MIT License
  *
@@ -24,7 +24,7 @@
  * SOFTWARE.
  */
 (() => {
-  // node_modules/.pnpm/@jbrowse+tubemap-core@0.2.5/node_modules/@jbrowse/tubemap-core/esm/types.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@1.1.0/node_modules/@jbrowse/tubemap-core/esm/types.js
   function emptyTrackShapes() {
     return {
       rectangles: [],
@@ -34,7 +34,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@0.2.5/node_modules/@jbrowse/tubemap-core/esm/panSN.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@1.1.0/node_modules/@jbrowse/tubemap-core/esm/panSN.js
   var NOT_SAMPLES = /* @__PURE__ */ new Set(["_gbwt_ref", "unknown"]);
   function parsePanSN(name) {
     const [sample, haplotype, contig] = name?.split("#") ?? [];
@@ -44,7 +44,7 @@
     return { sample, haplotype: Number(haplotype), contig };
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@0.2.5/node_modules/@jbrowse/tubemap-core/esm/layout.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@1.1.0/node_modules/@jbrowse/tubemap-core/esm/layout.js
   var DEBUG = false;
   function debugLog(...args) {
     if (DEBUG) {
@@ -267,9 +267,10 @@
     let bottom = 0;
     const panels = subsets.map(({ facet, tracks, reads }, i) => {
       const layout = placeSubset(topology, tracks, reads, nextBandId === void 0 ? void 0 : { [banded]: nextBandId });
-      const bandIds = [...layout.coarsenedEdgeMeta.keys()];
-      if (bandIds.length > 0) {
-        nextBandId = Math.max(...bandIds) + 1;
+      for (const id of layout.coarsenedEdgeMeta.keys()) {
+        if (nextBandId === void 0 || id >= nextBandId) {
+          nextBandId = id + 1;
+        }
       }
       const offsetY = i === 0 ? 0 : bottom + FACET_GAP + FACET_LABEL_HEIGHT - layout.bounds.minY;
       bottom = offsetY + layout.bounds.maxY;
@@ -684,15 +685,15 @@
     let previousValidYB;
     let lastPathIndexA = readA.path.length - 1;
     let lastPathIndexB = readB.path.length - 1;
-    while (!previousValidYA && lastPathIndexA >= 0) {
+    while (previousValidYA === void 0 && lastPathIndexA >= 0) {
       previousValidYA = readA.path[lastPathIndexA]?.y;
       lastPathIndexA -= 1;
     }
-    while (!previousValidYB && lastPathIndexB >= 0) {
+    while (previousValidYB === void 0 && lastPathIndexB >= 0) {
       previousValidYB = readB.path[lastPathIndexB]?.y;
       lastPathIndexB -= 1;
     }
-    if (previousValidYA && previousValidYB) {
+    if (previousValidYA !== void 0 && previousValidYB !== void 0) {
       return previousValidYA - previousValidYB;
     }
     const initialNodeA = readA.path[pathIndexA]?.node;
@@ -909,9 +910,16 @@
   var NODE_HORIZONTAL_SLACK = 20;
   function getImageDimensions(state) {
     const bounds = { minX: 99, maxX: -99, minY: 99, maxY: -99 };
+    const { rectangles, verticalRectangles, curves } = state.shapes;
+    for (const shapes of [rectangles, verticalRectangles, curves]) {
+      for (const { xStart, xEnd } of shapes) {
+        bounds.minX = Math.min(bounds.minX, xStart, xEnd);
+        bounds.maxX = Math.max(bounds.maxX, xStart, xEnd);
+      }
+    }
     state.nodes.forEach((node) => {
       if (node.x !== void 0) {
-        bounds.minX = Math.min(bounds.minX, node.x);
+        bounds.minX = Math.min(bounds.minX, node.x - 9);
         bounds.maxX = Math.max(bounds.maxX, node.x + NODE_HORIZONTAL_SLACK + node.pixelWidth);
       }
       if (node.y !== void 0) {
@@ -1268,6 +1276,10 @@
       }
     });
   }
+  var RISE_KNEE = 35;
+  function riseExtra(rise) {
+    return rise <= RISE_KNEE ? rise / 17.5 : RISE_KNEE / 17.5 * Math.sqrt(rise / RISE_KNEE);
+  }
   function calculateExtraSpace(state) {
     const leftSideEdges = [];
     const rightSideEdges = [];
@@ -1289,8 +1301,7 @@
             rightSideEdges[seg.order] = rightSideEdges[seg.order] + 1;
           }
         } else {
-          const yDifference = Math.abs((seg.y ?? 0) - (prevSeg.y ?? 0));
-          fallAngleAdjustment[seg.order] = Math.max(yDifference / 17.5, fallAngleAdjustment[seg.order]);
+          fallAngleAdjustment[seg.order] = Math.max(riseExtra(Math.abs((seg.y ?? 0) - (prevSeg.y ?? 0))), fallAngleAdjustment[seg.order]);
         }
       }
     });
@@ -2112,7 +2123,7 @@
     return successor !== 0 && soleNeighbor(pred, successor) !== 0;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@0.2.5/node_modules/@jbrowse/tubemap-core/esm/geometry.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@1.1.0/node_modules/@jbrowse/tubemap-core/esm/geometry.js
   function groupBy2(items, key) {
     const groups = /* @__PURE__ */ new Map();
     for (const item of items) {
@@ -2290,7 +2301,7 @@
     return d;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@0.2.5/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@1.1.0/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
   function readMismatches(layout) {
     const { nodes, nodeMap } = layout;
     const out = [];

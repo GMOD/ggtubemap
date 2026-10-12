@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@jbrowse/tubemap-core':
-        specifier: 0.2.5
-        version: 0.2.5
+        specifier: 1.1.0
+        version: 1.1.0
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -173,8 +173,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@jbrowse/tubemap-core@0.2.5':
-    resolution: {integrity: sha512-7aRTUOZljE2fyz3ktnVTEpL+6EHx01tqG3r39WH69v0xZBhZaseXtDUhu2o6SWD1rvEArpPNEVCY1QNPH1VULw==}
+  '@jbrowse/tubemap-core@1.1.0':
+    resolution: {integrity: sha512-7x08COgIJJaSbThSJ2kq5khv92snriLbpvCigyVYRIGt8CK0n9fmtF2tKtWoCHnkkjL7KuMwpjvHqxvJ4pV/XQ==}
 
   esbuild@0.28.2:
     resolution: {integrity: sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==}
@@ -261,7 +261,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@jbrowse/tubemap-core@0.2.5': {}
+  '@jbrowse/tubemap-core@1.1.0': {}
 
   esbuild@0.28.2:
     optionalDependencies:
