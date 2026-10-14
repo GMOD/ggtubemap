@@ -131,8 +131,8 @@ that QuickJS lays out exactly as Node does for the release bundled.
 
 The `Update tubemap-core` workflow runs this every day, and on demand from the
 Actions tab, committing to main when R CMD check passes. The `Check` workflow
-runs R CMD check on every push and fails if `pnpm bundle` would change the
-tracked bundle.
+runs R CMD check on every push except the update's own, which GitHub doesn't
+start workflows for, and fails if `pnpm bundle` would change the tracked bundle.
 
 To try unreleased core changes, bundle from a checkout's source instead:
 
