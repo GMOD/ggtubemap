@@ -36,8 +36,7 @@ normalize_nodes <- function(nodes) {
 }
 
 normalize_tracks <- function(tracks, type) {
-  rows <- as_rows(tracks)
-  Map(function(t, i) {
+  lapply(as_rows(tracks), function(t) {
     t <- rename_fields(
       t,
       c("source_track_id", "sequence_new", "first_node_offset",
@@ -47,11 +46,23 @@ normalize_tracks <- function(tracks, type) {
     )
     # a list, never a bare string, so a one-node path stays a JSON array
     t$sequence <- as.list(as.character(unlist(t$sequence)))
-    if (is.null(t$id)) t$id <- i - 1L
     if (is.null(t$sourceTrackID)) t$sourceTrackID <- if (type == "read") 1L else 0L
     if (type == "read") t$type <- "read"
     t
-  }, rows, seq_along(rows))
+  })
+}
+
+# Shapes find their track by id, so a track or read without one takes the next
+# id past every id given
+fill_ids <- function(tracks) {
+  ids <- lapply(tracks, `[[`, "id")
+  missing <- vapply(ids, is.null, logical(1))
+  first <- max(-1L, unlist(ids)) + 1L
+  tracks[missing] <- Map(function(t, id) {
+    t$id <- id
+    t
+  }, tracks[missing], first + seq_len(sum(missing)) - 1L)
+  tracks
 }
 
 # an empty list goes out as {}, not []
@@ -104,10 +115,13 @@ tubemap_layout <- function(graph, reads = graph$reads,
   if (!is.null(facet_by)) {
     facet_by <- match.arg(facet_by, c("sample_name", "read_group", "haplotype_sample"))
   }
+  tracks <- normalize_tracks(graph$tracks, "haplotype")
+  reads <- if (is.null(reads)) list() else normalize_tracks(reads, "read")
+  all <- fill_ids(c(tracks, reads))
   request <- list(
     nodes = normalize_nodes(graph$nodes),
-    tracks = normalize_tracks(graph$tracks, "haplotype"),
-    reads = if (is.null(reads)) list() else normalize_tracks(reads, "read"),
+    tracks = all[seq_along(tracks)],
+    reads = all[length(tracks) + seq_along(reads)],
     topology = compact(list(
       nodeWidthOption = node_width,
       mergeNodes = merge_nodes,

@@ -85,6 +85,21 @@ test_that("a path through one node stays a path", {
   expect_equal(levels(tm$shapes$haplotype), c("ref", "short"))
 })
 
+test_that("reads without ids number on past the haplotypes", {
+  graph <- tubemap_example("example-6")
+  strip_id <- function(t) {
+    t$id <- NULL
+    t
+  }
+  graph$tracks <- lapply(graph$tracks, strip_id)
+  graph$reads <- lapply(graph$reads, strip_id)
+  tm <- tubemap_layout(graph)
+  expect_equal(sum(tm$tracks$type == "haplotype"), length(graph$tracks))
+  expect_equal(sum(tm$tracks$type == "read"), length(graph$reads))
+  haplotypes <- tm$shapes[tm$shapes$type == "haplotype", ]
+  expect_false(anyNA(haplotypes$haplotype))
+})
+
 test_that("tracks may come as a data frame with a list column", {
   graph <- list(
     nodes = data.frame(name = c("1", "2", "3"), seq = c("ACGT", "A", "G")),
