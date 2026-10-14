@@ -59,10 +59,10 @@ than adding another tube layer, which would draw over the nodes.
 
 ### Reads
 
-Reads come with the graph in sequenceTubeMap's extracted form, as in the
-`brca1` and `hprc-chrM` examples. `autoplot()` colours them by strand, fades
-them by mapping quality, and marks their substitutions, deletions and
-insertions. `coord_tubemap()` zooms in by layout pixel:
+Reads come with the graph in sequenceTubeMap's extracted form, as in the `brca1`
+and `hprc-chrM` examples. `autoplot()` colours them by strand, fades them by
+mapping quality, and marks their substitutions, deletions and insertions.
+`coord_tubemap()` zooms in by layout pixel:
 
 ```r
 br <- tubemap_layout(tubemap_example("brca1"))
@@ -119,21 +119,18 @@ ggsave("tubemap.pdf", autoplot(tm), width = size[["width"]],
 
 ## Development
 
-The layout bundle `inst/js/tubemap-core.js` is tracked in git, so installing
-the package needs no Node. `pnpm bundle` builds it from `tools/bridge.js` and
-the `@jbrowse/tubemap-core` release pinned in `package.json`, and writes that
-version into its header.
+Git tracks the layout bundle `inst/js/tubemap-core.js`. `pnpm bundle` builds it
+from `tools/bridge.js` and the `@jbrowse/tubemap-core` release pinned in
+`package.json`, and writes that version into its header.
 
 `pnpm update-core [version]` pins a tubemap-core release, the latest by default,
 rebuilds the bundle, and copies that release's goldens into
-`tests/testthat/golden` and its example graphs into `inst/extdata`. The goldens
-come from tubemap-core's own test suite, so `devtools::test()` checks that
-QuickJS lays out exactly as Node does for the release bundled.
+`tests/testthat/golden` and its example graphs into `inst/extdata`.
+`devtools::test()` then checks that QuickJS lays out exactly as Node does.
 
-The `Update tubemap-core` workflow runs this every day, and on demand from the
-Actions tab, committing to main when R CMD check passes. The `Check` workflow
-runs R CMD check on every push except the update's own, which GitHub doesn't
-start workflows for, and fails if `pnpm bundle` would change the tracked bundle.
+The `Update tubemap-core` workflow runs this daily, committing to main when R
+CMD check passes. The `Check` workflow runs R CMD check on every other push, and
+fails if `pnpm bundle` would change the tracked bundle.
 
 To try unreleased core changes, bundle from a checkout's source instead:
 
@@ -161,4 +158,3 @@ back.
 Tutorials on [jbrowse.org](https://jbrowse.org/jb2/docs/tutorials/)
 
 - [HPRC part 1: graph alleles and haplotypes](https://jbrowse.org/jb2/docs/tutorials/pangenome_hprc/)
-
