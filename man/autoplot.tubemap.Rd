@@ -10,6 +10,8 @@
   reads = NULL,
   sequence = object$node_width == "normal",
   mismatches = sequence,
+  xlim = NULL,
+  ylim = NULL,
   ...
 )
 }
@@ -25,6 +27,9 @@ over the nodes.}
 at \code{"normal"} width, the only width at which bases fit.}
 
 \item{mismatches}{Draw read mismatches; by default under the same rule.}
+
+\item{xlim, ylim}{Limits in layout pixels, to zoom in on part of the map, as
+in \code{\link[=coord_tubemap]{coord_tubemap()}}.}
 
 \item{...}{Unused.}
 }

@@ -239,6 +239,14 @@ geom_tubemap_panel_labels <- function(tubemap, size = 8) {
   )
 }
 
+tubemap_limits <- function(tubemap, xlim, ylim, pad) {
+  b <- tubemap$bounds
+  list(
+    x = xlim %||% c(b$minX - pad, b$maxX + pad),
+    y = ylim %||% c(b$minY - pad, b$maxY + pad)
+  )
+}
+
 #' Coordinates for a tube map
 #'
 #' The layout's y runs downward and its curves assume square pixels, so a
@@ -251,9 +259,9 @@ geom_tubemap_panel_labels <- function(tubemap, size = 8) {
 #' @export
 coord_tubemap <- function(tubemap = NULL, xlim = NULL, ylim = NULL, pad = 20) {
   if (!is.null(tubemap)) {
-    b <- tubemap$bounds
-    xlim <- xlim %||% c(b$minX - pad, b$maxX + pad)
-    ylim <- ylim %||% c(b$minY - pad, b$maxY + pad)
+    lim <- tubemap_limits(tubemap, xlim, ylim, pad)
+    xlim <- lim$x
+    ylim <- lim$y
   }
   list(
     scale_y_reverse(),

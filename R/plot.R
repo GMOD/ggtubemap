@@ -13,6 +13,8 @@
 #' @param sequence Print each node's bases. By default, when nodes are drawn
 #'   at `"normal"` width, the only width at which bases fit.
 #' @param mismatches Draw read mismatches; by default under the same rule.
+#' @param xlim,ylim Limits in layout pixels, to zoom in on part of the map, as
+#'   in [coord_tubemap()].
 #' @param ... Unused.
 #' @return A ggplot. With the default haplotype fill it carries
 #'   [scale_fill_tubemap()], whose legend is dropped past 12 haplotypes; a
@@ -28,7 +30,8 @@
 #' ggplot2::autoplot(micb, haplotypes = ggplot2::aes(fill = phase))
 autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
                              sequence = object$node_width == "normal",
-                             mismatches = sequence, ...) {
+                             mismatches = sequence, xlim = NULL, ylim = NULL,
+                             ...) {
   levels <- nlevels(object$shapes$haplotype)
   ggplot() +
     geom_tubemap_haplotypes(object, haplotypes) +
@@ -40,7 +43,7 @@ autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
     (if (is.null(haplotypes$fill)) {
       scale_fill_tubemap(guide = if (levels > 12) "none" else "legend")
     }) +
-    coord_tubemap(object) +
+    coord_tubemap(object, xlim = xlim, ylim = ylim) +
     theme_tubemap()
 }
 
@@ -96,16 +99,19 @@ theme_tubemap <- function(base_size = 9) {
 #' @param px_per_in Layout pixels per inch.
 #' @param pad As in [coord_tubemap()].
 #' @param legend Extra height in inches to leave for a legend.
+#' @param xlim,ylim As in [coord_tubemap()], for a map zoomed in on part of
+#'   the layout.
 #' @return A named vector of `width` and `height`, to pass to
 #'   [ggplot2::ggsave()].
 #' @export
 #' @examples
 #' tm <- tubemap_layout(tubemap_example("brca1"), node_width = "compressed")
 #' tubemap_size(tm)
-tubemap_size <- function(tubemap, px_per_in = 96, pad = 20, legend = 0) {
-  b <- tubemap$bounds
+tubemap_size <- function(tubemap, px_per_in = 96, pad = 20, legend = 0,
+                         xlim = NULL, ylim = NULL) {
+  lim <- tubemap_limits(tubemap, xlim, ylim, pad)
   c(
-    width = (b$maxX - b$minX + 2 * pad) / px_per_in,
-    height = (b$maxY - b$minY + 2 * pad) / px_per_in + legend
+    width = abs(diff(lim$x)) / px_per_in,
+    height = abs(diff(lim$y)) / px_per_in + legend
   )
 }

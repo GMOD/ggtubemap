@@ -70,4 +70,11 @@ test_that("tubemap_size prints the layout at the asked pixels per inch", {
   b <- tm$bounds
   expect_equal(tubemap_size(tm, px_per_in = 100, pad = 0),
                c(width = (b$maxX - b$minX) / 100, height = (b$maxY - b$minY) / 100))
+  expect_equal(tubemap_size(tm, px_per_in = 100, xlim = c(0, 300))[["width"]], 3)
+})
+
+test_that("autoplot zooms without replacing its scale or coord", {
+  tm <- tubemap_layout(tubemap_example("brca1"))
+  p <- expect_silent(autoplot(tm, xlim = c(250, 900)))
+  expect_equal(p$coordinates$limits$x, c(250, 900))
 })

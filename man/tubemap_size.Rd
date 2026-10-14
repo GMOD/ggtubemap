@@ -4,7 +4,14 @@
 \alias{tubemap_size}
 \title{Output size for a tube map}
 \usage{
-tubemap_size(tubemap, px_per_in = 96, pad = 20, legend = 0)
+tubemap_size(
+  tubemap,
+  px_per_in = 96,
+  pad = 20,
+  legend = 0,
+  xlim = NULL,
+  ylim = NULL
+)
 }
 \arguments{
 \item{tubemap}{A \code{\link[=tubemap_layout]{tubemap_layout()}}.}
@@ -14,6 +21,9 @@ tubemap_size(tubemap, px_per_in = 96, pad = 20, legend = 0)
 \item{pad}{As in \code{\link[=coord_tubemap]{coord_tubemap()}}.}
 
 \item{legend}{Extra height in inches to leave for a legend.}
+
+\item{xlim, ylim}{As in \code{\link[=coord_tubemap]{coord_tubemap()}}, for a map zoomed in on part of
+the layout.}
 }
 \value{
 A named vector of \code{width} and \code{height}, to pass to

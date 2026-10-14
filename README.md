@@ -62,11 +62,11 @@ than adding another tube layer, which would draw over the nodes.
 Reads come with the graph in sequenceTubeMap's extracted form, as in the `brca1`
 and `hprc-chrM` examples. `autoplot()` colours them by strand, fades them by
 mapping quality, and marks their substitutions, deletions and insertions.
-`coord_tubemap()` zooms in by layout pixel:
+`xlim` and `ylim` zoom in by layout pixel:
 
 ```r
 br <- tubemap_layout(tubemap_example("brca1"))
-autoplot(br) + coord_tubemap(br, xlim = c(250, 900))
+autoplot(br, xlim = c(250, 900))
 ```
 
 ![Reads stacked under the BRCA1 reference, substitutions printed on them](man/figures/brca1.png)
