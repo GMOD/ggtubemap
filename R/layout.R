@@ -19,7 +19,7 @@ rename_fields <- function(x, from, to) {
 as_rows <- function(x) {
   if (is.data.frame(x)) {
     lapply(seq_len(nrow(x)), function(i) {
-      row <- lapply(x, function(col) if (is.list(col)) col[[i]] else col[[i]])
+      row <- lapply(x, `[[`, i)
       row[!vapply(row, function(v) length(v) == 1 && is.na(v), logical(1))]
     })
   } else {

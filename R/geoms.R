@@ -4,10 +4,16 @@
 NULL
 
 merge_aes <- function(base, extra) {
-  for (name in names(extra)) {
-    base[[name]] <- extra[[name]]
-  }
+  base[names(extra)] <- extra
   base
+}
+
+tubemap_layer <- function(geom, data, mapping, params, show.legend = FALSE) {
+  layer(
+    data = data, mapping = mapping, stat = "identity", geom = geom,
+    position = "identity", show.legend = show.legend, inherit.aes = FALSE,
+    params = params
+  )
 }
 
 # Points per layout pixel in the panel being drawn. coord_tubemap() keeps the
@@ -85,11 +91,7 @@ tube_layer <- function(data, mapping, seam, params) {
     ))$colour
     params$linewidth <- params$linewidth %||% 0.1
   }
-  layer(
-    data = data, mapping = mapping, stat = "identity", geom = GeomPolygon,
-    position = "identity", show.legend = NA, inherit.aes = FALSE,
-    params = params
-  )
+  tubemap_layer(GeomPolygon, data, mapping, params, show.legend = NA)
 }
 
 #' Tube map layers
@@ -142,11 +144,7 @@ geom_tubemap_reads <- function(tubemap, mapping = NULL, seam = TRUE, ...) {
 #' @export
 geom_tubemap_nodes <- function(tubemap, mapping = NULL, ...) {
   mapping <- merge_aes(aes(x = x, y = y, group = group), mapping)
-  layer(
-    data = tubemap$outlines, mapping = mapping, stat = "identity",
-    geom = GeomTubemapOutline, position = "identity", show.legend = FALSE,
-    inherit.aes = FALSE, params = list(...)
-  )
+  tubemap_layer(GeomTubemapOutline, tubemap$outlines, mapping, list(...))
 }
 
 #' @describeIn tubemap_layers Each node's bases, 14 layout pixels high, in a
@@ -156,11 +154,8 @@ geom_tubemap_nodes <- function(tubemap, mapping = NULL, ...) {
 #' @export
 geom_tubemap_sequence <- function(tubemap, mapping = NULL, min_size = 1.5, ...) {
   mapping <- merge_aes(aes(x = x, y = y, label = base), mapping)
-  layer(
-    data = tubemap$bases, mapping = mapping, stat = "identity",
-    geom = GeomTubemapText, position = "identity", show.legend = FALSE,
-    inherit.aes = FALSE, params = list(min_size = min_size, ...)
-  )
+  tubemap_layer(GeomTubemapText, tubemap$bases, mapping,
+                list(min_size = min_size, ...))
 }
 
 #' @describeIn tubemap_layers Each read's differences from the graph:
@@ -182,24 +177,18 @@ geom_tubemap_mismatches <- function(tubemap, soft_clips = FALSE, min_size = 1.5,
   substitutions <- mm[mm$type == "substitution", , drop = FALSE]
   insertions <- mm[mm$type == "insertion", , drop = FALSE]
   text <- function(data, label, dx) {
-    layer(
-      data = transform(data, .label = label, .x = x + dx, .y = y + height),
-      mapping = aes(x = .x, y = .y, label = .label), stat = "identity",
-      geom = GeomTubemapText, position = "identity", show.legend = FALSE,
-      inherit.aes = FALSE,
-      params = list(min_size = min_size, size = 12, hjust = 0)
-    )
+    tubemap_layer(GeomTubemapText, data,
+                  merge_aes(aes(x = x + dx, y = y + height), label),
+                  list(min_size = min_size, size = 12, hjust = 0))
   }
   list(
-    if (nrow(deletions) > 0) layer(
-      data = deletions,
-      mapping = aes(xmin = x, xmax = x_end, ymin = y, ymax = y + height),
-      stat = "identity", geom = GeomRect, position = "identity",
-      show.legend = FALSE, inherit.aes = FALSE,
-      params = list(fill = deletion_fill)
-    ),
-    if (nrow(substitutions) > 0) text(substitutions, substitutions$seq, 1),
-    if (nrow(insertions) > 0) text(insertions, "*", -3)
+    if (nrow(deletions) > 0) {
+      tubemap_layer(GeomRect, deletions,
+                    aes(xmin = x, xmax = x_end, ymin = y, ymax = y + height),
+                    list(fill = deletion_fill))
+    },
+    if (nrow(substitutions) > 0) text(substitutions, aes(label = seq), 1),
+    if (nrow(insertions) > 0) text(insertions, aes(label = "*"), -3)
   )
 }
 
@@ -221,21 +210,15 @@ geom_tubemap_panel_labels <- function(tubemap, size = 8) {
   panels$label_y <- panels$rule_y + 4
   rules <- panels[-1, , drop = FALSE]
   list(
-    if (nrow(rules) > 0) layer(
-      data = rules,
-      mapping = aes(x = x, xend = b$maxX, y = rule_y, yend = rule_y),
-      stat = "identity", geom = GeomSegment, position = "identity",
-      show.legend = FALSE, inherit.aes = FALSE,
-      params = list(colour = "#bbbbbb", linetype = "dashed", linewidth = 0.3)
-    ),
-    layer(
-      data = panels, mapping = aes(x = x, y = label_y, label = label),
-      stat = "identity", geom = GeomTubemapText, position = "identity",
-      show.legend = FALSE, inherit.aes = FALSE,
-      params = list(points = TRUE, min_size = 0, size = size, hjust = 0,
-                    vjust = 1, family = "sans", fontface = 2,
-                    colour = "#333333")
-    )
+    if (nrow(rules) > 0) {
+      tubemap_layer(GeomSegment, rules,
+                    aes(x = x, xend = b$maxX, y = rule_y, yend = rule_y),
+                    list(colour = "#bbbbbb", linetype = "dashed", linewidth = 0.3))
+    },
+    tubemap_layer(GeomTubemapText, panels, aes(x = x, y = label_y, label = label),
+                  list(points = TRUE, min_size = 0, size = size, hjust = 0,
+                       vjust = 1, family = "sans", fontface = 2,
+                       colour = "#333333"))
   )
 }
 
