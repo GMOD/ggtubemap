@@ -7,7 +7,7 @@ ggplot2. The layout is sequenceTubeMap's own, from
 embedded QuickJS engine; the drawing is ordinary ggplot2 layers, so a tube map
 takes scales, themes, `patchwork` and vector output like any other plot.
 
-Not yet published; from a checkout:
+The package is not published yet, so install it from a checkout:
 
 ```r
 devtools::install()
@@ -40,7 +40,7 @@ tm <- tubemap_layout(g, node_width = "compressed")
 `read_gfa()` reads `P` and `W` lines; walks get PanSN names,
 `sample#haplotype#contig`.
 
-### Colour by anything
+### Colour mappings
 
 Each shape row has its track's `name`, `strand`, `mapping_quality`,
 `sample_name`, `read_group` and `freq`. Add a column and map it:
@@ -60,8 +60,8 @@ than adding another tube layer, which would draw over the nodes.
 ### Reads
 
 Reads come with the graph in sequenceTubeMap's extracted form, as in the
-`brca1` and `hprc-chrM` examples. They are coloured by strand, faded by
-mapping quality, and marked with their substitutions, deletions and
+`brca1` and `hprc-chrM` examples. `autoplot()` colours them by strand, fades
+them by mapping quality, and marks their substitutions, deletions and
 insertions. `coord_tubemap()` zooms in by layout pixel:
 
 ```r
@@ -82,11 +82,11 @@ chrm <- tubemap_layout(tubemap_example("hprc-chrM"),
 autoplot(chrm)
 ```
 
-![43 mitochondrial haplotypes, with each sample's reads in its own panel](man/figures/hprc-chrM-facets.png)
+![43 mitochondrial haplotypes, with the reads of each sample in a separate panel](man/figures/hprc-chrM-facets.png)
 
-### Building your own
+### Custom plots
 
-`autoplot()` is these layers, each taking the layout:
+`autoplot()` builds the plot from these layers, each of which takes the layout:
 
 ```r
 ggplot() +
@@ -99,16 +99,17 @@ ggplot() +
   theme_tubemap()
 ```
 
-`coord_tubemap()` matters: the layout's y runs downward and its curves assume
-square pixels.
+`coord_tubemap()` reverses the y scale and fixes the aspect ratio at 1, because
+the layout's y runs downward and its curves assume square pixels.
 
 ## Output size
 
 Text and node outlines are sized in layout pixels and scale with the plot, so a
-map reads the same at any size, and sequence that would print smaller than
-1.5 pt is left out, as the viewer hides it when zoomed out. `tubemap_size()`
-gives the inches at which the map prints at a chosen pixels per inch; at the
-default 96 it matches sequenceTubeMap at 100%:
+map looks the same at any size. The text layers drop sequence that would print
+smaller than 1.5 pt, as the viewer hides it when zoomed out.
+
+`tubemap_size()` gives the inches at which the map prints at a chosen pixels per
+inch; at the default 96 it matches sequenceTubeMap at 100%:
 
 ```r
 size <- tubemap_size(tm, legend = 0.5)
@@ -119,15 +120,16 @@ ggsave("tubemap.pdf", autoplot(tm), width = size[["width"]],
 ## Development
 
 The layout bundle `inst/js/tubemap-core.js` is tracked in git, so installing
-the package needs no Node. It is built by `pnpm bundle` from `tools/bridge.js`
-and the `@jbrowse/tubemap-core` release pinned in `package.json`, and its
-header names that version.
+the package needs no Node. `pnpm bundle` builds it from `tools/bridge.js` and
+the `@jbrowse/tubemap-core` release pinned in `package.json`, and writes that
+version into its header.
 
-`pnpm update-core [version]` moves to a release, the latest by default: it pins
-it, rebuilds the bundle, and copies that release's goldens into
-`tests/testthat/golden` and its example graphs into `inst/extdata`. The
-goldens come from tubemap-core's own test suite, so `devtools::test()` checks
-that QuickJS lays out exactly as Node does for the release bundled.
+`pnpm update-core [version]` pins a tubemap-core release, the latest by default,
+rebuilds the bundle, and copies that release's goldens into
+`tests/testthat/golden` and its example graphs into `inst/extdata`. The goldens
+come from tubemap-core's own test suite, so `devtools::test()` checks that the
+layout under QuickJS matches the layout under Node exactly for the bundled
+release.
 
 The `Update tubemap-core` workflow runs this every day, and on demand from the
 Actions tab, committing to main when R CMD check passes. The `Check` workflow
@@ -141,8 +143,8 @@ pnpm install
 tools/bundle.sh ../tubemap-core
 ```
 
-The header then names the checkout's commit; `pnpm bundle` puts the release
-back.
+The header then holds the checkout's commit, and `pnpm bundle` restores the
+pinned release.
 
 `tools/readme-figures.R` regenerates the figures above.
 
