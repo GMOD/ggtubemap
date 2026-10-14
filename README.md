@@ -73,6 +73,22 @@ autoplot(br, xlim = c(250, 900))
 
 ![Reads stacked under the BRCA1 reference, substitutions printed on them](man/figures/brca1.png)
 
+### Ruler and positions
+
+`autoplot()` draws a ruler along the top in the coordinates of the first track
+with an `index_of_first_base`. `read_gfa()` gives every track one, taken from
+a walk's start or from a path named `name[start-end]` or `name:start-end`, and
+0 for other paths. Draw the ruler on a custom plot with `scale_x_tubemap(tm)`.
+
+`tubemap_x()` turns positions on that track into layout x, to mark a region:
+
+```r
+micb <- tubemap_layout(tubemap_example("micb-kir3dl1"), node_width = "compressed")
+autoplot(micb) +
+  annotate("rect", xmin = tubemap_x(micb, 31500700), xmax = tubemap_x(micb, 31500800),
+           ymin = -Inf, ymax = Inf, fill = "gold", alpha = 0.3)
+```
+
 ### Facets
 
 `facet_by` stacks one panel per `sample_name`, `read_group` or PanSN

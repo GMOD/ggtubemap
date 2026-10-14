@@ -26,6 +26,10 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #' 1.0 or 1.1 file, for [tubemap_layout()]. Links are not needed: the layout
 #' follows the paths. A walk is named in PanSN form, `sample#haplotype#contig`.
 #'
+#' Each track's `index_of_first_base`, the coordinate the ruler starts from, is
+#' a walk's start, or the start in a path named as a subpath (`name[start-end]`
+#' or `name:start-end`), or else 0.
+#'
 #' @param path A GFA file, optionally gzipped.
 #' @param reference The name of the path to draw as the reference, which the
 #'   layout puts first. By default the first path in the file.
@@ -53,13 +57,15 @@ read_gfa <- function(path, reference = NULL) {
   paths <- lapply(fields[kind == "P"], function(f) {
     steps <- strsplit(f[3], ",", fixed = TRUE)[[1]]
     oriented <- ifelse(endsWith(steps, "-"), "-", "")
-    list(name = f[2], sequence = paste0(oriented, substr(steps, 1, nchar(steps) - 1)))
+    list(name = f[2], sequence = paste0(oriented, substr(steps, 1, nchar(steps) - 1)),
+         index_of_first_base = path_start(f[2]))
   })
   walks <- lapply(fields[kind == "W"], function(f) {
     steps <- regmatches(f[7], gregexpr("[<>][^<>]+", f[7]))[[1]]
     oriented <- ifelse(startsWith(steps, "<"), "-", "")
     list(name = paste(f[2], f[3], f[4], sep = "#"),
-         sequence = paste0(oriented, substring(steps, 2)))
+         sequence = paste0(oriented, substring(steps, 2)),
+         index_of_first_base = as.numeric(f[5]))
   })
   tracks <- c(paths, walks)
   if (length(tracks) == 0) {
@@ -73,4 +79,11 @@ read_gfa <- function(path, reference = NULL) {
     tracks <- c(tracks[first[1]], tracks[-first[1]])
   }
   list(nodes = nodes, tracks = tracks)
+}
+
+# The start of a subpath, named `name[start-end]` as vg writes it or
+# `name:start-end` as odgi does, and otherwise 0
+path_start <- function(name) {
+  m <- regmatches(name, regexec("(\\[|:)([0-9]+)(-[0-9]+)?\\]?$", name))[[1]]
+  if (length(m) == 0) 0 else as.numeric(m[3])
 }

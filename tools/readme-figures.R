@@ -2,11 +2,12 @@
 devtools::load_all(quiet = TRUE)
 library(ggplot2)
 
-# autoplot(tubemap, ...) plus `extra`, `width` inches wide and as tall as the
-# map's aspect needs, plus `legend`
+# autoplot(tubemap, ...) plus `extra`, the map `width` inches wide, with room
+# for the ruler and `legend`
 save <- function(name, tubemap, width, ..., xlim = NULL, legend = 0.35,
                  extra = NULL) {
-  px_per_in <- tubemap_size(tubemap, px_per_in = 1, xlim = xlim)[["width"]] / width
+  map <- tubemap_size(tubemap, px_per_in = 1, xlim = xlim, ruler = FALSE)
+  px_per_in <- map[["width"]] / width
   size <- tubemap_size(tubemap, px_per_in, legend = legend, xlim = xlim)
   ggsave(file.path("man/figures", name),
          autoplot(tubemap, ..., xlim = xlim) + extra,

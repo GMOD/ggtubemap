@@ -20,9 +20,22 @@ test_that("read_gfa reads segments, paths and walks", {
   expect_equal(g$nodes$name, c("1", "2", "3", "4"))
   expect_equal(g$nodes$seq, c("ACGT", "A", NA, "TTGCA"))
   expect_equal(g$nodes$sequence_length, c(4, 1, 7, 5))
-  expect_equal(g$tracks[[1]], list(name = "ref", sequence = c("1", "2", "4")))
+  expect_equal(g$tracks[[1]], list(name = "ref", sequence = c("1", "2", "4"),
+                                   index_of_first_base = 0))
   expect_equal(g$tracks[[2]],
-               list(name = "HG002#1#chr1", sequence = c("1", "-3", "4")))
+               list(name = "HG002#1#chr1", sequence = c("1", "-3", "4"),
+                    index_of_first_base = 0))
+})
+
+test_that("subpath names and walks give the ruler its start", {
+  expect_equal(path_start("GRCh38#0#chr6[31000000-31100000]"), 31000000)
+  expect_equal(path_start("GRCh38#0#chr6:2000-3000"), 2000)
+  expect_equal(path_start("GRCh38#0#chr6"), 0)
+  tm <- tubemap_layout(read_gfa(write_gfa(sub("\tref\t", "\tref[100-112]\t", gfa))),
+                       merge_nodes = FALSE)
+  expect_equal(tm$ruler$start, c(100, 104, 105))
+  expect_equal(tubemap_x(tm, c(100, 104, 99, 200)),
+               c(tm$bases$x[1], tm$bases$x[tm$bases$node == "2"], NA, NA))
 })
 
 test_that("read_gfa puts the named reference first", {

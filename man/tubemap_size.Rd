@@ -10,7 +10,8 @@ tubemap_size(
   pad = 20,
   legend = 0,
   xlim = NULL,
-  ylim = NULL
+  ylim = NULL,
+  ruler = nrow(tubemap$ruler) > 0
 )
 }
 \arguments{
@@ -24,6 +25,10 @@ tubemap_size(
 
 \item{xlim, ylim}{As in \code{\link[=coord_tubemap]{coord_tubemap()}}, for a map zoomed in on part of
 the layout.}
+
+\item{ruler}{Leave room for \code{\link[=scale_x_tubemap]{scale_x_tubemap()}}'s ruler as
+\code{\link[=autoplot.tubemap]{autoplot.tubemap()}} draws it: 0.2 inches above, and wider side margins
+for the labels at either end.}
 }
 \value{
 A named vector of \code{width} and \code{height}, to pass to

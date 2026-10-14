@@ -2417,6 +2417,29 @@
       }
     }
   }
+  function rulerVisits(layout, emit) {
+    if (layout.trackForRuler === void 0) {
+      return;
+    }
+    const track = layout.tracks.find((t) => t.name === layout.trackForRuler);
+    const steps = track.indexSequence;
+    let start = track.indexOfFirstBase ?? 0;
+    for (let i = 0; i < steps.length; i += 1) {
+      const step = track.isCompletelyReverse ? steps.length - 1 - i : i;
+      const node = layout.nodes[Math.abs(steps[step])];
+      const [left, right] = nodePixelCoordinatesInX(node);
+      emit({
+        track: track.name,
+        node: node.name,
+        start,
+        length: node.sequenceLength,
+        reverse: isForwardIndex(steps[step]) === Boolean(track.isCompletelyReverse),
+        left,
+        right
+      });
+      start += node.sequenceLength;
+    }
+  }
   globalThis.tubemapLayout = function(requestJson) {
     const { nodes, tracks, reads, topology, placement, steps } = JSON.parse(requestJson);
     const arranged = layoutTopology(nodes, tracks, reads, topology);
@@ -2465,6 +2488,8 @@
       "soft_clip"
     ]);
     const panels = columns(["panel", "label", "top", "bottom", "offset_y"]);
+    const ruler = columns(["track", "node", "start", "length", "reverse", "left", "right"]);
+    rulerVisits(faceted.panels[0].layout, (row) => pushRow(ruler, row));
     let group = 0;
     const seenTracks = /* @__PURE__ */ new Set();
     faceted.panels.forEach((p, i) => {
@@ -2548,7 +2573,8 @@
       nodes: nodeTable,
       outlines,
       mismatches,
-      panels
+      panels,
+      ruler
     });
   };
 })();

@@ -4,8 +4,10 @@
 import {
   curvePaths,
   flattenPath,
+  isForwardIndex,
   layoutTopology,
   nodeOutlinePath,
+  nodePixelCoordinatesInX,
   placeFacets,
   readMismatches,
 } from '@jbrowse/tubemap-core'
@@ -92,6 +94,32 @@ function trackShapes(layout, steps, emit) {
   }
 }
 
+// The ruler track's node visits in ascending coordinate order, as
+// sequenceTubeMap's drawRuler walks them
+function rulerVisits(layout, emit) {
+  if (layout.trackForRuler === undefined) {
+    return
+  }
+  const track = layout.tracks.find(t => t.name === layout.trackForRuler)
+  const steps = track.indexSequence
+  let start = track.indexOfFirstBase ?? 0
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = track.isCompletelyReverse ? steps.length - 1 - i : i
+    const node = layout.nodes[Math.abs(steps[step])]
+    const [left, right] = nodePixelCoordinatesInX(node)
+    emit({
+      track: track.name,
+      node: node.name,
+      start,
+      length: node.sequenceLength,
+      reverse: isForwardIndex(steps[step]) === Boolean(track.isCompletelyReverse),
+      left,
+      right,
+    })
+    start += node.sequenceLength
+  }
+}
+
 globalThis.tubemapLayout = function (requestJson) {
   const { nodes, tracks, reads, topology, placement, steps } =
     JSON.parse(requestJson)
@@ -142,6 +170,8 @@ globalThis.tubemapLayout = function (requestJson) {
     'soft_clip',
   ])
   const panels = columns(['panel', 'label', 'top', 'bottom', 'offset_y'])
+  const ruler = columns(['track', 'node', 'start', 'length', 'reverse', 'left', 'right'])
+  rulerVisits(faceted.panels[0].layout, row => pushRow(ruler, row))
 
   let group = 0
   const seenTracks = new Set()
@@ -228,5 +258,6 @@ globalThis.tubemapLayout = function (requestJson) {
     outlines,
     mismatches,
     panels,
+    ruler,
   })
 }

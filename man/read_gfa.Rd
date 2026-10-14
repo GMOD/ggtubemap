@@ -21,3 +21,8 @@ Reads the segments and the paths (\code{P} lines) and walks (\code{W} lines) of 
 1.0 or 1.1 file, for \code{\link[=tubemap_layout]{tubemap_layout()}}. Links are not needed: the layout
 follows the paths. A walk is named in PanSN form, \code{sample#haplotype#contig}.
 }
+\details{
+Each track's \code{index_of_first_base}, the coordinate the ruler starts from, is
+a walk's start, or the start in a path named as a subpath (\code{name[start-end]}
+or \code{name:start-end}), or else 0.
+}

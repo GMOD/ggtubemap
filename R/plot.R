@@ -17,6 +17,8 @@
 #' @param mismatches Draw read mismatches; by default under the same rule.
 #' @param xlim,ylim Limits in layout pixels, to zoom in on part of the map, as
 #'   in [coord_tubemap()].
+#' @param ruler Draw [scale_x_tubemap()]'s ruler along the top; by default
+#'   when a track carries coordinates.
 #' @param ... Unused.
 #' @return A ggplot. When neither `haplotypes` nor `reads` maps `fill`, it
 #'   carries [scale_fill_tubemap()], whose legend is dropped past 12
@@ -33,7 +35,7 @@
 autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
                              sequence = object$node_width == "normal",
                              mismatches = sequence, xlim = NULL, ylim = NULL,
-                             ...) {
+                             ruler = nrow(object$ruler) > 0, ...) {
   levels <- nlevels(object$shapes$haplotype)
   default_fill <- is.null(haplotypes$fill) && is.null(reads$fill)
   if (is.null(haplotypes$fill) && !is.null(reads$fill)) {
@@ -51,8 +53,10 @@ autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
     (if (default_fill) {
       scale_fill_tubemap(guide = if (levels > 12) "none" else "legend")
     }) +
+    (if (ruler) scale_x_tubemap(object)) +
     coord_tubemap(object, xlim = xlim, ylim = ylim) +
-    theme_tubemap()
+    theme_tubemap() +
+    (if (ruler) theme(plot.margin = margin(4, ruler_side, 4, ruler_side)))
 }
 
 #' @export
@@ -83,7 +87,7 @@ scale_fill_tubemap <- function(reference = "grey15",
 #' A blank theme for tube maps
 #'
 #' [ggplot2::theme_void()] with the legend below, in a size that reads at
-#' figure scale.
+#' figure scale, and a top x axis styled for [scale_x_tubemap()]'s ruler.
 #'
 #' @param base_size Base font size, in points.
 #' @export
@@ -93,7 +97,10 @@ theme_tubemap <- function(base_size = 9) {
       legend.position = "bottom",
       legend.key.size = unit(base_size, "pt"),
       plot.background = element_rect(fill = "white", colour = NA),
-      plot.margin = margin(4, 4, 4, 4)
+      plot.margin = margin(4, 4, 4, 4),
+      axis.text.x.top = element_text(size = rel(0.8), margin = margin(b = 2)),
+      axis.ticks.x.top = element_line(linewidth = 0.3),
+      axis.ticks.length.x.top = unit(3, "pt")
     )
 }
 
@@ -109,6 +116,9 @@ theme_tubemap <- function(base_size = 9) {
 #' @param legend Extra height in inches to leave for a legend.
 #' @param xlim,ylim As in [coord_tubemap()], for a map zoomed in on part of
 #'   the layout.
+#' @param ruler Leave room for [scale_x_tubemap()]'s ruler as
+#'   [autoplot.tubemap()] draws it: 0.2 inches above, and wider side margins
+#'   for the labels at either end.
 #' @return A named vector of `width` and `height`, to pass to
 #'   [ggplot2::ggsave()].
 #' @export
@@ -116,10 +126,16 @@ theme_tubemap <- function(base_size = 9) {
 #' tm <- tubemap_layout(tubemap_example("brca1"), node_width = "compressed")
 #' tubemap_size(tm)
 tubemap_size <- function(tubemap, px_per_in = 96, pad = 20, legend = 0,
-                         xlim = NULL, ylim = NULL) {
+                         xlim = NULL, ylim = NULL,
+                         ruler = nrow(tubemap$ruler) > 0) {
   lim <- tubemap_limits(tubemap, xlim, ylim, pad)
   c(
-    width = abs(diff(lim$x)) / px_per_in,
-    height = abs(diff(lim$y)) / px_per_in + legend
+    width = abs(diff(lim$x)) / px_per_in +
+      if (ruler) (ruler_side - 4) * 2 / 72 else 0,
+    height = abs(diff(lim$y)) / px_per_in + legend + if (ruler) 0.2 else 0
   )
 }
+
+# points beside the map for a ruler label centred on its first or last tick,
+# against theme_tubemap()'s 4
+ruler_side <- 24

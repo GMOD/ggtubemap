@@ -11,5 +11,5 @@ theme_tubemap(base_size = 9)
 }
 \description{
 \code{\link[ggplot2:theme_void]{ggplot2::theme_void()}} with the legend below, in a size that reads at
-figure scale.
+figure scale, and a top x axis styled for \code{\link[=scale_x_tubemap]{scale_x_tubemap()}}'s ruler.
 }

@@ -12,6 +12,7 @@
   mismatches = sequence,
   xlim = NULL,
   ylim = NULL,
+  ruler = nrow(object$ruler) > 0,
   ...
 )
 }
@@ -32,6 +33,9 @@ at \code{"normal"} width, the only width at which bases fit.}
 
 \item{xlim, ylim}{Limits in layout pixels, to zoom in on part of the map, as
 in \code{\link[=coord_tubemap]{coord_tubemap()}}.}
+
+\item{ruler}{Draw \code{\link[=scale_x_tubemap]{scale_x_tubemap()}}'s ruler along the top; by default
+when a track carries coordinates.}
 
 \item{...}{Unused.}
 }

@@ -98,7 +98,10 @@ compact <- function(x) x[!vapply(x, is.null, logical(1))]
 #'   `"haplotype_sample"` (the PanSN sample of each haplotype).
 #' @param curve_steps Straight pieces per Bézier when curves are flattened.
 #' @return A `tubemap` object: a list of data frames (`shapes`, `tracks`,
-#'   `nodes`, `outlines`, `bases`, `mismatches`, `panels`) and the `bounds`.
+#'   `nodes`, `outlines`, `bases`, `mismatches`, `panels`, `ruler`) and the
+#'   `bounds`. `ruler` holds each node visit of the ruler track, the first
+#'   track with an `index_of_first_base`, in coordinate order; it is empty
+#'   when no track has one.
 #' @export
 #' @examples
 #' tm <- tubemap_layout(tubemap_example("example-6"))
@@ -198,6 +201,7 @@ new_tubemap <- function(out, node_width) {
       bases = node_bases(nodes),
       mismatches = mismatches,
       panels = as_frame(out$panels),
+      ruler = as_frame(out$ruler),
       bounds = out$bounds,
       node_width = node_width
     ),

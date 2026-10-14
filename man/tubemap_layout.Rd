@@ -55,7 +55,10 @@ one band per edge.}
 }
 \value{
 A \code{tubemap} object: a list of data frames (\code{shapes}, \code{tracks},
-\code{nodes}, \code{outlines}, \code{bases}, \code{mismatches}, \code{panels}) and the \code{bounds}.
+\code{nodes}, \code{outlines}, \code{bases}, \code{mismatches}, \code{panels}, \code{ruler}) and the
+\code{bounds}. \code{ruler} holds each node visit of the ruler track, the first
+track with an \code{index_of_first_base}, in coordinate order; it is empty
+when no track has one.
 }
 \description{
 Runs the sequenceTubeMap layout from \verb{@jbrowse/tubemap-core} and returns

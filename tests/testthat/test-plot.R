@@ -47,6 +47,42 @@ test_that("opaque tubes get a seam stroke in their fill, translucent ones none",
   expect_equal(reads$colour[!translucent], unclass(reads$fill[!translucent]))
 })
 
+test_that("the ruler ticks round positions on the bases that print them", {
+  tm <- tubemap_layout(tubemap_example("brca1"))
+  axis <- function(...) {
+    x <- ggplot_build(autoplot(tm, ...))$layout$panel_params[[1]]$x
+    keep <- !is.na(x$breaks)
+    list(breaks = x$breaks[keep], labels = trimws(x$get_labels()[keep]),
+         position = x$position)
+  }
+  full <- axis()
+  expect_equal(full$position, "top")
+  expect_equal(full$labels[1:3], c("0", "20", "40"))
+  expect_equal(full$breaks[1:3], tm$bases$x[c(1, 21, 41)])
+  expect_true(all(diff(full$breaks) >= 80))
+
+  zoomed <- axis(xlim = c(250, 900))
+  expect_true(all(zoomed$breaks >= 250 & zoomed$breaks <= 900))
+  expect_equal(zoomed$labels, full$labels[match(zoomed$breaks, full$breaks)])
+})
+
+test_that("compressed nodes each get a ruler tick where they have room", {
+  tm <- tubemap_layout(tubemap_example("hprc-chrM"), node_width = "compressed")
+  x <- ggplot_build(autoplot(tm))$layout$panel_params[[1]]$x
+  breaks <- x$breaks[!is.na(x$breaks)]
+  expect_gt(length(breaks), 20)
+  expect_true(all(diff(breaks) >= 80))
+  expect_true(all(trimws(x$get_labels()[!is.na(x$breaks)]) %in%
+                    format(c(tm$ruler$start, seq(200, 400, 100)), trim = TRUE)))
+})
+
+test_that("a layout without coordinates draws no ruler", {
+  tm <- tubemap_layout(tubemap_example("example-6"))
+  expect_equal(nrow(tm$ruler), 0)
+  expect_null(autoplot(tm)$scales$get_scales("x"))
+  expect_error(tubemap_x(tm, 10), "no ruler track")
+})
+
 test_that("text and outlines scale with the panel's physical size", {
   grDevices::pdf(NULL)
   on.exit(grDevices::dev.off())
@@ -75,9 +111,12 @@ test_that("text below the minimum size is dropped", {
 test_that("tubemap_size prints the layout at the asked pixels per inch", {
   tm <- tubemap_layout(tubemap_example("brca1"), node_width = "compressed")
   b <- tm$bounds
-  expect_equal(tubemap_size(tm, px_per_in = 100, pad = 0),
+  expect_equal(tubemap_size(tm, px_per_in = 100, pad = 0, ruler = FALSE),
                c(width = (b$maxX - b$minX) / 100, height = (b$maxY - b$minY) / 100))
-  expect_equal(tubemap_size(tm, px_per_in = 100, xlim = c(0, 300))[["width"]], 3)
+  expect_equal(diff(c(tubemap_size(tm, ruler = FALSE)[["height"]],
+                      tubemap_size(tm)[["height"]])), 0.2)
+  expect_equal(tubemap_size(tm, px_per_in = 100, xlim = c(0, 300),
+                            ruler = FALSE)[["width"]], 3)
 })
 
 test_that("autoplot zooms without replacing its scale or coord", {
