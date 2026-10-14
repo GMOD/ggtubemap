@@ -57,36 +57,36 @@ function facetLabel(facet, panel) {
   return `${name} · ${counted(panel.readCount, 'read')}`
 }
 
-function trackShapes(layout, panel, steps, emit) {
+function trackShapes(layout, steps, emit) {
   const { rectangles, curves, corners, verticalRectangles } = layout.shapes
   for (const type of ['haplotype', 'read']) {
     for (const r of rectangles) {
       if (r.type === type) {
-        emit(panel, r.id, type, 'rectangle', rectPoints(r))
+        emit(r.id, type, 'rectangle', rectPoints(r))
       }
     }
     for (const c of curvePaths(curves, type)) {
-      emit(panel, c.id, type, 'curve', flattenPath(c.path, steps))
+      emit(c.id, type, 'curve', flattenPath(c.path, steps))
     }
     // a turnaround's pieces draw together, track by track, so one track's
     // corners never sit under another's stems
-    const ids = [
-      ...new Set(
-        [...verticalRectangles, ...corners]
-          .filter(s => s.type === type)
-          .map(s => s.id),
-      ),
-    ]
-    for (const id of ids) {
-      for (const r of verticalRectangles) {
-        if (r.type === type && r.id === id) {
-          emit(panel, id, type, 'turn', rectPoints(r))
-        }
+    const turns = new Map()
+    const addTurn = (id, points) => {
+      turns.set(id, [...(turns.get(id) ?? []), points])
+    }
+    for (const r of verticalRectangles) {
+      if (r.type === type) {
+        addTurn(r.id, rectPoints(r))
       }
-      for (const c of corners) {
-        if (c.type === type && c.id === id) {
-          emit(panel, id, type, 'turn', flattenPath(c.path, steps))
-        }
+    }
+    for (const c of corners) {
+      if (c.type === type) {
+        addTurn(c.id, flattenPath(c.path, steps))
+      }
+    }
+    for (const [id, pieces] of turns) {
+      for (const points of pieces) {
+        emit(id, type, 'turn', points)
       }
     }
   }
@@ -144,23 +144,17 @@ globalThis.tubemapLayout = function (requestJson) {
   const panels = columns(['panel', 'label', 'top', 'bottom', 'offset_y'])
 
   let group = 0
-  const emit = (panel, id, type, shape, points) => {
-    group += 1
-    for (const [x, y] of points) {
-      pushRow(shapes, { panel, group, track_id: id, type, shape, x, y })
-    }
-  }
-
   const seenTracks = new Set()
   faceted.panels.forEach((p, i) => {
     const panel = i + 1
     const { layout, offsetY } = p
     const dy = y => y + offsetY
-    const before = shapes.y.length
-    trackShapes(layout, panel, steps, emit)
-    for (let k = before; k < shapes.y.length; k += 1) {
-      shapes.y[k] = dy(shapes.y[k])
-    }
+    trackShapes(layout, steps, (id, type, shape, points) => {
+      group += 1
+      for (const [x, y] of points) {
+        pushRow(shapes, { panel, group, track_id: id, type, shape, x, y: dy(y) })
+      }
+    })
     for (const t of layout.tracks) {
       if (seenTracks.has(t.id)) {
         continue
