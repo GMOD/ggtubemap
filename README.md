@@ -40,7 +40,7 @@ tm <- tubemap_layout(g, node_width = "compressed")
 `read_gfa()` reads `P` and `W` lines; walks get PanSN names,
 `sample#haplotype#contig`.
 
-### Colour mappings
+### Colour by anything
 
 Each shape row has its track's `name`, `strand`, `mapping_quality`,
 `sample_name`, `read_group` and `freq`. Add a column and map it:
@@ -82,11 +82,11 @@ chrm <- tubemap_layout(tubemap_example("hprc-chrM"),
 autoplot(chrm)
 ```
 
-![43 mitochondrial haplotypes, with the reads of each sample in a separate panel](man/figures/hprc-chrM-facets.png)
+![43 mitochondrial haplotypes, with each sample's reads in a separate panel](man/figures/hprc-chrM-facets.png)
 
 ### Custom plots
 
-`autoplot()` builds the plot from these layers, each of which takes the layout:
+`autoplot()` builds the plot from these layers, each taking the layout:
 
 ```r
 ggplot() +
@@ -127,9 +127,8 @@ version into its header.
 `pnpm update-core [version]` pins a tubemap-core release, the latest by default,
 rebuilds the bundle, and copies that release's goldens into
 `tests/testthat/golden` and its example graphs into `inst/extdata`. The goldens
-come from tubemap-core's own test suite, so `devtools::test()` checks that the
-layout under QuickJS matches the layout under Node exactly for the bundled
-release.
+come from tubemap-core's own test suite, so `devtools::test()` checks that
+QuickJS lays out exactly as Node does for the release bundled.
 
 The `Update tubemap-core` workflow runs this every day, and on demand from the
 Actions tab, committing to main when R CMD check passes. The `Check` workflow
@@ -143,8 +142,8 @@ pnpm install
 tools/bundle.sh ../tubemap-core
 ```
 
-The header then holds the checkout's commit, and `pnpm bundle` restores the
-pinned release.
+The header then holds the checkout's commit; `pnpm bundle` puts the release
+back.
 
 `tools/readme-figures.R` regenerates the figures above.
 
