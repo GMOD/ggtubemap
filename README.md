@@ -55,7 +55,9 @@ autoplot(micb, haplotypes = aes(fill = phase)) +
 ![91 HPRC haplotypes through MICB, coloured by haplotype 1 or 2](man/figures/micb.png)
 
 Pass mappings through `autoplot()`'s `haplotypes` and `reads` arguments rather
-than adding another tube layer, which would draw over the nodes.
+than adding another tube layer, which would draw over the nodes. A `fill` on
+the reads alone, such as `reads = aes(fill = mapping_quality)`, takes the fill
+scale, and the haplotypes keep their default colours.
 
 ### Reads
 

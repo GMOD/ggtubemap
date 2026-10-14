@@ -26,6 +26,13 @@ test_that("a haplotypes mapping replaces the fill and its scale", {
   expect_length(fills, length(unique(tm$shapes$phase[tm$shapes$type == "haplotype"])))
 })
 
+test_that("a reads fill takes the scale and the haplotypes keep their colours", {
+  tm <- tubemap_layout(tubemap_example("brca1"))
+  data <- ggplot_build(autoplot(tm, reads = aes(fill = mapping_quality)))$data
+  expect_equal(unique(data[[1]]$fill), "grey15")
+  expect_gt(length(unique(data[[2]]$fill)), 1)
+})
+
 test_that("opaque tubes get a seam stroke in their fill, translucent ones none", {
   tm <- tubemap_layout(tubemap_example("brca1"))
   reads <- tm$shapes$track_type == "read"

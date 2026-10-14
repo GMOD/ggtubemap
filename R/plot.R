@@ -9,16 +9,18 @@
 #' @param haplotypes,reads Aesthetics for the haplotype and read tubes, added to
 #'   the defaults of [geom_tubemap_haplotypes()] and [geom_tubemap_reads()].
 #'   Map these here rather than adding a second tube layer, which would draw
-#'   over the nodes.
+#'   over the nodes. Both layers share one fill scale, so a `fill` mapped on
+#'   the reads alone takes it, and the haplotypes keep [scale_fill_tubemap()]'s
+#'   colours without a legend.
 #' @param sequence Print each node's bases. By default, when nodes are drawn
 #'   at `"normal"` width, the only width at which bases fit.
 #' @param mismatches Draw read mismatches; by default under the same rule.
 #' @param xlim,ylim Limits in layout pixels, to zoom in on part of the map, as
 #'   in [coord_tubemap()].
 #' @param ... Unused.
-#' @return A ggplot. With the default haplotype fill it carries
-#'   [scale_fill_tubemap()], whose legend is dropped past 12 haplotypes; a
-#'   `haplotypes` mapping brings its own scale.
+#' @return A ggplot. When neither `haplotypes` nor `reads` maps `fill`, it
+#'   carries [scale_fill_tubemap()], whose legend is dropped past 12
+#'   haplotypes; a `fill` mapping brings its own scale.
 #' @exportS3Method ggplot2::autoplot
 #' @examples
 #' tm <- tubemap_layout(tubemap_example("example-6"))
@@ -33,6 +35,12 @@ autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
                              mismatches = sequence, xlim = NULL, ylim = NULL,
                              ...) {
   levels <- nlevels(object$shapes$haplotype)
+  default_fill <- is.null(haplotypes$fill) && is.null(reads$fill)
+  if (is.null(haplotypes$fill) && !is.null(reads$fill)) {
+    object$shapes$.haplotype_fill <-
+      scale_fill_tubemap()$palette(levels)[object$shapes$haplotype]
+    haplotypes <- merge_aes(aes(fill = I(.haplotype_fill)), haplotypes)
+  }
   ggplot() +
     geom_tubemap_haplotypes(object, haplotypes) +
     geom_tubemap_reads(object, reads) +
@@ -40,7 +48,7 @@ autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
     (if (sequence) geom_tubemap_sequence(object)) +
     (if (mismatches) geom_tubemap_mismatches(object)) +
     geom_tubemap_panel_labels(object) +
-    (if (is.null(haplotypes$fill)) {
+    (if (default_fill) {
       scale_fill_tubemap(guide = if (levels > 12) "none" else "legend")
     }) +
     coord_tubemap(object, xlim = xlim, ylim = ylim) +

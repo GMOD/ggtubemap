@@ -3,5 +3,5 @@
 
 utils::globalVariables(c(
   "x", "y", "group", "haplotype", "base", "label", "label_y", "rule_y",
-  "x_end", "height", ".label", ".x", ".y", ".strand_fill", ".mapq_alpha", "fill"
+  "x_end", "height", ".label", ".x", ".y", ".strand_fill", ".mapq_alpha", ".haplotype_fill", "fill"
 ))

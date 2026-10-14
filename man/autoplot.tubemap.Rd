@@ -21,7 +21,9 @@
 \item{haplotypes, reads}{Aesthetics for the haplotype and read tubes, added to
 the defaults of \code{\link[=geom_tubemap_haplotypes]{geom_tubemap_haplotypes()}} and \code{\link[=geom_tubemap_reads]{geom_tubemap_reads()}}.
 Map these here rather than adding a second tube layer, which would draw
-over the nodes.}
+over the nodes. Both layers share one fill scale, so a \code{fill} mapped on
+the reads alone takes it, and the haplotypes keep \code{\link[=scale_fill_tubemap]{scale_fill_tubemap()}}'s
+colours without a legend.}
 
 \item{sequence}{Print each node's bases. By default, when nodes are drawn
 at \code{"normal"} width, the only width at which bases fit.}
@@ -34,9 +36,9 @@ in \code{\link[=coord_tubemap]{coord_tubemap()}}.}
 \item{...}{Unused.}
 }
 \value{
-A ggplot. With the default haplotype fill it carries
-\code{\link[=scale_fill_tubemap]{scale_fill_tubemap()}}, whose legend is dropped past 12 haplotypes; a
-\code{haplotypes} mapping brings its own scale.
+A ggplot. When neither \code{haplotypes} nor \code{reads} maps \code{fill}, it
+carries \code{\link[=scale_fill_tubemap]{scale_fill_tubemap()}}, whose legend is dropped past 12
+haplotypes; a \code{fill} mapping brings its own scale.
 }
 \description{
 Puts the \link{tubemap_layers} together in sequenceTubeMap's order: haplotypes,
