@@ -1,5 +1,5 @@
 /*
- * @jbrowse/tubemap-core 1.1.0, bundled by tools/bridge.js
+ * @jbrowse/tubemap-core 2.0.0, bundled by tools/bridge.js
  *
  * MIT License
  *
@@ -24,17 +24,22 @@
  * SOFTWARE.
  */
 (() => {
-  // node_modules/.pnpm/@jbrowse+tubemap-core@1.1.0/node_modules/@jbrowse/tubemap-core/esm/types.js
-  function emptyTrackShapes() {
-    return {
-      rectangles: [],
-      curves: [],
-      corners: [],
-      verticalRectangles: []
-    };
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.0/node_modules/@jbrowse/tubemap-core/esm/groupBy.js
+  function groupBy(items, key) {
+    const groups = /* @__PURE__ */ new Map();
+    for (const item of items) {
+      const k = key(item);
+      const group = groups.get(k);
+      if (group === void 0) {
+        groups.set(k, [item]);
+      } else {
+        group.push(item);
+      }
+    }
+    return groups;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@1.1.0/node_modules/@jbrowse/tubemap-core/esm/panSN.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.0/node_modules/@jbrowse/tubemap-core/esm/panSN.js
   var NOT_SAMPLES = /* @__PURE__ */ new Set(["_gbwt_ref", "unknown"]);
   function parsePanSN(name) {
     const [sample, haplotype, contig] = name?.split("#") ?? [];
@@ -44,15 +49,10 @@
     return { sample, haplotype: Number(haplotype), contig };
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@1.1.0/node_modules/@jbrowse/tubemap-core/esm/layout.js
-  var DEBUG = false;
-  function debugLog(...args) {
-    if (DEBUG) {
-      console.log(...args);
-    }
-  }
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.0/node_modules/@jbrowse/tubemap-core/esm/layout.js
   var READ_FACET_FIELDS = ["read_group", "sample_name"];
   var FACET_FIELDS = [...READ_FACET_FIELDS, "haplotype_sample"];
+  var DEFAULT_CHAR_WIDTH = 8.401;
   function layersFrom({ layers, coarsenedReadView = false, showReads = true }, hasReads) {
     if (layers !== void 0) {
       return layers;
@@ -75,9 +75,17 @@
       layers: layersFrom(options, hasReads),
       ignoreStrand: options.ignoreStrand ?? false,
       nodeWidthOption: options.nodeWidthOption ?? "normal",
-      charWidth: options.charWidth ?? 8.401,
+      charWidth: options.charWidth ?? DEFAULT_CHAR_WIDTH,
       trackWidth: options.trackWidth ?? 15,
       freqWidth: options.freqWidth ?? "log"
+    };
+  }
+  function emptyTrackShapes() {
+    return {
+      rectangles: [],
+      curves: [],
+      corners: [],
+      verticalRectangles: []
     };
   }
   function emptyState(config) {
@@ -94,7 +102,6 @@
       extraRight: [],
       maxOrder: -1,
       shapes: emptyTrackShapes(),
-      imageBounds: { minX: 0, maxX: 0, minY: 0, maxY: 0 },
       trackForRuler: void 0,
       coarsenedEdgeMeta: /* @__PURE__ */ new Map()
     };
@@ -209,21 +216,11 @@
       return [name ? `${name.sample}#${name.haplotype}` : track];
     })).size;
   }
-  function groupBy(items, keyOf) {
-    const groups = /* @__PURE__ */ new Map();
-    for (const item of items) {
-      const key = keyOf(item);
-      const group = groups.get(key);
-      if (group === void 0) {
-        groups.set(key, [item]);
-      } else {
-        group.push(item);
-      }
-    }
-    return [...groups].sort(([a], [b]) => a === null || b === null ? Number(a === null) - Number(b === null) : a.localeCompare(b, void 0, { numeric: true }));
+  function sortedGroups(items, keyOf) {
+    return [...groupBy(items, keyOf)].sort(([a], [b]) => a === null || b === null ? Number(a === null) - Number(b === null) : a.localeCompare(b, void 0, { numeric: true }));
   }
   function facetReads(topology, by, options = {}) {
-    return groupBy(selectReads(topology, { ...options, facet: void 0 }), (read) => read[by] ?? null).map(([key, reads]) => ({
+    return sortedGroups(selectReads(topology, { ...options, facet: void 0 }), (read) => read[by] ?? null).map(([key, reads]) => ({
       facet: { by, key },
       tracks: topology.tracks,
       reads
@@ -231,7 +228,7 @@
   }
   function facetHaplotypes(topology, options = {}) {
     const kept = references(topology);
-    const samples = groupBy(topology.tracks.filter((track) => !kept.has(track)), sampleOf);
+    const samples = sortedGroups(topology.tracks.filter((track) => !kept.has(track)), sampleOf);
     if (samples.length === 0) {
       return [];
     }
@@ -333,31 +330,19 @@
     if (haplotypeBands !== void 0) {
       state.reads = haplotypeBands.bands.concat(state.reads);
     }
-    if (state.reads.length > 0) {
-      placeReads(state);
-      state.tracks = state.tracks.concat(state.reads);
-    } else {
-      state.nodes.forEach((node) => {
-        node.incomingReads = [];
-        node.outgoingReads = [];
-        node.internalReads = [];
-      });
-    }
+    placeReads(state);
+    state.tracks = state.tracks.concat(state.reads);
     if (x === "measure") {
       generateNodeXCoords(state);
     }
     generateSVGShapesFromPath(state);
-    debugLog("Tracks:", state.tracks);
-    debugLog("Nodes:", state.nodes);
-    debugLog("Lane assignment:", state.assignments);
-    getImageDimensions(state);
     return {
       nodes: state.nodes,
       tracks: state.tracks,
       reads: state.reads,
       nodeMap: state.nodeMap,
       shapes: state.shapes,
-      bounds: state.imageBounds,
+      bounds: getImageDimensions(state),
       maxOrder: state.maxOrder,
       trackForRuler: state.trackForRuler,
       coarsenedEdgeMeta: state.coarsenedEdgeMeta,
@@ -406,10 +391,7 @@
     });
   }
   function generateReadOnlyNodeAttributes(state) {
-    state.nodesPerOrder = [];
-    for (let i = 0; i <= state.maxOrder; i += 1) {
-      state.nodesPerOrder[i] = [];
-    }
+    state.nodesPerOrder = Array.from({ length: state.maxOrder + 1 }, () => []);
     const orderY = /* @__PURE__ */ new Map();
     state.nodes.forEach((node) => {
       if (node.y !== void 0) {
@@ -450,26 +432,19 @@
       if (read.width === void 0 || read.width === 0) {
         read.width = READ_WIDTH;
       }
-      if (read.path.length === 1) {
-        const firstNode = read.path[0].node;
-        if (firstNode !== null) {
-          state.nodes[firstNode].internalReads.push(idx);
+      read.path.forEach((segment, pathIdx) => {
+        if (segment.node === null) {
+          return;
         }
-      } else {
-        read.path.forEach((element, pathIdx) => {
-          if (pathIdx === 0) {
-            const firstNode = read.path[0].node;
-            if (firstNode !== null) {
-              state.nodes[firstNode].outgoingReads.push([idx, pathIdx]);
-            }
-          } else {
-            const elemNode = element.node;
-            if (elemNode !== null) {
-              state.nodes[elemNode].incomingReads.push([idx, pathIdx]);
-            }
-          }
-        });
-      }
+        const node = state.nodes[segment.node];
+        if (read.path.length === 1) {
+          node.internalReads.push(idx);
+        } else if (pathIdx === 0) {
+          node.outgoingReads.push([idx, pathIdx]);
+        } else {
+          node.incomingReads.push([idx, pathIdx]);
+        }
+      });
     });
   }
   function placeReads(state) {
@@ -502,31 +477,20 @@
     const bottomY = calculateBottomY(state);
     const elementsWithoutNode = [];
     state.reads.forEach((read, idx) => {
-      const len = read.path.length;
-      const prevSegment = new Array(len);
-      let lastValidPrev;
-      for (let i = 0; i < len; i++) {
-        if (i === 0) {
-          prevSegment[i] = void 0;
-        } else {
-          prevSegment[i] = lastValidPrev ?? read.path[0];
+      const prevSegment = [];
+      const nextSegment = [];
+      let visit;
+      read.path.forEach((seg, i) => {
+        prevSegment[i] = visit;
+        if (seg.node !== null) {
+          visit = seg;
         }
-        const seg = read.path[i];
-        if (seg.node !== null && seg.node) {
-          lastValidPrev = seg;
-        }
-      }
-      const nextSegment = new Array(len);
-      let firstValidNext;
-      for (let i = len - 1; i >= 0; i--) {
-        if (i === len - 1) {
-          nextSegment[i] = void 0;
-        } else {
-          nextSegment[i] = firstValidNext ?? read.path[len - 1];
-        }
-        const seg = read.path[i];
-        if (seg.node !== null && seg.node) {
-          firstValidNext = seg;
+      });
+      visit = void 0;
+      for (let i = read.path.length - 1; i >= 0; i -= 1) {
+        nextSegment[i] = visit;
+        if (read.path[i].node !== null) {
+          visit = read.path[i];
         }
       }
       read.path.forEach((element, pathIdx) => {
@@ -556,7 +520,6 @@
       segment.y = bottomY[segment.order];
       bottomY[segment.order] += read.width;
     });
-    debugLog("Reads:", state.reads);
   }
   function placeReadSet(state, toPlace, node, topMargin) {
     let incomingReads = node.incomingReads.filter(([readID]) => toPlace.has(readID));
@@ -625,7 +588,7 @@
       const finalNodeCoverLength = currentRead.finalNodeCoverLength ?? 0;
       currentY = startY;
       while (firstNodeOffset < (occupiedUntil.get(currentY) ?? -Infinity) + 2 || finalNodeCoverLength > (occupiedFrom.get(currentY) ?? Infinity) - 3) {
-        currentY += currentRead.width || READ_WIDTH;
+        currentY += currentRead.width;
       }
       currentRead.path[0].y = currentY;
       occupiedUntil.set(currentY, finalNodeCoverLength);
@@ -645,11 +608,7 @@
     return a.y - b.y;
   }
   function setOccupiedUntil(map, read, pathIndex, y, node) {
-    if (pathIndex === read.path.length - 1) {
-      map.set(y, read.finalNodeCoverLength ?? 0);
-    } else {
-      map.set(y, node.sequenceLength);
-    }
+    map.set(y, pathIndex === read.path.length - 1 ? read.finalNodeCoverLength ?? 0 : node.sequenceLength);
   }
   function compareNoNodeReads(state, a, b) {
     const readA = state.reads[a.readIndex];
@@ -681,61 +640,37 @@
   function compareReadOutgoingSegmentsByGoingTo(state, [readIndexA, pathIndexA], [readIndexB, pathIndexB]) {
     const readA = state.reads[readIndexA];
     const readB = state.reads[readIndexB];
-    let previousValidYA;
-    let previousValidYB;
-    let lastPathIndexA = readA.path.length - 1;
-    let lastPathIndexB = readB.path.length - 1;
-    while (previousValidYA === void 0 && lastPathIndexA >= 0) {
-      previousValidYA = readA.path[lastPathIndexA]?.y;
-      lastPathIndexA -= 1;
+    const lastYA = readA.path.findLast((seg) => seg.y !== void 0)?.y;
+    const lastYB = readB.path.findLast((seg) => seg.y !== void 0)?.y;
+    if (lastYA !== void 0 && lastYB !== void 0) {
+      return lastYA - lastYB;
     }
-    while (previousValidYB === void 0 && lastPathIndexB >= 0) {
-      previousValidYB = readB.path[lastPathIndexB]?.y;
-      lastPathIndexB -= 1;
-    }
-    if (previousValidYA !== void 0 && previousValidYB !== void 0) {
-      return previousValidYA - previousValidYB;
-    }
-    const initialNodeA = readA.path[pathIndexA]?.node;
-    const initialNodeB = readB.path[pathIndexB]?.node;
-    let nodeA = typeof initialNodeA === "number" ? state.nodes[initialNodeA] : null;
-    let nodeB = typeof initialNodeB === "number" ? state.nodes[initialNodeB] : null;
-    while (nodeA && nodeB && nodeA === nodeB) {
-      if (pathIndexA < readA.path.length - 1) {
-        pathIndexA += 1;
-        while (readA.path[pathIndexA]?.node === null) {
-          pathIndexA += 1;
-        }
-        const nextNodeIdx = readA.path[pathIndexA]?.node;
-        nodeA = typeof nextNodeIdx === "number" ? state.nodes[nextNodeIdx] : null;
-      } else {
-        nodeA = null;
+    const nodeAt = (read, i) => {
+      const node = read.path[i]?.node;
+      return node === null || node === void 0 ? null : state.nodes[node] ?? null;
+    };
+    const nextVisit = (read, i) => {
+      let next = i + 1;
+      while (read.path[next]?.node === null) {
+        next += 1;
       }
-      if (pathIndexB < readB.path.length - 1) {
-        pathIndexB += 1;
-        while (readB.path[pathIndexB]?.node === null) {
-          pathIndexB += 1;
-        }
-        const nextNodeIdx = readB.path[pathIndexB]?.node;
-        nodeB = typeof nextNodeIdx === "number" ? state.nodes[nextNodeIdx] : null;
-      } else {
-        nodeB = null;
-      }
+      return next;
+    };
+    let nodeA = nodeAt(readA, pathIndexA);
+    let nodeB = nodeAt(readB, pathIndexB);
+    while (nodeA !== null && nodeA === nodeB) {
+      pathIndexA = nextVisit(readA, pathIndexA);
+      pathIndexB = nextVisit(readB, pathIndexB);
+      nodeA = nodeAt(readA, pathIndexA);
+      nodeB = nodeAt(readB, pathIndexB);
     }
-    if (nodeA) {
-      if (nodeB) {
-        return compareNodesByOrder(nodeA, nodeB);
-      }
-      return 1;
+    if (nodeA !== null && nodeB !== null) {
+      return compareNodesByOrder(nodeA, nodeB);
     }
-    if (nodeB) {
-      return -1;
+    if (nodeA !== null || nodeB !== null) {
+      return nodeA === null ? -1 : 1;
     }
-    const beginDiff = (readA.firstNodeOffset ?? 0) - (readB.firstNodeOffset ?? 0);
-    if (beginDiff !== 0) {
-      return beginDiff;
-    }
-    return (readA.finalNodeCoverLength ?? 0) - (readB.finalNodeCoverLength ?? 0);
+    return (readA.firstNodeOffset ?? 0) - (readB.firstNodeOffset ?? 0) || (readA.finalNodeCoverLength ?? 0) - (readB.finalNodeCoverLength ?? 0);
   }
   function compareTrackByInitialOrdering(trackA, trackB) {
     const pathA = trackA.path;
@@ -763,27 +698,10 @@
   function compareInternalReads(state, idxA, idxB) {
     const a = state.reads[idxA];
     const b = state.reads[idxB];
-    const aFirst = a.firstNodeOffset ?? 0;
-    const bFirst = b.firstNodeOffset ?? 0;
-    if (aFirst < bFirst) {
-      return -1;
-    } else if (aFirst > bFirst) {
-      return 1;
-    }
-    const aLast = a.finalNodeCoverLength ?? 0;
-    const bLast = b.finalNodeCoverLength ?? 0;
-    if (aLast < bLast) {
-      return -1;
-    } else if (aLast > bLast) {
-      return 1;
-    }
-    return 0;
+    return (a.firstNodeOffset ?? 0) - (b.firstNodeOffset ?? 0) || (a.finalNodeCoverLength ?? 0) - (b.finalNodeCoverLength ?? 0);
   }
   function calculateBottomY(state) {
-    const bottomY = [];
-    for (let i = 0; i <= state.maxOrder; i += 1) {
-      bottomY.push(0);
-    }
+    const bottomY = new Array(state.maxOrder + 1).fill(0);
     state.nodes.forEach((node) => {
       if (node.y !== void 0) {
         bottomY[node.order] = Math.max(bottomY[node.order], node.y + node.contentHeight + 20);
@@ -844,34 +762,24 @@
   }
   function reverseReversedReads(state, reads = state.reads) {
     reads.forEach((read) => {
-      let pos = 0;
-      while (pos < read.sequence.length && read.sequence[pos].startsWith("-")) {
-        pos += 1;
+      if (!read.sequence.every(isReverse)) {
+        return;
       }
-      if (pos === read.sequence.length) {
-        read.is_reverse = true;
-        read.sequence = read.sequence.reverse();
-        for (let i = 0; i < read.sequence.length; i += 1) {
-          read.sequence[i] = forward(read.sequence[i]);
-        }
-        const sequenceNew = read.sequenceNew ?? [];
-        sequenceNew.reverse();
-        read.sequenceNew = sequenceNew;
-        for (const entry of sequenceNew) {
-          entry.nodeName = forward(entry.nodeName);
-          reverseMismatches(entry.mismatches, nodeByName(state, entry.nodeName).sequenceLength);
-        }
-        const temp = read.firstNodeOffset ?? 0;
-        const firstLen = nodeByName(state, read.sequence[0]).sequenceLength;
-        read.firstNodeOffset = firstLen - (read.finalNodeCoverLength ?? 0);
-        const lastLen = nodeByName(state, read.sequence[read.sequence.length - 1]).sequenceLength;
-        read.finalNodeCoverLength = lastLen - temp;
+      read.is_reverse = read.is_reverse !== true;
+      read.sequence = read.sequence.toReversed().map(forward);
+      if (read.sequenceNew !== void 0) {
+        read.sequenceNew = read.sequenceNew.toReversed();
       }
-    });
-  }
-  function reverseMismatches(mismatches, sequenceLength) {
-    mismatches.forEach((mm) => {
-      Object.assign(mm, mirroredMismatch(mm, sequenceLength));
+      for (const entry of read.sequenceNew ?? []) {
+        entry.nodeName = forward(entry.nodeName);
+        const { sequenceLength } = nodeByName(state, entry.nodeName);
+        entry.mismatches = entry.mismatches.map((mm) => mirroredMismatch(mm, sequenceLength));
+      }
+      const firstOffset = read.firstNodeOffset ?? 0;
+      const firstLen = nodeByName(state, read.sequence[0]).sequenceLength;
+      const lastLen = nodeByName(state, read.sequence.at(-1)).sequenceLength;
+      read.firstNodeOffset = firstLen - (read.finalNodeCoverLength ?? 0);
+      read.finalNodeCoverLength = lastLen - firstOffset;
     });
   }
   function mirroredMismatch(mm, sequenceLength) {
@@ -909,7 +817,12 @@
   }
   var NODE_HORIZONTAL_SLACK = 20;
   function getImageDimensions(state) {
-    const bounds = { minX: 99, maxX: -99, minY: 99, maxY: -99 };
+    const bounds = {
+      minX: Infinity,
+      maxX: -Infinity,
+      minY: Infinity,
+      maxY: -Infinity
+    };
     const { rectangles, verticalRectangles, curves } = state.shapes;
     for (const shapes of [rectangles, verticalRectangles, curves]) {
       for (const { xStart, xEnd } of shapes) {
@@ -934,7 +847,7 @@
         bounds.minY = Math.min(bounds.minY, y);
       });
     });
-    state.imageBounds = bounds;
+    return bounds;
   }
   function nodeByName(state, nodeName) {
     const index = state.nodeMap.get(forward(nodeName));
@@ -1027,11 +940,7 @@
   }
   var UNREACHABLE_ORDER = -1;
   function fillUnassignedOrders(orders) {
-    const filled = [];
-    for (const order of orders) {
-      filled.push(order ?? UNREACHABLE_ORDER);
-    }
-    return filled;
+    return Array.from(orders, (order) => order ?? UNREACHABLE_ORDER);
   }
   function generateNodeOrder(state) {
     let modifiedSequence;
@@ -1050,7 +959,6 @@
     });
     generateNodeOrderOfSingleTrack(state, state.tracks[0].indexSequence);
     for (let i = 1; i < tracksAndReads.length; i += 1) {
-      debugLog(`generating order for track ${i + 1}`);
       rightIndex = generateNodeOrderTrackBeginning(state, tracksAndReads[i].indexSequence);
       if (rightIndex === null) {
         if (i < state.tracks.length) {
@@ -1120,13 +1028,9 @@
     if (minOrder < 0) {
       increaseOrderForAllNodes(state, -minOrder);
     }
-    const finalOrders = fillUnassignedOrders(state.nodeOrders);
-    state.nodeOrders = finalOrders;
-    finalOrders.forEach((order, i) => {
-      const node = state.nodes[i];
-      if (node !== void 0) {
-        node.order = order;
-      }
+    state.nodeOrders = fillUnassignedOrders(state.nodeOrders);
+    state.nodes.forEach((node, i) => {
+      node.order = state.nodeOrders[i];
     });
   }
   function isSuccessor(state, first, second, scratch) {
@@ -1176,7 +1080,7 @@
       head += 1;
       const currentNodeOrder = state.nodeOrders[currentNode];
       if (currentNodeOrder !== void 0 && currentNodeOrder < currentOrder) {
-        if (!increasedOrders.has(currentNode) || increasedOrders.get(currentNode) < currentOrder) {
+        if ((increasedOrders.get(currentNode) ?? -Infinity) < currentOrder) {
           increasedOrders.set(currentNode, currentOrder);
           state.nodes[currentNode].successors.forEach((successor) => {
             if (state.nodeOrders[successor] > currentNodeOrder && successor !== tabuNode) {
@@ -1281,24 +1185,20 @@
     return rise <= RISE_KNEE ? rise / 17.5 : RISE_KNEE / 17.5 * Math.sqrt(rise / RISE_KNEE);
   }
   function calculateExtraSpace(state) {
-    const leftSideEdges = [];
-    const rightSideEdges = [];
-    const fallAngleAdjustment = [];
+    const slots = state.maxOrder + 1;
+    const leftSideEdges = new Array(slots).fill(0);
+    const rightSideEdges = new Array(slots).fill(0);
+    const fallAngleAdjustment = new Array(slots).fill(0);
     const extra = [];
-    for (let i = 0; i <= state.maxOrder; i += 1) {
-      leftSideEdges.push(0);
-      rightSideEdges.push(0);
-      fallAngleAdjustment.push(0);
-    }
     state.tracks.forEach((track) => {
       for (let i = 1; i < track.path.length; i += 1) {
         const seg = track.path[i];
         const prevSeg = track.path[i - 1];
         if (seg.order === prevSeg.order) {
           if (seg.isForward) {
-            leftSideEdges[seg.order] = leftSideEdges[seg.order] + 1;
+            leftSideEdges[seg.order] += 1;
           } else {
-            rightSideEdges[seg.order] = rightSideEdges[seg.order] + 1;
+            rightSideEdges[seg.order] += 1;
           }
         } else {
           fallAngleAdjustment[seg.order] = Math.max(riseExtra(Math.abs((seg.y ?? 0) - (prevSeg.y ?? 0))), fallAngleAdjustment[seg.order]);
@@ -1312,79 +1212,51 @@
     return extra;
   }
   function generateLaneAssignment(state) {
-    const prevSegmentPerOrderPerTrack = [];
-    const assignmentByOrderAndNode = [];
-    for (let i = 0; i <= state.maxOrder; i += 1) {
-      state.assignments[i] = [];
-      assignmentByOrderAndNode[i] = /* @__PURE__ */ new Map();
-      prevSegmentPerOrderPerTrack[i] = [];
-    }
-    state.tracks.forEach((track, trackNo) => {
+    state.assignments = Array.from({ length: state.maxOrder + 1 }, () => []);
+    const byNode = /* @__PURE__ */ new Map();
+    state.tracks.forEach((track, trackID) => {
       track.path = basicPath(state, track);
-      track.path.forEach((segment, segmentNumber) => {
-        addToAssignment(state, segment.order, segment.node, trackNo, segmentNumber, prevSegmentPerOrderPerTrack, assignmentByOrderAndNode);
+      track.path.forEach(({ order, node }, segmentID) => {
+        const segment = { trackID, segmentID };
+        const existing = node === null ? void 0 : byNode.get(node);
+        if (existing === void 0) {
+          const assignment = { node, tracks: [segment] };
+          state.assignments[order].push(assignment);
+          if (node !== null) {
+            byNode.set(node, assignment);
+          }
+        } else {
+          existing.tracks.push(segment);
+        }
       });
     });
     for (let i = 0; i <= state.maxOrder; i += 1) {
       generateSingleLaneAssignment(state, state.assignments[i], i);
     }
   }
-  function addToAssignment(state, order, nodeIndex, trackNo, segmentID, prevSegmentPerOrderPerTrack, assignmentByOrderAndNode) {
-    const segment = {
-      trackID: trackNo,
-      segmentID,
-      compareToFromSame: prevSegmentPerOrderPerTrack[order][trackNo] ?? null
-    };
-    const existing = nodeIndex === null ? void 0 : assignmentByOrderAndNode[order].get(nodeIndex);
-    if (existing === void 0) {
-      const assignment = {
-        type: "single",
-        node: nodeIndex,
-        tracks: [segment]
-      };
-      state.assignments[order].push(assignment);
-      if (nodeIndex !== null) {
-        assignmentByOrderAndNode[order].set(nodeIndex, assignment);
-      }
-    } else {
-      existing.type = "multiple";
-      existing.tracks.push(segment);
-    }
-    prevSegmentPerOrderPerTrack[order][trackNo] = segment;
-  }
   function getIdealLanesAndCoords(state, assignment, order) {
-    let index;
     assignment.forEach((node) => {
-      node.idealLane = 0;
+      let laneSum = 0;
       node.tracks.forEach((track) => {
-        if (track.segmentID === 0) {
-          track.idealLane = track.trackID;
-          track.idealY = null;
-        } else {
-          if (state.tracks[track.trackID].path[track.segmentID - 1].order === order - 1) {
-            track.idealLane = state.tracks[track.trackID].path[track.segmentID - 1].lane ?? void 0;
-            track.idealY = state.tracks[track.trackID].path[track.segmentID - 1].y;
-          } else if (track.segmentID < state.tracks[track.trackID].path.length - 1 && state.tracks[track.trackID].path[track.segmentID + 1].order === order - 1) {
-            track.idealLane = state.tracks[track.trackID].path[track.segmentID + 1].lane ?? void 0;
-            track.idealY = state.tracks[track.trackID].path[track.segmentID + 1].y;
-          } else {
-            index = track.segmentID - 1;
-            while (index >= 0 && state.tracks[track.trackID].path[index].order !== order - 1) {
-              index -= 1;
-            }
-            if (index < 0) {
-              track.idealLane = track.trackID;
-              track.idealY = null;
-            } else {
-              track.idealLane = state.tracks[track.trackID].path[index].lane;
-              track.idealY = state.tracks[track.trackID].path[index].y;
-            }
-          }
-        }
-        node.idealLane += track.idealLane;
+        const from = segmentToTheLeft(state.tracks[track.trackID].path, track.segmentID, order - 1);
+        track.idealLane = from === void 0 ? track.trackID : from.lane;
+        track.idealY = from === void 0 ? null : from.y;
+        laneSum += track.idealLane;
       });
-      node.idealLane /= node.tracks.length;
+      node.idealLane = laneSum / node.tracks.length;
     });
+  }
+  function segmentToTheLeft(path, segmentID, leftOrder) {
+    if (segmentID === 0) {
+      return void 0;
+    }
+    if (path[segmentID - 1].order === leftOrder) {
+      return path[segmentID - 1];
+    }
+    if (path[segmentID + 1]?.order === leftOrder) {
+      return path[segmentID + 1];
+    }
+    return path.slice(0, segmentID).findLast((seg) => seg.order === leftOrder);
   }
   function generateSingleLaneAssignment(state, assignment, order) {
     let currentLane = 0;
@@ -1395,13 +1267,13 @@
     getIdealLanesAndCoords(state, assignment, order);
     assignment.sort(compareByIdealLane);
     assignment.forEach((node) => {
-      if (node.node !== null) {
-        state.nodes[node.node].topLane = currentLane;
+      const placed = node.node === null ? void 0 : state.nodes[node.node];
+      if (placed !== void 0) {
         if (prevNameIsNull) {
           currentY -= 10;
         }
-        state.nodes[node.node].y = currentY;
-        state.nodes[node.node].contentHeight = 0;
+        placed.y = currentY;
+        placed.contentHeight = 0;
         prevNameIsNull = false;
       } else {
         if (prevNameIsNull) {
@@ -1413,19 +1285,19 @@
       }
       node.tracks.sort(compareByIdealLane);
       node.tracks.forEach((track) => {
-        track.lane = currentLane;
-        if (track.trackID === prevTrack && node.node === null && prevNameIsNull) {
+        const { path, width } = state.tracks[track.trackID];
+        if (track.trackID === prevTrack && placed === void 0 && prevNameIsNull) {
           currentY += 10;
         }
-        state.tracks[track.trackID].path[track.segmentID].lane = currentLane;
-        state.tracks[track.trackID].path[track.segmentID].y = currentY;
+        path[track.segmentID].lane = currentLane;
+        path[track.segmentID].y = currentY;
         if (typeof track.idealY === "number") {
           potentialAdjustmentValues.add(track.idealY - currentY);
         }
         currentLane += 1;
-        currentY += state.tracks[track.trackID].width;
-        if (node.node !== null) {
-          state.nodes[node.node].contentHeight += state.tracks[track.trackID].width;
+        currentY += width;
+        if (placed !== void 0) {
+          placed.contentHeight += width;
         }
         prevTrack = track.trackID;
       });
@@ -1476,41 +1348,30 @@
         });
       }
     });
-    if (state.nodesPerOrder[node.order].length > 0) {
-      state.nodesPerOrder[node.order].forEach((nodeIndex) => {
-        if (state.nodes[nodeIndex] !== node && state.nodes[nodeIndex].y > node.y) {
-          state.nodes[nodeIndex].y += adjustBy;
-        }
-      });
-    }
+    state.nodesPerOrder[node.order].forEach((nodeIndex) => {
+      const other = state.nodes[nodeIndex];
+      if (other !== node && other.y > node.y) {
+        other.y += adjustBy;
+      }
+    });
   }
   function getVerticalAdjustmentCost(state, assignment, moveBy) {
     let result = 0;
     assignment.forEach((node) => {
       node.tracks.forEach((track) => {
-        if (typeof track.idealY === "number" && state.tracks[track.trackID].type !== "read") {
-          result += Math.abs(track.idealY - moveBy - state.tracks[track.trackID].path[track.segmentID].y) * state.tracks[track.trackID].width;
+        const { type, path, width } = state.tracks[track.trackID];
+        if (typeof track.idealY === "number" && type !== "read") {
+          result += Math.abs(track.idealY - moveBy - path[track.segmentID].y) * width;
         }
       });
     });
     return result;
   }
   function compareByIdealLane(a, b) {
-    if (a.idealLane !== void 0) {
-      if (b.idealLane !== void 0) {
-        if (a.idealLane < b.idealLane) {
-          return -1;
-        } else if (a.idealLane > b.idealLane) {
-          return 1;
-        }
-        return 0;
-      }
-      return -1;
+    if (a.idealLane === void 0 || b.idealLane === void 0) {
+      return Number(a.idealLane === void 0) - Number(b.idealLane === void 0);
     }
-    if (b.idealLane !== void 0) {
-      return 1;
-    }
-    return 0;
+    return a.idealLane - b.idealLane;
   }
   function compareNodesByOrder(a, b) {
     if (a.order !== b.order) {
@@ -1522,7 +1383,6 @@
     return 0;
   }
   function calculateTrackWidth(state) {
-    let allAreFour = true;
     const NARROW_WIDTH = 4;
     const WIDE_WIDTH = state.config.trackWidth;
     if (state.config.freqWidth === "linear") {
@@ -1532,19 +1392,9 @@
       return;
     }
     for (const track of state.tracks) {
-      if (track.freq !== void 0) {
-        track.width = Math.round((Math.log(Math.max(track.freq, 1)) + 1) * NARROW_WIDTH);
-      } else {
-        track.width = WIDE_WIDTH;
-        if (track.type !== void 0 && track.type === "read") {
-          track.width = NARROW_WIDTH;
-        }
-      }
-      if (track.width !== NARROW_WIDTH) {
-        allAreFour = false;
-      }
+      track.width = track.freq !== void 0 ? Math.round((Math.log(Math.max(track.freq, 1)) + 1) * NARROW_WIDTH) : track.type === "read" ? NARROW_WIDTH : WIDE_WIDTH;
     }
-    if (allAreFour) {
+    if (state.tracks.every((track) => track.width === NARROW_WIDTH)) {
       state.tracks.forEach((track) => {
         if (track.freq !== void 0) {
           track.width = WIDE_WIDTH;
@@ -1552,17 +1402,9 @@
       });
     }
   }
-  function getReadXStart(state, read) {
-    const seg = read.path[0];
+  function readBaseX(state, seg, base) {
     const node = state.nodes[seg.node];
-    const offset = read.firstNodeOffset ?? 0;
-    return clampedXCoordinateOfBaseWithinNode(node, seg.isForward ? offset : node.sequenceLength - offset);
-  }
-  function getReadXEnd(state, read) {
-    const seg = read.path[read.path.length - 1];
-    const node = state.nodes[seg.node];
-    const cover = read.finalNodeCoverLength ?? 0;
-    return clampedXCoordinateOfBaseWithinNode(node, seg.isForward ? cover : node.sequenceLength - cover);
+    return clampedXCoordinateOfBaseWithinNode(node, seg.isForward ? base : node.sequenceLength - base);
   }
   function getXCoordinateOfBaseWithinNode(node, base) {
     if (base > node.sequenceLength) {
@@ -1579,137 +1421,78 @@
     return nodeLeftX + clamped / node.sequenceLength * (nodeRightX - nodeLeftX);
   }
   function generateSVGShapesFromPath(state) {
-    let xStart;
-    let xEnd;
-    let yStart;
-    let yEnd;
-    for (let i = 0; i <= state.maxOrder; i += 1) {
-      state.extraLeft.push(0);
-      state.extraRight.push(0);
-    }
+    state.extraLeft = new Array(state.maxOrder + 1).fill(0);
+    state.extraRight = new Array(state.maxOrder + 1).fill(0);
     const orderStartX = [];
     const orderEndX = [];
     state.nodes.forEach((node) => {
       if (node.x !== void 0) {
         orderStartX[node.order] = node.x;
-        if (orderEndX[node.order] === void 0) {
-          orderEndX[node.order] = node.x + node.pixelWidth;
-        } else {
-          orderEndX[node.order] = Math.max(orderEndX[node.order], node.x + node.pixelWidth);
-        }
+        orderEndX[node.order] = Math.max(orderEndX[node.order] ?? -Infinity, node.x + node.pixelWidth);
       }
     });
     const reference = state.tracks[0];
     state.tracks.sort(compareTrackByInitialOrdering);
     state.tracks.forEach((track) => {
-      yStart = track.path[0].y;
-      if (track.type !== "read") {
-        if (track.sequence[0].startsWith("-")) {
-          xStart = orderEndX[track.path[0].order] + 20;
+      const { id, name, type, width, path } = track;
+      const rectangle = (xStart2, xEnd2, yStart2) => {
+        state.shapes.rectangles.push({
+          xStart: Math.min(xStart2, xEnd2),
+          yStart: yStart2,
+          xEnd: Math.max(xStart2, xEnd2),
+          yEnd: yStart2 + width - 1,
+          id,
+          name,
+          type
+        });
+      };
+      const exitX = (seg) => seg.isForward ? orderEndX[seg.order] : orderStartX[seg.order];
+      const first = path[0];
+      let yStart = first.y;
+      let xStart = type === "read" ? readBaseX(state, first, track.firstNodeOffset ?? 0) : first.isForward ? orderStartX[first.order] - 20 : orderEndX[first.order] + 20;
+      for (let i = 1; i < path.length; i += 1) {
+        const prev = path[i - 1];
+        const seg = path[i];
+        if (seg.y === yStart) {
+          continue;
+        }
+        const xEnd2 = exitX(prev);
+        if (xEnd2 !== xStart) {
+          rectangle(xStart, xEnd2, yStart);
+        }
+        const yEnd = seg.y;
+        const step = seg.order - prev.order;
+        if (step === 1 || step === -1) {
+          const xNext = step === 1 ? orderStartX[seg.order] : orderEndX[seg.order];
+          state.shapes.curves.push({
+            xStart: step === 1 ? xEnd2 : xEnd2 + 1,
+            yStart,
+            xEnd: step === 1 ? xNext + 1 : xNext,
+            yEnd,
+            width,
+            id,
+            name,
+            type,
+            nodeStart: prev.node,
+            nodeEnd: seg.node,
+            orderStart: prev.order,
+            orderEnd: seg.order,
+            ...track === reference ? { reference: true } : {}
+          });
+          xStart = xNext;
         } else {
-          xStart = orderStartX[track.path[0].order] - 20;
+          generateTurnaround(state, track, prev.isForward ? 1 : -1, xEnd2, yStart, yEnd, seg.order);
+          xStart = xEnd2;
         }
-      } else {
-        xStart = getReadXStart(state, track);
+        yStart = yEnd;
       }
-      for (let i = 0; i < track.path.length; i += 1) {
-        if (track.path[i].y !== yStart) {
-          if (track.path[i - 1].isForward) {
-            xEnd = orderEndX[track.path[i - 1].order];
-          } else {
-            xEnd = orderStartX[track.path[i - 1].order];
-          }
-          if (xEnd !== xStart) {
-            state.shapes.rectangles.push({
-              xStart: Math.min(xStart, xEnd),
-              yStart,
-              xEnd: Math.max(xStart, xEnd),
-              yEnd: yStart + track.width - 1,
-              // TODO: This is not actually the index of the track!
-              id: track.id,
-              name: track.name,
-              type: track.type
-            });
-          }
-          if (track.path[i].order - 1 === track.path[i - 1].order) {
-            xStart = xEnd;
-            xEnd = orderStartX[track.path[i].order];
-            yEnd = track.path[i].y;
-            state.shapes.curves.push({
-              xStart,
-              yStart,
-              xEnd: xEnd + 1,
-              yEnd,
-              width: track.width,
-              id: track.id,
-              name: track.name,
-              type: track.type,
-              nodeStart: track.path[i - 1].node,
-              nodeEnd: track.path[i].node,
-              orderStart: track.path[i - 1].order,
-              orderEnd: track.path[i].order,
-              ...track === reference ? { reference: true } : {}
-            });
-            xStart = xEnd;
-            yStart = yEnd;
-          } else if (track.path[i].order + 1 === track.path[i - 1].order) {
-            xStart = xEnd;
-            xEnd = orderEndX[track.path[i].order];
-            yEnd = track.path[i].y;
-            state.shapes.curves.push({
-              xStart: xStart + 1,
-              yStart,
-              xEnd,
-              yEnd,
-              width: track.width,
-              id: track.id,
-              name: track.name,
-              type: track.type,
-              nodeStart: track.path[i - 1].node,
-              nodeEnd: track.path[i].node,
-              orderStart: track.path[i - 1].order,
-              orderEnd: track.path[i].order,
-              ...track === reference ? { reference: true } : {}
-            });
-            xStart = xEnd;
-            yStart = yEnd;
-          } else {
-            if (track.path[i - 1].isForward) {
-              yEnd = track.path[i].y;
-              generateTurnaround(state, 1, xEnd, yStart, yEnd, track.width, track.id, track.path[i].order, track.type, track.name);
-              xStart = orderEndX[track.path[i].order];
-              yStart = track.path[i].y;
-            } else {
-              yEnd = track.path[i].y;
-              generateTurnaround(state, -1, xEnd, yStart, yEnd, track.width, track.id, track.path[i].order, track.type, track.name);
-              xStart = orderStartX[track.path[i].order];
-              yStart = track.path[i].y;
-            }
-          }
-        }
-      }
-      if (track.type !== "read") {
-        if (!track.path[track.path.length - 1].isForward) {
-          xEnd = orderStartX[track.path[track.path.length - 1].order] - 20;
-        } else {
-          xEnd = orderEndX[track.path[track.path.length - 1].order] + 20;
-        }
-      } else {
-        xEnd = getReadXEnd(state, track);
-      }
-      state.shapes.rectangles.push({
-        xStart: Math.min(xStart, xEnd),
-        yStart,
-        xEnd: Math.max(xStart, xEnd),
-        yEnd: yStart + track.width - 1,
-        id: track.id,
-        name: track.name,
-        type: track.type
-      });
+      const last = path[path.length - 1];
+      const xEnd = type === "read" ? readBaseX(state, last, track.finalNodeCoverLength ?? 0) : exitX(last) + (last.isForward ? 20 : -20);
+      rectangle(xStart, xEnd, yStart);
     });
   }
   var COARSENED_ID_BASE = 1e9;
-  function buildCoarsenedSyntheticBands(state, source, unit, firstId = COARSENED_ID_BASE) {
+  function buildCoarsenedSyntheticBands(state, source, unit, firstId) {
     const edges = /* @__PURE__ */ new Map();
     let total = 0;
     const span = state.nodes.length;
@@ -1784,9 +1567,7 @@
         sequence: [edge.sName, edge.dName],
         indexSequence: [],
         path: [],
-        // Pre-set width so placeReads / placeReadSet allocate the right vertical
-        // space and assignReadsToNodes (patched to honor pre-set widths) leaves
-        // it alone.
+        // assignReadsToNodes keeps a width already set
         width: widthForCount(edge.crossings),
         firstNodeOffset: srcLen,
         finalNodeCoverLength: 0,
@@ -1802,17 +1583,6 @@
         haplotypeShare: share
       });
       i += 1;
-    }
-    if (DEBUG) {
-      let tallestName = "?";
-      let tallestH = 0;
-      state.nodes.forEach((n) => {
-        if (n.contentHeight > tallestH) {
-          tallestH = n.contentHeight;
-          tallestName = n.name;
-        }
-      });
-      debugLog(`[coarsened] ${unit}s_in=${source.length} edges_out=${synthetic.length} tallestNodeBeforePlace=${tallestName}(${tallestH.toFixed(1)})`);
     }
     return { bands: synthetic, total };
   }
@@ -1867,7 +1637,7 @@
     return `${Math.round(share * 100)}%`;
   }
   var MIN_BEND_WIDTH = 7;
-  function generateTurnaround(state, dir, x, yStart, yEnd, trackWidth, trackID, order, type, trackName) {
+  function generateTurnaround(state, { width: trackWidth, id: trackID, name: trackName, type }, dir, x, yStart, yEnd, order) {
     const extra = dir === 1 ? state.extraRight : state.extraLeft;
     const offset = 10 * extra[order];
     const apex = x + dir * (offset + 5);
@@ -1906,13 +1676,13 @@
     d += ` H ${outer}`;
     d += ` Q ${outer} ${yBottom + trackWidth} ${apex} ${yBottom + trackWidth}`;
     d += " Z ";
-    state.shapes.corners.push({ path: d, id: trackID, type });
+    state.shapes.corners.push({ path: d, id: trackID, name: trackName, type });
     d = `M ${apex} ${yTop}`;
     d += ` Q ${outer} ${yTop} ${outer} ${yTop + trackWidth + radius}`;
     d += ` H ${inner}`;
     d += ` Q ${inner} ${yTop + trackWidth} ${apex} ${yTop + trackWidth}`;
     d += " Z ";
-    state.shapes.corners.push({ path: d, id: trackID, type });
+    state.shapes.corners.push({ path: d, id: trackID, name: trackName, type });
     extra[order] += 1;
   }
   function nodePixelCoordinatesInX(node) {
@@ -1925,19 +1695,19 @@
       case "compressed":
         state.nodes.forEach((node) => {
           node.width = 1 + Math.log2(Math.max(node.sequenceLength, 1));
-          node.pixelWidth = Math.round((node.width - 1) * 8.401);
+          node.pixelWidth = Math.round((node.width - 1) * DEFAULT_CHAR_WIDTH);
         });
         break;
       case "small":
         state.nodes.forEach((node) => {
           node.width = node.sequenceLength / 100;
-          node.pixelWidth = Math.max(Math.round((node.width - 1) * 8.401), 0);
+          node.pixelWidth = Math.max(Math.round((node.width - 1) * DEFAULT_CHAR_WIDTH), 0);
         });
         break;
       case "fixed":
         state.nodes.forEach((node) => {
           node.width = 10;
-          node.pixelWidth = Math.round(node.width * 8.401);
+          node.pixelWidth = Math.round(node.width * DEFAULT_CHAR_WIDTH);
         });
         break;
       case "normal": {
@@ -2032,7 +1802,7 @@
     });
     const absorbed = new Uint8Array(state.nodes.length);
     state.nodes.forEach((_, i) => {
-      if (mergeableWithPred(i, pred, succ) !== 0) {
+      if (mergeableWithPred(i, pred, succ)) {
         absorbed[i] = 1;
       }
     });
@@ -2116,38 +1886,16 @@
   }
   function mergeableWithPred(index, pred, succ) {
     const predecessor = soleNeighbor(pred, index);
-    return predecessor !== 0 && soleNeighbor(succ, predecessor) !== 0 ? predecessor : 0;
+    return predecessor !== 0 && soleNeighbor(succ, predecessor) !== 0;
   }
   function mergeableWithSucc(index, pred, succ) {
     const successor = soleNeighbor(succ, index);
     return successor !== 0 && soleNeighbor(pred, successor) !== 0;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@1.1.0/node_modules/@jbrowse/tubemap-core/esm/geometry.js
-  function groupBy2(items, key) {
-    const groups = /* @__PURE__ */ new Map();
-    for (const item of items) {
-      const k = key(item);
-      const group = groups.get(k);
-      if (group === void 0) {
-        groups.set(k, [item]);
-      } else {
-        group.push(item);
-      }
-    }
-    return groups;
-  }
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.0/node_modules/@jbrowse/tubemap-core/esm/geometry.js
   function compareCurvesByXYStartValue(a, b) {
-    if (a.xStart < b.xStart) {
-      return 1;
-    } else if (a.xStart > b.xStart) {
-      return -1;
-    } else if (a.yStart > b.yStart) {
-      return 1;
-    } else if (a.yStart < b.yStart) {
-      return -1;
-    }
-    return 0;
+    return b.xStart - a.xStart || a.yStart - b.yStart;
   }
   function curveEnds(curve) {
     return [
@@ -2189,7 +1937,7 @@
     return wanted.map((w, i) => w * (group[i].reference ? referenceScale : othersScale));
   }
   function curvePaths(curves, type, { gapWidth = Infinity } = {}) {
-    const groupedCurves = groupBy2(curves.filter((curve) => curve.type === type), (curve) => curveEnds(curve).join(","));
+    const groupedCurves = groupBy(curves.filter((curve) => curve.type === type), (curve) => curveEnds(curve).join(","));
     groupedCurves.forEach((curveGroup) => {
       curveGroup.sort(compareCurvesByXYStartValue);
       const spread = spreads(curveGroup, gapWidth);
@@ -2301,7 +2049,7 @@
     return d;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@1.1.0/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.0/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
   function readMismatches(layout) {
     const { nodes, nodeMap } = layout;
     const out = [];
@@ -2310,17 +2058,16 @@
       if (read.type !== "read" || entries === void 0) {
         continue;
       }
+      let from = 0;
       entries.forEach((entry, i) => {
         const nodeIndex = nodeMap.get(forward(entry.nodeName));
         const node = nodeIndex === void 0 ? void 0 : nodes[nodeIndex];
-        let pathIndex = i;
-        while (pathIndex < read.path.length && read.path[pathIndex].node !== nodeIndex) {
-          pathIndex += 1;
-        }
+        const pathIndex = read.path.findIndex((s, j) => j >= from && s.node === nodeIndex);
         const segment = read.path[pathIndex];
         if (node === void 0 || segment?.y === void 0) {
           return;
         }
+        from = pathIndex + 1;
         for (const edit of entry.mismatches) {
           const mm = segment.isForward ? edit : mirroredMismatch(edit, node.sequenceLength);
           const span = mm.type === "deletion" ? mm.length : mm.type === "substitution" ? mm.seq?.length : 0;
