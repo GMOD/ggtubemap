@@ -13,6 +13,6 @@ if [ -n "$core" ]; then
 fi
 
 pnpm exec esbuild tools/bridge.js --bundle --format=iife --target=es2020 \
-  --legal-comments=inline "${alias[@]}" \
+  --legal-comments=inline "${alias[@]}" --alias:fs/promises=./tools/no-fs.js \
   --banner:js="$(node tools/banner.js ${core:+"$core"})" \
   --outfile=inst/js/tubemap-core.js

@@ -8,6 +8,12 @@ importers:
 
   .:
     devDependencies:
+      '@gmod/tabix':
+        specifier: 3.10.2
+        version: 3.10.2
+      '@jbrowse/graph-walks':
+        specifier: 1.0.0
+        version: 1.0.0
       '@jbrowse/tubemap-core':
         specifier: 2.0.0
         version: 2.0.0
@@ -173,6 +179,23 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@gmod/bgzf-filehandle@6.7.0':
+    resolution: {integrity: sha512-ThtHVneb+tASyGFACVL/rMu6d5AY0vWK6poeOJwIIAaJpXYpptrmwvhdk2xk5eoNzL+iN40B3bXytMvQ+e+80Q==}
+
+  '@gmod/shared-read-cache@2.0.1':
+    resolution: {integrity: sha512-HXLI9d42+wRhnUx+Iyh5DPTIY4TnuVW9ROF90nGb0vQdOLT8MHq44VdQyc2Zt0HfngJUvhmPxjJRr28YykT05g==}
+
+  '@gmod/tabix@3.10.2':
+    resolution: {integrity: sha512-vlHs03ILhRNuVWbqaA01nNQvRZBR+/uXia/1hWVu4wsHoArVfro5bUBCcYAhBo+kes7tdYJRc7xVWxwxT4Jscw==}
+
+  '@jbrowse/graph-walks@1.0.0':
+    resolution: {integrity: sha512-/4nfD2RYQkspOC038UmRagYl5keL26J+Ijngqvi9P3PH/DCe3dBYberxH1BcHgNk6G3wOAtsVNK1A3SnvDRKUQ==}
+    engines: {node: '>=20'}
+
+  '@jbrowse/quick-lru@8.0.0':
+    resolution: {integrity: sha512-zToC0THd94TGr4cWMp9eOCRB8eeN004ncajZzVOoM8WEWV90YMTX5SX9zY6Nk1hhY7ASKWnfOmguXt7SoXaLzw==}
+    engines: {node: '>=22'}
+
   '@jbrowse/tubemap-core@2.0.0':
     resolution: {integrity: sha512-hSa1f8LO1916BtJwZ5u2tBG2CKlYtoeMIbWkjlvlaBi9rUPBDgjuWCDBtep1OJAqIX3/LLSxnFOhUsM9vvTqxQ==}
 
@@ -180,6 +203,12 @@ packages:
     resolution: {integrity: sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==}
     engines: {node: '>=18'}
     hasBin: true
+
+  generic-filehandle2@2.5.1:
+    resolution: {integrity: sha512-+0F0k0xH4erZEB3xOVBdrlJi0hyURYb/CygF8QyqAjLsitmoZYl86pMfTZ91/w2Z1CPK610mBy93bxyiby1CHA==}
+
+  pako-esm2@2.0.2:
+    resolution: {integrity: sha512-bm+PwddAyroj8Ny8tNuLepGW28OUdI2b/PkvhaW2jHBVZ5fgcR1xsrLPiOKwk8LoXyc1az2NdHlvICBN2BjR6Q==}
 
 snapshots:
 
@@ -261,6 +290,24 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
+  '@gmod/bgzf-filehandle@6.7.0':
+    dependencies:
+      generic-filehandle2: 2.5.1
+      pako-esm2: 2.0.2
+
+  '@gmod/shared-read-cache@2.0.1': {}
+
+  '@gmod/tabix@3.10.2':
+    dependencies:
+      '@gmod/bgzf-filehandle': 6.7.0
+      '@gmod/shared-read-cache': 2.0.1
+      '@jbrowse/quick-lru': 8.0.0
+      generic-filehandle2: 2.5.1
+
+  '@jbrowse/graph-walks@1.0.0': {}
+
+  '@jbrowse/quick-lru@8.0.0': {}
+
   '@jbrowse/tubemap-core@2.0.0': {}
 
   esbuild@0.28.2:
@@ -291,3 +338,7 @@ snapshots:
       '@esbuild/win32-arm64': 0.28.2
       '@esbuild/win32-ia32': 0.28.2
       '@esbuild/win32-x64': 0.28.2
+
+  generic-filehandle2@2.5.1: {}
+
+  pako-esm2@2.0.2: {}

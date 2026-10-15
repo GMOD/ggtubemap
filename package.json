@@ -1,7 +1,7 @@
 {
   "name": "ggtubemap-js",
   "private": true,
-  "description": "Builds inst/js/tubemap-core.js, the layout bundle the R package evaluates in QuickJS",
+  "description": "Builds inst/js/tubemap-core.js, the layout bundle the R package evaluates in V8",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.15.1",
@@ -10,6 +10,8 @@
     "update-core": "tools/update-core.sh"
   },
   "devDependencies": {
+    "@gmod/tabix": "3.10.2",
+    "@jbrowse/graph-walks": "1.0.0",
     "@jbrowse/tubemap-core": "2.0.0",
     "esbuild": "^0.28.2"
   }

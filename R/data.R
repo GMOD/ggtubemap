@@ -30,14 +30,36 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #' a walk's start, or the start in a path named as a subpath (`name[start-end]`
 #' or `name:start-end`), or else 0.
 #'
-#' @param path A GFA file, optionally gzipped.
+#' With `region`, `path` is a [gfa-to-tabix](https://github.com/GMOD/gfa-to-tabix)
+#' `--walks` file with its `.tbi`, local or a URL, such as the HPRC release
+#' 2.1 walk file the JBrowse HPRC demo hosts. Range requests fetch only the
+#' blocks the region needs, and the reference sample's walk comes first.
+#'
+#' @param path A GFA file, optionally gzipped, local or a URL; or a
+#'   `.walks.bed.gz` file with `region`.
 #' @param reference The name of the path to draw as the reference, which the
 #'   layout puts first. By default the first path in the file.
+#' @param region On a walk file, the locus to cut, such as
+#'   `"chr6:160,653,940-160,654,130"`.
+#' @param haplotypes On a walk file, the `sample#haplotype` walks to keep,
+#'   every one when `NULL`.
+#' @param context On a walk file, bp of reference kept past each end of
+#'   `region`.
 #' @return A list of `nodes` (a data frame of `name` and `seq`, or
 #'   `sequence_length` where a segment's sequence is `*`) and `tracks`.
 #' @export
-read_gfa <- function(path, reference = NULL) {
-  lines <- readLines(gzfile(path))
+#' @examples
+#' \dontrun{
+#' walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f2.GRCh38.walks.bed.gz"
+#' g <- read_gfa(walks, region = "chr6:160,653,940-160,654,130",
+#'               haplotypes = c("HG00097#1", "HG00133#2"))
+#' }
+read_gfa <- function(path, reference = NULL, region = NULL, haplotypes = NULL,
+                     context = 0) {
+  if (!is.null(region)) {
+    return(order_tracks(cut_walks(path, region, haplotypes, context), reference))
+  }
+  lines <- gfa_lines(path)
   fields <- strsplit(lines, "\t", fixed = TRUE)
   kind <- vapply(fields, `[`, "", 1)
 
@@ -71,14 +93,32 @@ read_gfa <- function(path, reference = NULL) {
   if (length(tracks) == 0) {
     stop("The GFA has no P or W lines to draw.", call. = FALSE)
   }
-  if (!is.null(reference)) {
-    first <- which(vapply(tracks, `[[`, "", "name") == reference)
-    if (length(first) == 0) {
-      stop(sprintf("No path named '%s'.", reference), call. = FALSE)
-    }
-    tracks <- c(tracks[first[1]], tracks[-first[1]])
+  order_tracks(list(nodes = nodes, tracks = tracks), reference)
+}
+
+order_tracks <- function(graph, reference) {
+  if (is.null(reference)) {
+    return(graph)
   }
-  list(nodes = nodes, tracks = tracks)
+  tracks <- graph$tracks
+  first <- which(vapply(tracks, `[[`, "", "name") == reference)
+  if (length(first) == 0) {
+    stop(sprintf("No path named '%s'.", reference), call. = FALSE)
+  }
+  graph$tracks <- c(tracks[first[1]], tracks[-first[1]])
+  graph
+}
+
+gfa_lines <- function(path) {
+  if (grepl("^(https?|ftp)://", path)) {
+    local <- tempfile()
+    on.exit(unlink(local))
+    utils::download.file(path, local, mode = "wb", quiet = TRUE)
+    path <- local
+  }
+  con <- gzfile(path)
+  on.exit(close(con), add = TRUE, after = FALSE)
+  readLines(con)
 }
 
 # The start of a subpath, named `name[start-end]` as vg writes it or

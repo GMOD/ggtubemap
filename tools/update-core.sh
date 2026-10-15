@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Moves ggtubemap to a release of @jbrowse/tubemap-core, the latest by default:
 # pins it, rebuilds the bundle, and copies in that release's goldens and
-# example graphs, so the tests hold QuickJS to the layouts the same release
+# example graphs, so the tests hold V8 to the layouts the same release
 # makes under Node.
 set -euo pipefail
 cd "$(dirname "$0")/.."

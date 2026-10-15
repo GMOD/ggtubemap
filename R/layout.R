@@ -2,8 +2,8 @@ the <- new.env(parent = emptyenv())
 
 js_context <- function() {
   if (is.null(the$ctx)) {
-    ctx <- QuickJSR::JSContext$new(stack_size = 64 * 1024 * 1024)
-    ctx$source(file = system.file("js", "tubemap-core.js", package = "ggtubemap"))
+    ctx <- V8::v8()
+    ctx$source(system.file("js", "tubemap-core.js", package = "ggtubemap"))
     the$ctx <- ctx
   }
   the$ctx

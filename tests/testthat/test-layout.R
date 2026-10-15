@@ -26,7 +26,7 @@ rectangle_corners <- function(rects) {
   sort(paste(round(rects$x, 6), round(rects$y, 6)))
 }
 
-test_that("QuickJS reproduces core's golden layout of example-6", {
+test_that("V8 reproduces core's golden layout of example-6", {
   g <- golden("example-6.default")
   tm <- tubemap_layout(tubemap_example("example-6"))
   expect_equal(unlist(tm$bounds), unlist(g$bounds), tolerance = 1e-9)

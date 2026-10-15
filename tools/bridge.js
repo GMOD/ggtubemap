@@ -1,6 +1,9 @@
 // The one function R calls: JSON in, JSON out, every table columnar so
 // jsonlite reads it straight into a data frame. Shapes come out as flattened
 // polygons in sequenceTubeMap's draw order, panel by panel.
+import './polyfills.js'
+import './walks.js'
+
 import {
   curvePaths,
   flattenPath,
@@ -11,10 +14,6 @@ import {
   placeFacets,
   readMismatches,
 } from '@jbrowse/tubemap-core'
-
-// QuickJS has no structuredClone. Core clones only the inputs, which arrive
-// here as parsed JSON, so a JSON round trip copies them exactly.
-globalThis.structuredClone ??= value => JSON.parse(JSON.stringify(value))
 
 function columns(names) {
   const table = {}

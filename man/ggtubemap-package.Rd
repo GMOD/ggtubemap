@@ -6,7 +6,7 @@
 \alias{ggtubemap-package}
 \title{ggtubemap: Pangenome Tube Maps in 'ggplot2'}
 \description{
-Draws pangenome graphs as tube maps, the view of 'sequenceTubeMap', with 'ggplot2'. The layout runs from the '@jbrowse/tubemap-core' JavaScript library in an embedded 'QuickJS' engine, and every tube, node and base comes back as polygons and text that 'ggplot2' layers draw, so tube maps take scales, themes and vector output like any other plot.
+Draws pangenome graphs as tube maps, the view of 'sequenceTubeMap', with 'ggplot2'. The layout runs from the '@jbrowse/tubemap-core' JavaScript library in 'V8', and every tube, node and base comes back as polygons and text that 'ggplot2' layers draw, so tube maps take scales, themes and vector output like any other plot. It also cuts a region out of a 'gfa-to-tabix' walk file by range requests.
 }
 \seealso{
 Useful links:

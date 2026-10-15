@@ -9,20 +9,22 @@ Authors@R: c(
   )
 Description: Draws pangenome graphs as tube maps, the view of
     'sequenceTubeMap', with 'ggplot2'. The layout runs from the
-    '@jbrowse/tubemap-core' JavaScript library in an embedded 'QuickJS'
-    engine, and every tube, node and base comes back as polygons and text
-    that 'ggplot2' layers draw, so tube maps take scales, themes and vector
-    output like any other plot.
+    '@jbrowse/tubemap-core' JavaScript library in 'V8', and every tube,
+    node and base comes back as polygons and text that 'ggplot2' layers
+    draw, so tube maps take scales, themes and vector output like any other
+    plot. It also cuts a region out of a 'gfa-to-tabix' walk file by range
+    requests.
 License: MIT + file LICENSE
 URL: https://github.com/GMOD/ggtubemap
 Depends:
     R (>= 4.4.0)
 Imports:
+    curl,
     ggplot2 (>= 3.5.0),
     grDevices,
     grid,
     jsonlite,
-    QuickJSR
+    V8
 Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
