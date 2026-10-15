@@ -223,7 +223,7 @@ node_bases <- function(nodes) {
     node = nodes$name[row],
     x = nodes$left[row] + (i + 0.5) * step[row],
     y = nodes$y[row] + 4,
-    base = unlist(strsplit(nodes$seq, ""), use.names = FALSE),
+    base = as.character(unlist(strsplit(nodes$seq, ""), use.names = FALSE)),
     stringsAsFactors = FALSE
   )
 }

@@ -25,3 +25,11 @@ test_that("a byte range reads the same from a file and from a URL", {
   expect_identical(fetch_range(url, 10, 20), fetch_range(walk_file, 10, 20))
   expect_identical(fetch_range(walk_file, 0, -1), readBin(walk_file, "raw", file.size(walk_file)))
 })
+
+test_that("a graph with no bases draws at normal node widths", {
+  g <- read_gfa(walk_file, region = "chr:1004500-1004961")
+  expect_true(all(is.na(g$nodes$seq)))
+  tm <- tubemap_layout(g)
+  expect_equal(nrow(tm$bases), 0)
+  expect_no_error(ggplot2::ggplot_build(autoplot(tm)))
+})
