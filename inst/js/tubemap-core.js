@@ -4993,7 +4993,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@1.0.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@1.1.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp) {
       super(message);
@@ -5005,6 +5005,13 @@
     }
   };
   var SEP = "#";
+  function panSNSample(refName) {
+    return refName.split(SEP)[0];
+  }
+  function panSNContig(refName) {
+    const parts = refName.split(SEP);
+    return parts.length >= 3 ? parts.slice(2).join(SEP) : parts.length === 2 ? parts[1] : refName;
+  }
   function panSNHaplotype(refName) {
     const parts = refName.split(SEP);
     return parts.length >= 3 ? `${parts[0]}${SEP}${parts[1]}` : void 0;
@@ -5018,7 +5025,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@1.0.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@1.1.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
@@ -5546,7 +5553,7 @@
     return links;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@1.0.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@1.1.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
     return match ? +match[1] : void 0;
@@ -5576,6 +5583,10 @@
   }
   function walkNameFilter(wanted, referenceHaplotype) {
     return wanted === void 0 || wanted.length === 0 ? void 0 : (name) => panSNMatchesPrefix(name, referenceHaplotype) || wanted.some((prefix) => panSNMatchesPrefix(name, prefix));
+  }
+  function walksKept(wanted, refName) {
+    var _a;
+    return walkNameFilter(wanted, (_a = panSNHaplotype(refName)) !== null && _a !== void 0 ? _a : refName);
   }
   function joinPieces(rows) {
     const byPath = /* @__PURE__ */ new Map();
@@ -5949,7 +5960,32 @@
   }
   var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@1.0.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@1.1.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  function qualifiedKey(assemblyName, refName) {
+    return `${assemblyName}	${refName}`;
+  }
+  function refNameLookup(names) {
+    const lookup = /* @__PURE__ */ new Map();
+    for (const name of names) {
+      lookup.set(name, name);
+      const sample = panSNSample(name);
+      if (sample !== name) {
+        const contig = panSNContig(name);
+        lookup.set(qualifiedKey(sample, contig), name);
+        const haplotype = panSNHaplotype(name);
+        if (haplotype !== void 0) {
+          lookup.set(qualifiedKey(haplotype, contig), name);
+        }
+      }
+    }
+    return lookup;
+  }
+  function resolveRefName(lookup, assemblyName, refName) {
+    var _a;
+    return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
+  }
+
+  // node_modules/.pnpm/@jbrowse+graph-walks@1.1.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var FOLLOW_ROUNDS = 3;
   var FOLLOW_CHUNKS = 4;
@@ -6013,6 +6049,24 @@
     // The reference sequences the walk file holds windows on
     referenceSequences(opts = {}) {
       return this.walks.getReferenceSequenceNames(opts);
+    }
+    /**
+     * The walk file's sequence for `refName` on `sample`, or for `refName` as
+     * the file spells it: `chr6` on `GRCh38` is `GRCh38#0#chr6`. Undefined when
+     * the file holds neither.
+     */
+    async sequenceFor(sample, refName, opts = {}) {
+      if (!this.lookupRead) {
+        const read = this.walks.getReferenceSequenceNames().then(refNameLookup);
+        read.catch(() => {
+          if (this.lookupRead === read) {
+            this.lookupRead = void 0;
+          }
+        });
+        this.lookupRead = read;
+      }
+      const lookup = await raceAbort(this.lookupRead, opts.signal);
+      return resolveRefName(lookup, sample, refName);
     }
     async queryStart(start, opts = {}) {
       const { chunk, lookback } = await this.header(opts);
@@ -6143,18 +6197,6 @@
       }
     };
   }
-  function resolveName(names, refName) {
-    if (names.includes(refName)) {
-      return refName;
-    }
-    const ends = names.filter((n) => n.endsWith(`#${refName}`));
-    if (ends.length === 1) {
-      return ends[0];
-    }
-    throw new Error(
-      ends.length > 1 ? `${refName} names ${ends.length} sequences in the walk file (${ends.join(", ")}): give one in full` : `the walk file has no sequence ${refName}; it holds ${names.slice(0, 5).join(", ")}${names.length > 5 ? ", ..." : ""}`
-    );
-  }
   function tracksOf({ nodes, walks }, reference) {
     const tracks = [];
     for (let p = 0; p < walks.names.length; p++) {
@@ -6187,11 +6229,19 @@
         chunkCacheIdleTimeoutMs: 0
       })
     );
-    const anchor = resolveName(await reader.referenceSequences(), refName);
+    const { references: references2 } = await reader.header();
+    const sample = references2[0] ?? "";
+    const anchor = await reader.sequenceFor(sample, refName);
+    if (anchor === void 0) {
+      const names = await reader.referenceSequences();
+      throw new Error(
+        `the walk file has no sequence ${refName} on ${sample}; it holds ${names.slice(0, 5).join(", ")}${names.length > 5 ? ", ..." : ""}`
+      );
+    }
     const { graph, kept, fragments } = await reader.cut(
       anchor,
       { start, end },
-      { context, keep: walkNameFilter(haplotypes, panSNHaplotype(anchor) ?? anchor), sequences: true, links: false }
+      { context, keep: walksKept(haplotypes, anchor), sequences: true, links: false }
     );
     const tables = graph.tables(kept, fragments);
     const seq = tables.nodes.names.map((name) => graph.sequences.get(Number(name)) ?? null);

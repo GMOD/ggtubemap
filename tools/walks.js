@@ -2,7 +2,7 @@
 // V8 has no file system or network, so each byte range comes from R as
 // base64 through console.r.call, and @jbrowse/graph-walks does the cut.
 import { TabixIndexedFile } from '@gmod/tabix'
-import { WalkReader, panSNHaplotype, walkNameFilter } from '@jbrowse/graph-walks'
+import { WalkReader, walksKept } from '@jbrowse/graph-walks'
 
 import { fromBase64 } from './polyfills.js'
 
@@ -16,22 +16,6 @@ function rangeFile(location) {
     readFile: async () => bytes(0, -1),
     close: async () => {},
   }
-}
-
-// `chr6` names `GRCh38#0#chr6` where exactly one sequence ends that way
-function resolveName(names, refName) {
-  if (names.includes(refName)) {
-    return refName
-  }
-  const ends = names.filter(n => n.endsWith(`#${refName}`))
-  if (ends.length === 1) {
-    return ends[0]
-  }
-  throw new Error(
-    ends.length > 1
-      ? `${refName} names ${ends.length} sequences in the walk file (${ends.join(', ')}): give one in full`
-      : `the walk file has no sequence ${refName}; it holds ${names.slice(0, 5).join(', ')}${names.length > 5 ? ', ...' : ''}`,
-  )
 }
 
 // the reference sample's walk first, as a tube map draws its reference on top
@@ -68,11 +52,19 @@ globalThis.cutWalks = async function ({
       chunkCacheIdleTimeoutMs: 0,
     }),
   )
-  const anchor = resolveName(await reader.referenceSequences(), refName)
+  const { references } = await reader.header()
+  const sample = references[0] ?? ''
+  const anchor = await reader.sequenceFor(sample, refName)
+  if (anchor === undefined) {
+    const names = await reader.referenceSequences()
+    throw new Error(
+      `the walk file has no sequence ${refName} on ${sample}; it holds ${names.slice(0, 5).join(', ')}${names.length > 5 ? ', ...' : ''}`,
+    )
+  }
   const { graph, kept, fragments } = await reader.cut(
     anchor,
     { start, end },
-    { context, keep: walkNameFilter(haplotypes, panSNHaplotype(anchor) ?? anchor), sequences: true, links: false },
+    { context, keep: walksKept(haplotypes, anchor), sequences: true, links: false },
   )
   const tables = graph.tables(kept, fragments)
   const seq = tables.nodes.names.map(name => graph.sequences.get(Number(name)) ?? null)

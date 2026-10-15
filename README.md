@@ -213,9 +213,16 @@ rebuilds the bundle, and copies that release's goldens into
 `tests/testthat/golden` and its example graphs into `inst/extdata`.
 `devtools::test()` then checks that V8 lays out exactly as Node does.
 
-The `Update tubemap-core` workflow runs this daily, committing to main when R
-CMD check passes. The `Check` workflow runs R CMD check on every other push, and
-fails if `pnpm bundle` would change the tracked bundle.
+`pnpm update-deps [version]` runs `update-core`, then moves the other bundled
+packages to their latest releases and the packages they depend on to the
+newest their ranges allow, and lists what changed.
+
+- The `Update bundled packages` workflow runs `update-deps` daily, committing
+  to main when R CMD check passes
+- `@jbrowse` releases go in the day they come out. Others wait three days,
+  the `minimumReleaseAge` in `pnpm-workspace.yaml`
+- The `Check` workflow runs R CMD check on every other push, and fails if
+  `pnpm bundle` would change the tracked bundle
 
 To try unreleased core changes, bundle from a checkout's source instead:
 

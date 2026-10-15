@@ -1,7 +1,7 @@
 minimumReleaseAge: 4320
-# tubemap-core is ours, and the update workflow takes each release the day it
-# comes out; the quarantine would hold every update for three days
+# the @jbrowse packages are ours, and the update workflow takes each release
+# the day it comes out; the quarantine would hold every update for three days
 minimumReleaseAgeExclude:
-  - '@jbrowse/tubemap-core'
+  - '@jbrowse/*'
 allowBuilds:
   esbuild: true

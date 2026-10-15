@@ -1,23 +1,28 @@
-name: Update tubemap-core
+name: Update bundled packages
 
-# Takes each @jbrowse/tubemap-core release as it comes out: pins it, rebuilds
-# the bundle, refreshes that release's goldens and example graphs, and commits
-# to main once R CMD check passes. A failing check leaves main alone and fails
-# the run, so the next run tries again.
+# Takes each release of the bundled packages as it comes out: runs
+# tools/update-deps.sh, which pins tubemap-core with its goldens and example
+# graphs and moves the rest to their latest releases, and commits to main once
+# R CMD check passes. A failing check leaves main alone and fails the run, so
+# the next run tries again.
 on:
   schedule:
     - cron: '17 6 * * *'
+  # a dependency's release can start a run at once, with a token that may
+  # dispatch to this repo: gh api repos/GMOD/ggtubemap/dispatches -f event_type=dependency-released
+  repository_dispatch:
+    types: [dependency-released]
   workflow_dispatch:
     inputs:
       version:
         description: 'tubemap-core version, latest by default'
         required: false
 
-concurrency: update-core
+concurrency: update-deps
 
 jobs:
   update:
-    name: Bundle the latest release
+    name: Bundle the latest releases
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -28,43 +33,34 @@ jobs:
         with:
           node-version: 24.x
           cache: pnpm
-      - name: Find the release to take
-        id: release
+      - run: pnpm install --frozen-lockfile
+      - name: Update
+        id: update
         run: |
-          pinned=$(node -p "require('./package.json').devDependencies['@jbrowse/tubemap-core']")
-          wanted=${INPUT_VERSION:-$(npm view @jbrowse/tubemap-core version)}
-          echo "pinned $pinned, wanted $wanted"
-          echo "version=$wanted" >> "$GITHUB_OUTPUT"
-          if [ "$pinned" != "$wanted" ]; then echo "update=true" >> "$GITHUB_OUTPUT"; fi
+          tools/update-deps.sh "$INPUT_VERSION" > changes.txt
+          cat changes.txt
+          if [ -s changes.txt ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
         env:
           INPUT_VERSION: ${{ inputs.version }}
-      - if: steps.release.outputs.update
-        run: pnpm install --frozen-lockfile
-      - if: steps.release.outputs.update
-        run: pnpm update-core "$VERSION"
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
-      - if: steps.release.outputs.update
+      - if: steps.update.outputs.changed
         uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
         with:
           use-public-rspm: true
-      - if: steps.release.outputs.update
+      - if: steps.update.outputs.changed
         uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
         with:
           extra-packages: any::rcmdcheck
           needs: check
-      - if: steps.release.outputs.update
+      - if: steps.update.outputs.changed
         uses: r-lib/actions/check-r-package@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
         with:
           args: 'c("--no-manual")'
           error-on: '"note"'
-      - if: steps.release.outputs.update
+      - if: steps.update.outputs.changed
         name: Commit to main
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add package.json pnpm-lock.yaml inst tests
-          git commit -m "Bundle @jbrowse/tubemap-core $VERSION"
+          git commit -m "Bundle the latest releases" -m "$(cat changes.txt)"
           git push origin HEAD:main
-        env:
-          VERSION: ${{ steps.release.outputs.version }}

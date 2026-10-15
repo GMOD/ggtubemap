@@ -7,11 +7,12 @@
   "packageManager": "pnpm@11.15.1",
   "scripts": {
     "bundle": "tools/bundle.sh",
-    "update-core": "tools/update-core.sh"
+    "update-core": "tools/update-core.sh",
+    "update-deps": "tools/update-deps.sh"
   },
   "devDependencies": {
     "@gmod/tabix": "3.10.2",
-    "@jbrowse/graph-walks": "1.0.0",
+    "@jbrowse/graph-walks": "1.1.0",
     "@jbrowse/tubemap-core": "2.0.1",
     "esbuild": "^0.28.2"
   }
