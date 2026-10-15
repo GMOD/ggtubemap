@@ -15,8 +15,8 @@ importers:
         specifier: 1.0.0
         version: 1.0.0
       '@jbrowse/tubemap-core':
-        specifier: 2.0.0
-        version: 2.0.0
+        specifier: 2.0.1
+        version: 2.0.1
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -196,8 +196,8 @@ packages:
     resolution: {integrity: sha512-zToC0THd94TGr4cWMp9eOCRB8eeN004ncajZzVOoM8WEWV90YMTX5SX9zY6Nk1hhY7ASKWnfOmguXt7SoXaLzw==}
     engines: {node: '>=22'}
 
-  '@jbrowse/tubemap-core@2.0.0':
-    resolution: {integrity: sha512-hSa1f8LO1916BtJwZ5u2tBG2CKlYtoeMIbWkjlvlaBi9rUPBDgjuWCDBtep1OJAqIX3/LLSxnFOhUsM9vvTqxQ==}
+  '@jbrowse/tubemap-core@2.0.1':
+    resolution: {integrity: sha512-tpufiNVlRWzGiOdbWERDg6vPdmKqZMxbVWAHy8vW0Lk6CLlf9zc2Jy9kcVIR8ybkzsktpfpb0pETdDDK6FWdpA==}
 
   esbuild@0.28.2:
     resolution: {integrity: sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==}
@@ -308,7 +308,7 @@ snapshots:
 
   '@jbrowse/quick-lru@8.0.0': {}
 
-  '@jbrowse/tubemap-core@2.0.0': {}
+  '@jbrowse/tubemap-core@2.0.1': {}
 
   esbuild@0.28.2:
     optionalDependencies:

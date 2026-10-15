@@ -1,5 +1,5 @@
 /*
- * @jbrowse/tubemap-core 2.0.0, bundled by tools/bridge.js
+ * @jbrowse/tubemap-core 2.0.1, bundled by tools/bridge.js
  *
  * MIT License
  *
@@ -6205,7 +6205,7 @@
     });
   };
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.0/node_modules/@jbrowse/tubemap-core/esm/groupBy.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.1/node_modules/@jbrowse/tubemap-core/esm/groupBy.js
   function groupBy(items, key) {
     const groups = /* @__PURE__ */ new Map();
     for (const item of items) {
@@ -6220,7 +6220,7 @@
     return groups;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.0/node_modules/@jbrowse/tubemap-core/esm/panSN.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.1/node_modules/@jbrowse/tubemap-core/esm/panSN.js
   var NOT_SAMPLES = /* @__PURE__ */ new Set(["_gbwt_ref", "unknown"]);
   function parsePanSN(name) {
     const [sample, haplotype, contig] = name?.split("#") ?? [];
@@ -6230,7 +6230,7 @@
     return { sample, haplotype: Number(haplotype), contig };
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.0/node_modules/@jbrowse/tubemap-core/esm/layout.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.1/node_modules/@jbrowse/tubemap-core/esm/layout.js
   var READ_FACET_FIELDS = ["read_group", "sample_name"];
   var FACET_FIELDS = [...READ_FACET_FIELDS, "haplotype_sample"];
   var DEFAULT_CHAR_WIDTH = 8.401;
@@ -7123,6 +7123,11 @@
   function fillUnassignedOrders(orders) {
     return Array.from(orders, (order) => order ?? UNREACHABLE_ORDER);
   }
+  function compactOrders(orders) {
+    const used = [...new Set(orders.filter((order) => order >= 0))].sort((a, b) => a - b);
+    const rank = new Map(used.map((order, i) => [order, i]));
+    return orders.map((order) => rank.get(order) ?? order);
+  }
   function generateNodeOrder(state) {
     let modifiedSequence;
     let currentOrder;
@@ -7209,7 +7214,7 @@
     if (minOrder < 0) {
       increaseOrderForAllNodes(state, -minOrder);
     }
-    state.nodeOrders = fillUnassignedOrders(state.nodeOrders);
+    state.nodeOrders = compactOrders(fillUnassignedOrders(state.nodeOrders));
     state.nodes.forEach((node, i) => {
       node.order = state.nodeOrders[i];
     });
@@ -8074,7 +8079,7 @@
     return successor !== 0 && soleNeighbor(pred, successor) !== 0;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.0/node_modules/@jbrowse/tubemap-core/esm/geometry.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.1/node_modules/@jbrowse/tubemap-core/esm/geometry.js
   function compareCurvesByXYStartValue(a, b) {
     return b.xStart - a.xStart || a.yStart - b.yStart;
   }
@@ -8230,7 +8235,7 @@
     return d;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.0/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.1/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
   function readMismatches(layout) {
     const { nodes, nodeMap } = layout;
     const out = [];
