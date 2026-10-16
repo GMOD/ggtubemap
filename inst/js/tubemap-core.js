@@ -4993,7 +4993,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@1.1.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@2.0.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp) {
       super(message);
@@ -5025,7 +5025,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@1.1.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@2.0.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
@@ -5058,25 +5058,31 @@
   function canonicalLink(a, b) {
     return a > otherStrand(b) ? [otherStrand(b), otherStrand(a)] : [a, b];
   }
+  function chunkTag(tag, anchor) {
+    const at = tag.lastIndexOf(":");
+    return {
+      refName: tag[3] === "Z" ? tag.slice(5, at) : anchor,
+      start: +tag.slice(at + 1)
+    };
+  }
   function tags(cols, from, anchor) {
-    let prev;
-    let next;
+    const out = {};
     for (let k = from; k < cols.length; k++) {
       const tag = cols[k];
-      if (tag.startsWith("pv:") || tag.startsWith("nx:")) {
-        const at = tag.lastIndexOf(":");
-        const chunk = {
-          refName: tag[3] === "Z" ? tag.slice(5, at) : anchor,
-          start: +tag.slice(at + 1)
-        };
-        if (tag.startsWith("pv:")) {
-          prev = chunk;
-        } else {
-          next = chunk;
-        }
+      const key = tag.slice(0, 2);
+      if (key === "pv") {
+        out.prev = chunkTag(tag, anchor);
+      } else if (key === "nx") {
+        out.next = chunkTag(tag, anchor);
+      } else if (key === "pg" || key === "ng") {
+        const side = key === "pg" ? "prevRecord" : "nextRecord";
+        out[side] = { ...out[side], bp: +tag.slice(5) };
+      } else if (key === "pr" || key === "nr") {
+        const side = key === "pr" ? "prevRecord" : "nextRecord";
+        out[side] = { bp: 0, ...out[side], chunk: chunkTag(tag, anchor) };
       }
     }
-    return { prev, next };
+    return out;
   }
   var RefPath = class {
     constructor() {
@@ -5553,7 +5559,8 @@
     return links;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@1.1.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@2.0.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  var WALK_STOP_KINDS = ["elsewhere", "break", "end"];
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
     return match ? +match[1] : void 0;
@@ -5623,13 +5630,18 @@
       at += p.n;
     }
     const first = pieces[0];
+    const last = pieces.at(-1);
     return {
       name: first.name,
+      fragStart: first.fragStart,
       hapOffset: first.hapOffset,
+      firstPiece: first.piece,
       ids,
       rev,
       prev: first.prev,
-      next: pieces.at(-1).next
+      next: last.next,
+      prevRecord: first.prevRecord,
+      nextRecord: last.nextRecord
     };
   }
   function walkCut(runs, nodes, refName) {
@@ -5723,6 +5735,47 @@
       const node = nodes.get(id);
       return node === void 0 ? 0 : node.end - node.start;
     };
+    const bpOf = (ids, from, to) => {
+      let bp = 0;
+      for (let i = from; i < to; i++) {
+        bp += length(ids[i]);
+      }
+      return bp;
+    };
+    const byRecord = /* @__PURE__ */ new Map();
+    for (const run of runs) {
+      const key = `${run.name}	${run.fragStart}`;
+      const list = byRecord.get(key);
+      if (list) {
+        list.push(run);
+      } else {
+        byRecord.set(key, [run]);
+      }
+    }
+    const neighbours = /* @__PURE__ */ new Map();
+    for (const list of byRecord.values()) {
+      list.sort((a, b) => a.firstPiece - b.firstPiece);
+      list.forEach((run, i) => {
+        neighbours.set(run, [list[i - 1], list[i + 1]]);
+      });
+    }
+    const runEnd = (run) => run.hapOffset + bpOf(run.ids, 0, run.ids.length);
+    const stop = (run, after, trimmed) => {
+      var _a;
+      const cut = trimmed > 0 ? { trimmed } : {};
+      const chunk = after ? run.next : run.prev;
+      if (chunk) {
+        const other = (_a = neighbours.get(run)) === null || _a === void 0 ? void 0 : _a[after ? 1 : 0];
+        return other ? {
+          kind: "elsewhere",
+          chunk,
+          bp: after ? other.hapOffset - runEnd(run) : run.hapOffset - runEnd(other),
+          ...cut
+        } : { kind: "elsewhere", chunk, ...cut };
+      }
+      const gap = after ? run.nextRecord : run.prevRecord;
+      return gap ? { kind: "break", ...gap, ...cut } : { kind: "end", ...cut };
+    };
     const fragments = [];
     for (const { run, first: f, last: l } of spans) {
       const { ids, rev } = run;
@@ -5734,23 +5787,53 @@
       while (last < ids.length - 1 && kept.has(ids[last + 1])) {
         last++;
       }
-      let hapStart = run.hapOffset;
-      for (let i = 0; i < first; i++) {
-        hapStart += length(ids[i]);
-      }
-      let hapEnd = hapStart;
-      for (let i = first; i <= last; i++) {
-        hapEnd += length(ids[i]);
-      }
+      const hapStart = run.hapOffset + bpOf(ids, 0, first);
+      const hapEnd = hapStart + bpOf(ids, first, last + 1);
       fragments.push({
         name: run.name,
+        fragStart: run.fragStart,
         hapStart,
         hapEnd,
         ids: ids.subarray(first, last + 1),
-        rev: rev.subarray(first, last + 1)
+        rev: rev.subarray(first, last + 1),
+        before: stop(run, false, hapStart - run.hapOffset),
+        after: stop(run, true, runEnd(run) - hapEnd)
       });
     }
     return { kept, fragments, open: [...open.values()] };
+  }
+  function stopTable(stops) {
+    const chunkRefNames = [];
+    const refIndex = /* @__PURE__ */ new Map();
+    const table = {
+      kinds: new Uint8Array(stops.length),
+      kindNames: [...WALK_STOP_KINDS],
+      bp: new Float64Array(stops.length).fill(Number.NaN),
+      trimmed: new Float64Array(stops.length),
+      chunkRefs: new Int32Array(stops.length).fill(-1),
+      chunkStarts: new Float64Array(stops.length).fill(Number.NaN),
+      chunkRefNames
+    };
+    stops.forEach((stop, i) => {
+      var _a;
+      table.kinds[i] = WALK_STOP_KINDS.indexOf(stop.kind);
+      table.trimmed[i] = (_a = stop.trimmed) !== null && _a !== void 0 ? _a : 0;
+      if ("bp" in stop && stop.bp !== void 0) {
+        table.bp[i] = stop.bp;
+      }
+      if ("chunk" in stop && stop.chunk) {
+        const { refName, start } = stop.chunk;
+        let ref = refIndex.get(refName);
+        if (ref === void 0) {
+          ref = chunkRefNames.length;
+          refIndex.set(refName, ref);
+          chunkRefNames.push(refName);
+        }
+        table.chunkRefs[i] = ref;
+        table.chunkStarts[i] = start;
+      }
+    });
+    return table;
   }
   var WalkGraph = class {
     constructor(window) {
@@ -5888,7 +5971,9 @@
           ends: Float64Array.from(walks, (f) => f.hapEnd),
           offsets,
           steps,
-          reversed
+          reversed,
+          before: stopTable(walks.map((f) => f.before)),
+          after: stopTable(walks.map((f) => f.after))
         }
       };
     }
@@ -5960,7 +6045,7 @@
   }
   var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@1.1.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@2.0.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -5985,7 +6070,7 @@
     return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@1.1.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@2.0.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var FOLLOW_ROUNDS = 3;
   var FOLLOW_CHUNKS = 4;
@@ -6025,12 +6110,12 @@
     header(opts = {}) {
       if (!this.headerRead) {
         const read = this.walks.getHeaderLines().then((lines) => {
-          var _a;
+          var _a, _b;
           const header = walkHeader(lines);
-          if (header.format !== 2) {
-            throw new WalkFormatError("This walk file is format 1, from gfa-to-tabix 0.12 or earlier; rebuild it with gfa-to-tabix 1.0 or later");
+          if (header.format !== 3) {
+            throw new WalkFormatError(`This walk file is format ${(_a = header.format) !== null && _a !== void 0 ? _a : 1}; @jbrowse/graph-walks reads format 3, so rebuild it with gfa-to-tabix 1.1 or later`);
           }
-          const chunk = (_a = header.chunk) !== null && _a !== void 0 ? _a : 65536;
+          const chunk = (_b = header.chunk) !== null && _b !== void 0 ? _b : 65536;
           return {
             ...header,
             chunk,
