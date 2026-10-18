@@ -11,8 +11,8 @@
     "update-deps": "tools/update-deps.sh"
   },
   "devDependencies": {
-    "@gmod/tabix": "3.10.2",
-    "@jbrowse/graph-walks": "2.0.0",
+    "@gmod/tabix": "3.11.0",
+    "@jbrowse/graph-walks": "2.1.0",
     "@jbrowse/tubemap-core": "2.0.1",
     "esbuild": "^0.28.2"
   }
