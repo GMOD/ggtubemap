@@ -43,7 +43,7 @@ blocks the region needs, and the reference sample's walk comes first.
 }
 \examples{
 \dontrun{
-walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f4.GRCh38.walks.bed.gz"
+walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f5.GRCh38.walks.bed.gz"
 g <- read_gfa(walks, region = "chr6:160,653,940-160,654,130",
               haplotypes = c("HG00097#1", "HG00133#2"))
 }

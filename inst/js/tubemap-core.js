@@ -5083,15 +5083,19 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@3.1.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.0.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
-    constructor(message, limit, windowBp, fitsBp) {
+    constructor(message, limit, windowBp, fitsBp, unzoomable) {
       super(message);
       this.regionTooLarge = true;
       this.name = "NodeLimitError";
       this.limit = limit;
       this.windowBp = windowBp;
       this.fitsBp = fitsBp;
+      this.zoomHelps = unzoomable === void 0;
+      if (unzoomable) {
+        this.bytes = unzoomable.bytes;
+      }
     }
   };
   var SEP = "#";
@@ -5115,7 +5119,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@3.1.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.0.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
@@ -5204,14 +5208,26 @@
       return (_a = this.occurrences.get(idOf(handle))) === null || _a === void 0 ? void 0 : _a[0];
     }
     nearest(handle, i) {
-      var _a;
-      let best;
-      for (const j of (_a = this.occurrences.get(idOf(handle))) !== null && _a !== void 0 ? _a : []) {
-        if (best === void 0 || Math.abs(j - i) <= Math.abs(best - i)) {
-          best = j;
+      const at = this.occurrences.get(idOf(handle));
+      if (!at) {
+        return void 0;
+      }
+      let lo = 0;
+      let hi = at.length;
+      while (lo < hi) {
+        const mid = lo + hi >> 1;
+        if (at[mid] <= i) {
+          lo = mid + 1;
+        } else {
+          hi = mid;
         }
       }
-      return best;
+      const before = at[lo - 1];
+      const after = at[lo];
+      if (before === void 0 || after === void 0) {
+        return before !== null && before !== void 0 ? before : after;
+      }
+      return after - i <= i - before ? after : before;
     }
     // The position a stretch along R from position i, reading R the way `h`
     // does there, first holds `target`, i itself included
@@ -5388,6 +5404,37 @@
       at += length;
     }
   }
+  var DETAIL_SPACING = 16384;
+  function abridgedRow(cols) {
+    const anchor = cols[0];
+    const handles = [+cols[10], +cols[11]];
+    const pieces = numbers(cols[7]);
+    for (let k = 1; k < pieces.length; k++) {
+      pieces[k] += pieces[k - 1];
+    }
+    return {
+      chunkStart: +cols[1],
+      name: cols[4],
+      fragStart: +cols[5],
+      hapOffset: +cols[6],
+      piece: pieces[0],
+      n: handles.length,
+      steps: {
+        ids: Int32Array.from(handles, idOf),
+        rev: Uint8Array.from(handles, (h) => h & 1)
+      },
+      ...tags(cols, 13, anchor),
+      abridged: {
+        pieces,
+        steps: +cols[8],
+        bp: +cols[9],
+        detail: {
+          refName: `${anchor}~${cols[1]}`,
+          start: +cols[12] * DETAIL_SPACING
+        }
+      }
+    };
+  }
   function decodeChunk(rows, keep, withSequences = false) {
     var _a, _b, _c;
     const path = new RefPath();
@@ -5477,6 +5524,13 @@
       return route;
     };
     for (const cols of rows) {
+      if (cols[3] === "abridged") {
+        const name2 = cols[4];
+        if (keep === void 0 || keep(name2)) {
+          out.rows.push(abridgedRow(cols));
+        }
+        continue;
+      }
       if (cols[3] !== "walk") {
         continue;
       }
@@ -5510,7 +5564,9 @@
       });
       if (keep === void 0 || keep(name)) {
         const n = +cols[8];
+        let interior = 0;
         for (let k = 0; k < choices.length; k += 3) {
+          interior += routeOf(choices[k]).interior.length;
           for (const h of routeOf(choices[k]).interior) {
             const id = idOf(h);
             if (!out.nodes.has(id)) {
@@ -5526,6 +5582,7 @@
           hapOffset: +cols[6],
           piece: +cols[7],
           n,
+          interior,
           steps: decodeWalk(path, routes, cols, choices, n),
           ...tags(cols, 12, cols[0])
         });
@@ -5540,12 +5597,16 @@
         offR.add(id);
       }
     }
+    const linkCanonical = (a, b) => {
+      const [from, to] = canonicalLink(a, b);
+      link(from, to);
+    };
     const best = /* @__PURE__ */ new Map();
     for (const { path, routes, walks, lengths } of chunks) {
       const handles = path.handles;
       for (let k = 1; k < handles.length; k++) {
         if (kept.has(idOf(handles[k - 1])) && kept.has(idOf(handles[k]))) {
-          link(...canonicalLink(handles[k - 1], handles[k]));
+          linkCanonical(handles[k - 1], handles[k]);
         }
       }
       const wanted = new Uint8Array(routes.length);
@@ -5557,12 +5618,12 @@
           const inCut = kept.has(idOf(h));
           any || (any = offR.has(idOf(h)));
           if (inCut && from !== NONE && kept.has(idOf(from))) {
-            link(...canonicalLink(from, h));
+            linkCanonical(from, h);
           }
           from = h;
         }
         if (from !== NONE && exit !== NONE && kept.has(idOf(from)) && kept.has(idOf(exit))) {
-          link(...canonicalLink(from, exit));
+          linkCanonical(from, exit);
         }
         wanted[index] = any ? 1 : 0;
       }
@@ -5655,7 +5716,7 @@
     return links;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@3.1.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.0.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var WALK_STOP_KINDS = ["elsewhere", "break", "end"];
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -5708,7 +5769,12 @@
   }
   function joinPieces(rows) {
     const byPath = /* @__PURE__ */ new Map();
+    const runs = [];
     for (const row of rows) {
+      if (row.abridged) {
+        runs.push(decodeRun([row]));
+        continue;
+      }
       const key = `${row.name}	${row.fragStart}`;
       const list = byPath.get(key);
       if (list) {
@@ -5717,7 +5783,6 @@
         byPath.set(key, [row]);
       }
     }
-    const runs = [];
     for (const pieces of byPath.values()) {
       pieces.sort((a, b) => a.piece - b.piece);
       let from = 0;
@@ -5752,7 +5817,8 @@
       prev: first.prev,
       next: last.next,
       prevRecord: first.prevRecord,
-      nextRecord: last.nextRecord
+      nextRecord: last.nextRecord,
+      ...first.abridged ? { abridged: first.abridged } : {}
     };
   }
   function walkCut(runs, nodes, refName, { contained = false, context = 0 } = {}) {
@@ -5855,8 +5921,28 @@
         spans.push({ run, first, last });
       }
     };
+    let windowStart = Infinity;
+    let windowEnd = -Infinity;
+    for (const node of nodes.values()) {
+      if (node.onWindow) {
+        windowStart = Math.min(windowStart, node.start);
+        windowEnd = Math.max(windowEnd, node.end);
+      }
+    }
+    const abridgedSpan = (run) => {
+      const a = reference(run.ids[0]);
+      const b = reference(run.ids.at(-1));
+      if ((a === null || a === void 0 ? void 0 : a.refName) !== refName || (b === null || b === void 0 ? void 0 : b.refName) !== refName) {
+        return;
+      }
+      if (Math.max(a.end, b.end) > windowStart && Math.min(a.start, b.start) < windowEnd) {
+        spans.push({ run, first: 0, last: run.ids.length - 1 });
+      }
+    };
     for (const run of runs) {
-      if (contained) {
+      if (run.abridged) {
+        abridgedSpan(run);
+      } else if (contained) {
         containedSpans(run);
       } else {
         detourSpan(run);
@@ -5886,6 +5972,7 @@
         kept.add(ids[i]);
       }
     }
+    const abridgedRuns = new Set(spans.filter((span) => span.run.abridged).map((span) => span.run));
     const bpOf = (ids, from, to) => {
       let bp = 0;
       for (let i = from; i < to; i++) {
@@ -5910,7 +5997,16 @@
         neighbours.set(run, [list[i - 1], list[i + 1]]);
       });
     }
-    const runEnd = (run) => run.hapOffset + bpOf(run.ids, 0, run.ids.length);
+    const ends = /* @__PURE__ */ new Map();
+    const runEnd = (run) => {
+      var _a, _b;
+      let end = ends.get(run);
+      if (end === void 0) {
+        end = run.hapOffset + ((_b = (_a = run.abridged) === null || _a === void 0 ? void 0 : _a.bp) !== null && _b !== void 0 ? _b : bpOf(run.ids, 0, run.ids.length));
+        ends.set(run, end);
+      }
+      return end;
+    };
     const stop = (run, after, trimmed) => {
       var _a;
       const cut = trimmed > 0 ? { trimmed } : {};
@@ -5930,6 +6026,20 @@
     const fragments = [];
     for (const { run, first: f, last: l } of spans) {
       const { ids, rev } = run;
+      if (abridgedRuns.has(run)) {
+        fragments.push({
+          name: run.name,
+          fragStart: run.fragStart,
+          hapStart: run.hapOffset,
+          hapEnd: runEnd(run),
+          ids,
+          rev,
+          before: stop(run, false, 0),
+          after: stop(run, true, 0),
+          abridged: run.abridged
+        });
+        continue;
+      }
       let first = f;
       let last = l;
       while (first > 0 && kept.has(ids[first - 1])) {
@@ -6150,7 +6260,15 @@
           steps,
           reversed,
           before: stopTable(walks.map((f) => f.before)),
-          after: stopTable(walks.map((f) => f.after))
+          after: stopTable(walks.map((f) => f.after)),
+          abridgedSteps: Float64Array.from(walks, (f) => {
+            var _a, _b;
+            return (_b = (_a = f.abridged) === null || _a === void 0 ? void 0 : _a.steps) !== null && _b !== void 0 ? _b : NaN;
+          }),
+          abridgedBp: Float64Array.from(walks, (f) => {
+            var _a, _b;
+            return (_b = (_a = f.abridged) === null || _a === void 0 ? void 0 : _a.bp) !== null && _b !== void 0 ? _b : NaN;
+          })
         }
       };
     }
@@ -6166,14 +6284,21 @@
     steps: "the step budget",
     bytes: "a byte budget of"
   };
+  var ALONG_R_PER_STEP = 4;
+  var readSteps = (row) => {
+    var _a;
+    const interior = (_a = row.interior) !== null && _a !== void 0 ? _a : 0;
+    return interior + (row.n - interior) / ALONG_R_PER_STEP;
+  };
   function stepBudgetError(rows, stepBudget, readPerKept, window, chunk, filtered, names = BUDGET_NAMES) {
     var _a;
     let total = 0;
     const perChunk = /* @__PURE__ */ new Map();
     const walks = /* @__PURE__ */ new Set();
     for (const row of rows) {
-      total += row.n;
-      perChunk.set(row.chunkStart, ((_a = perChunk.get(row.chunkStart)) !== null && _a !== void 0 ? _a : 0) + row.n);
+      const steps = readSteps(row);
+      total += steps;
+      perChunk.set(row.chunkStart, ((_a = perChunk.get(row.chunkStart)) !== null && _a !== void 0 ? _a : 0) + steps);
       walks.add(row.name);
     }
     const budget = stepBudget * readPerKept;
@@ -6191,7 +6316,7 @@
       fitsBp = Math.max(fitsBp, cs + chunk - window.start);
     }
     const fewerFit = !filtered && walks.size > 2 && 2 * total / walks.size <= budget;
-    return new RegionTooLargeError(fitsBp > 0 ? `Zoom in to about ${bpString(fitsBp)}${fewerFit ? ", or choose fewer haplotypes," : ""} to see the graph` : `Too many haplotype steps here to draw ${filtered ? "these haplotypes" : "every haplotype"} (${read.toLocaleString()} steps read, over ${readPerKept} \xD7 ${names.steps} of ${stepBudget.toLocaleString()}); choose fewer haplotypes`, budget, windowBp, Math.max(fitsBp, 1));
+    return new RegionTooLargeError(fitsBp > 0 ? `Zoom in to about ${bpString(fitsBp)}${fewerFit ? ", or choose fewer haplotypes," : ""} to see the graph` : `Too many haplotype steps here to draw ${filtered ? "these haplotypes" : "every haplotype"} (${Math.round(read).toLocaleString()} steps read, a step along the reference counting a quarter, over ${readPerKept} \xD7 ${names.steps} of ${stepBudget.toLocaleString()}); choose fewer haplotypes`, budget, windowBp, Math.max(fitsBp, 1));
   }
   function keptStepsError(fragments, budget, window, filtered) {
     const total = fragments.reduce((sum, f) => sum + f.ids.length, 0);
@@ -6225,11 +6350,11 @@
       fitsBp = cs + chunk - window.start;
     }
     const windowBp = window.end - window.start;
-    return new RegionTooLargeError(fitsBp > 0 ? `Zoom in to about ${bpString(fitsBp)} to see the graph` : `Too much graph here to fetch (${megabytes(least !== null && least !== void 0 ? least : bytes)} against ${names.bytes} ${megabytes(budget)})`, budget, windowBp, Math.max(fitsBp, 1));
+    return fitsBp > 0 ? new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)} to see the graph`, budget, windowBp, fitsBp) : new RegionTooLargeError(`Too much graph here to fetch, even zoomed in (${megabytes(least !== null && least !== void 0 ? least : bytes)} against ${names.bytes} ${megabytes(budget)}). A satellite or rDNA array usually causes this: the graph folds the repeat into a few nodes that each haplotype loops through many times`, budget, windowBp, 1, { bytes });
   }
   var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@3.1.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.0.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -6254,7 +6379,7 @@
     return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@3.1.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.0.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var FOLLOW_ROUNDS = 3;
   var FOLLOW_CHUNKS = 4;
@@ -6269,6 +6394,9 @@
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
       throw new Error(`${refName}:${start}-${end} is not a finite range to query the graph's index for`);
     }
+  }
+  function withoutDetails(names) {
+    return names.filter((name) => !name.includes("~"));
   }
   function raceAbort(promise, signal) {
     if (!signal) {
@@ -6296,8 +6424,8 @@
         const read = this.walks.getHeaderLines().then((lines) => {
           var _a, _b;
           const header = walkHeader(lines);
-          if (header.format !== 4) {
-            throw new WalkFormatError(`This walk file is format ${(_a = header.format) !== null && _a !== void 0 ? _a : 1}; @jbrowse/graph-walks reads format 4, so rebuild it with gfa-to-tabix 1.2 or later`);
+          if (header.format !== 5) {
+            throw new WalkFormatError(`This walk file is format ${(_a = header.format) !== null && _a !== void 0 ? _a : 1}; @jbrowse/graph-walks reads format 5, so rebuild it with gfa-to-tabix 1.4 or later`);
           }
           return { ...header, chunk: (_b = header.chunk) !== null && _b !== void 0 ? _b : 65536 };
         });
@@ -6310,9 +6438,10 @@
       }
       return raceAbort(this.headerRead, opts.signal);
     }
-    // The reference sequences the walk file holds windows on
-    referenceSequences(opts = {}) {
-      return this.walks.getReferenceSequenceNames(opts);
+    // The reference sequences the walk file holds windows on, without the
+    // `seq~cs` sequences of detail records
+    async referenceSequences(opts = {}) {
+      return withoutDetails(await this.walks.getReferenceSequenceNames(opts));
     }
     /**
      * The walk file's sequence for `refName` on `sample`, or for `refName` as
@@ -6321,7 +6450,7 @@
      */
     async sequenceFor(sample, refName, opts = {}) {
       if (!this.lookupRead) {
-        const read = this.walks.getReferenceSequenceNames().then(refNameLookup);
+        const read = this.walks.getReferenceSequenceNames().then((names) => refNameLookup(withoutDetails(names)));
         read.catch(() => {
           if (this.lookupRead === read) {
             this.lookupRead = void 0;
@@ -6340,7 +6469,7 @@
     }
     async cut(refName, region, opts = {}) {
       var _a, _b;
-      const { signal, keep, context = WALK_CONTEXT, stepBudget = Infinity, byteBudget = Infinity, links = true, contained = false, nodeLimit = Infinity } = opts;
+      const { signal, keep, context = WALK_CONTEXT, stepBudget = Infinity, byteBudget = Infinity, links = true, contained = false, nodeLimit = Infinity, expand } = opts;
       const header = await this.header({ signal });
       const { chunk } = header;
       const from = walkQueryStart(header, refName, region.start, region.end);
@@ -6373,19 +6502,54 @@
       const ends = [];
       const surely = /* @__PURE__ */ new Set();
       const filtered = keep !== void 0;
+      let details = [];
       const decode = (cs, chunkRows) => {
         if (decoded.has(cs)) {
           return;
         }
         decoded.add(cs);
         const chunkCut = decodeChunk(chunkRows, keep, opts.sequences);
-        rows.push(...chunkCut.rows);
+        let refRows;
+        for (const row of chunkCut.rows) {
+          if (row.abridged && (expand === null || expand === void 0 ? void 0 : expand(row.name))) {
+            refRows !== null && refRows !== void 0 ? refRows : refRows = chunkRows.filter((cols) => cols[3] === "ref");
+            details.push({ refRows, row });
+          } else {
+            rows.push(row);
+          }
+        }
+        place2(chunkCut, cs);
+      };
+      const decodeDetail = async ({ refRows, row }) => {
+        const { refName: sequence, start } = row.abridged.detail;
+        checkRange(sequence, start, start + 1);
+        const held = [];
+        await this.walks.getLines(sequence, start, start + 1, {
+          signal: reads.signal,
+          lineCallback: (line) => {
+            const cols = line.split("	");
+            cols[0] = refName;
+            cols[1] = String(row.chunkStart);
+            held.push(cols);
+          }
+        });
+        const chunkCut = decodeChunk([...refRows, ...held], (name) => name === row.name, opts.sequences);
+        for (const decodedRow of chunkCut.rows) {
+          if (decodedRow.name === row.name) {
+            rows.push(decodedRow);
+          }
+        }
+        place2(chunkCut, row.chunkStart);
+      };
+      const place2 = (chunkCut, cs) => {
         for (const [id, node] of chunkCut.nodes) {
           graph.placeNode(id, node);
         }
         graph.addSequences(chunkCut.sequences);
         graph.addChunk(chunkCut.chunk);
-        ends.push(...chunkCut.ends);
+        for (const end of chunkCut.ends) {
+          ends.push(end);
+        }
         if (Number.isFinite(nodeLimit)) {
           surelyKept(chunkCut, graph.nodes, contained, surely);
           if (surely.size > nodeLimit) {
@@ -6420,6 +6584,11 @@
         if (at !== void 0) {
           decode(at, held);
         }
+        const pending = details;
+        details = [];
+        for (const detail of pending) {
+          await decodeDetail(detail);
+        }
         if (links) {
           for (const [a, b] of pieceLinks(ends)) {
             graph.addLinkEnds(a, b);
@@ -6443,10 +6612,17 @@
         cut = cutRows();
         let spent = await bytesFor([{ start: from, end: region.end }]);
         for (let round = 0; round < FOLLOW_ROUNDS; round++) {
-          const starts = cut.open.filter((c) => c.refName === refName && c.start >= lo && c.start <= hi).map((c) => c.start);
+          let reachFirst = first;
+          let reachLast = last;
+          for (const c of cut.open) {
+            if (c.refName === refName && c.start >= lo && c.start <= hi) {
+              reachFirst = Math.min(reachFirst, c.start);
+              reachLast = Math.max(reachLast, c.start);
+            }
+          }
           const spans = [
-            { start: Math.min(first, ...starts), end: first },
-            { start: last + chunk, end: Math.max(last, ...starts) + 1 }
+            { start: reachFirst, end: first },
+            { start: last + chunk, end: reachLast + 1 }
           ].filter((span) => span.end > span.start);
           if (spans.length === 0) {
             break;
@@ -6455,8 +6631,8 @@
           if (spent > byteBudget) {
             break;
           }
-          first = Math.min(first, ...starts);
-          last = Math.max(last, ...starts);
+          first = reachFirst;
+          last = reachLast;
           await Promise.all(spans.map(({ start, end }) => readChunks(start, end)));
           cut = cutRows();
         }

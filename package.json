@@ -12,7 +12,7 @@
   },
   "devDependencies": {
     "@gmod/tabix": "3.11.0",
-    "@jbrowse/graph-walks": "3.1.0",
+    "@jbrowse/graph-walks": "4.0.0",
     "@jbrowse/tubemap-core": "2.0.1",
     "esbuild": "^0.28.2"
   }
