@@ -138,6 +138,9 @@
     return { ok: true, arrayBuffer: async () => bytes.buffer };
   });
 
+  // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.2/node_modules/@gmod/bgzf-filehandle/esm/constants.js
+  var MAX_BGZF_BLOCK_SIZE = 1 << 16;
+
   // node_modules/.pnpm/pako-esm2@2.0.2/node_modules/pako-esm2/esm/zlib/constants.js
   var Z_NO_FLUSH = 0;
   var Z_SYNC_FLUSH = 2;
@@ -2444,7 +2447,7 @@
   }
   var ungzip = inflate2;
 
-  // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.0/node_modules/@gmod/bgzf-filehandle/esm/bgzfBlockScan.js
+  // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.2/node_modules/@gmod/bgzf-filehandle/esm/bgzfBlockScan.js
   var BGZF_HEADER_SIZE = 18;
   var BGZF_TRAILER_SIZE = 8;
   var BGZF_MIN_BLOCK_SIZE = BGZF_HEADER_SIZE + BGZF_TRAILER_SIZE;
@@ -2465,6 +2468,9 @@
       }
       const trailerPos = offset + bsize - BGZF_TRAILER_SIZE;
       const isize = (input[trailerPos + 4] | input[trailerPos + 5] << 8 | input[trailerPos + 6] << 16 | input[trailerPos + 7] << 24) >>> 0;
+      if (isize > MAX_BGZF_BLOCK_SIZE) {
+        break;
+      }
       blocks.push({
         inputOffset: offset,
         compressedSize: bsize,
@@ -2480,22 +2486,7 @@
     return blocks;
   }
 
-  // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.0/node_modules/@gmod/bgzf-filehandle/esm/util.js
-  function concatUint8Array(args) {
-    let total = 0;
-    for (const entry of args) {
-      total += entry.length;
-    }
-    const mergedArray = new Uint8Array(total);
-    let offset = 0;
-    for (const entry of args) {
-      mergedArray.set(entry, offset);
-      offset += entry.length;
-    }
-    return mergedArray;
-  }
-
-  // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.0/node_modules/@gmod/bgzf-filehandle/esm/wasm/bgzf-wasm-inlined.js
+  // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.2/node_modules/@gmod/bgzf-filehandle/esm/wasm/bgzf-wasm-inlined.js
   var __webpack_require__ = {};
   (() => {
     __webpack_require__.d = (exports, definition) => {
@@ -2781,7 +2772,111 @@
     return { buffer, cpositions, dpositions };
   }
 
-  // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.0/node_modules/@gmod/bgzf-filehandle/esm/unzip.js
+  // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.2/node_modules/@gmod/bgzf-filehandle/esm/inflateBlocks.js
+  var MAX_INFLATE_BYTES = 8 * 1024 * 1024;
+  function inflateFootprint(blocks) {
+    let total = 0;
+    for (const block of blocks) {
+      total += block.compressedSize + block.decompressedSize;
+    }
+    return total;
+  }
+  function inflateRuns(blocks, start = 0, end = blocks.length) {
+    const runs = [];
+    let runStart = start;
+    let bytes = 0;
+    for (let b = start; b < end; b++) {
+      const block = blocks[b];
+      const size = block.compressedSize + block.decompressedSize;
+      if (b > runStart && bytes + size > MAX_INFLATE_BYTES) {
+        runs.push([runStart, b]);
+        runStart = b;
+        bytes = 0;
+      }
+      bytes += size;
+    }
+    if (runStart < end) {
+      runs.push([runStart, end]);
+    }
+    return runs;
+  }
+  function runInputRange(blocks, start, end) {
+    const first = blocks[start];
+    const last = blocks[end - 1];
+    return {
+      inputOffset: first.inputOffset,
+      inputLength: last.inputOffset + last.compressedSize - first.inputOffset
+    };
+  }
+  function scannedInput(input, blocks) {
+    const last = blocks.at(-1);
+    return input.subarray(0, last ? last.inputOffset + last.compressedSize : MAX_BGZF_BLOCK_SIZE);
+  }
+  var RAW_ARITY = {
+    decompress_all: 3,
+    __wbindgen_add_to_stack_pointer: 1,
+    __wbindgen_export: 3,
+    __wbindgen_export2: 2
+  };
+  function rawWasm(exports) {
+    const named = Object.entries(RAW_ARITY).every(([name, arity]) => {
+      const fn = exports[name];
+      return typeof fn === "function" && fn.length === arity;
+    });
+    return named && exports.memory instanceof WebAssembly.Memory ? exports : void 0;
+  }
+  async function decompressAllInto(input, output, offset) {
+    const raw = rawWasm(await init());
+    if (raw) {
+      const retptr = raw.__wbindgen_add_to_stack_pointer(-16);
+      try {
+        const ptr = raw.__wbindgen_export2(input.length, 1) >>> 0;
+        new Uint8Array(raw.memory.buffer).set(input, ptr);
+        raw.decompress_all(retptr, ptr, input.length);
+        const ret = new DataView(raw.memory.buffer);
+        if (ret.getInt32(retptr + 12, true) === 0) {
+          const outPtr = ret.getUint32(retptr, true);
+          const outLen = ret.getUint32(retptr + 4, true);
+          output.set(new Uint8Array(raw.memory.buffer, outPtr, outLen), offset);
+          raw.__wbindgen_export(outPtr, outLen, 1);
+          return outLen;
+        }
+      } finally {
+        raw.__wbindgen_add_to_stack_pointer(16);
+      }
+    }
+    const run = await decompressAll(input);
+    output.set(run, offset);
+    return run.length;
+  }
+  function splitBlocks(decompressed, blocks, startBlock, endBlock, out) {
+    let offset = 0;
+    for (let b = startBlock; b < endBlock; b++) {
+      const blockSize = blocks[b].decompressedSize;
+      out[b] = decompressed.subarray(offset, offset + blockSize);
+      offset += blockSize;
+    }
+  }
+  async function inflateInRuns(input, blocks) {
+    let total = 0;
+    for (const block of blocks) {
+      total += block.decompressedSize;
+    }
+    const output = new Uint8Array(total);
+    let offset = 0;
+    for (const [start, end] of inflateRuns(blocks)) {
+      const { inputOffset, inputLength } = runInputRange(blocks, start, end);
+      offset += await decompressAllInto(input.subarray(inputOffset, inputOffset + inputLength), output, offset);
+    }
+    return output;
+  }
+  async function inflateHere(input, blocks) {
+    const resultBlocks = new Array(blocks.length);
+    splitBlocks(await inflateInRuns(input, blocks), blocks, 0, blocks.length, resultBlocks);
+    return { blocks: resultBlocks };
+  }
+
+  // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.2/node_modules/@gmod/bgzf-filehandle/esm/unzip.js
   var BGZF_MIN_BLOCK_SIZE2 = 26;
   function hasGzipHeader(data) {
     return data[0] === 31 && data[1] === 139;
@@ -2816,8 +2911,9 @@
       }
       throw new Error("problem decompressing block: not a valid bgzf or gzip block");
     }
+    const blocks = scanBgzfBlocks(inputData, 0, Infinity);
     try {
-      return await decompressAll(inputData);
+      return inflateFootprint(blocks) > MAX_INFLATE_BYTES ? await inflateInRuns(inputData, blocks) : await decompressAll(scannedInput(inputData, blocks));
     } catch (error) {
       if (errorMessage(error).includes("invalid bgzf header")) {
         return decompressGzip(inputData);
@@ -2841,7 +2937,7 @@
       if (start < end) {
         slices.push(block.subarray(start, end));
       }
-      dpos += block.length - start;
+      dpos += Math.max(0, block.length - start);
       if (isLast) {
         cpositions.push(info.filePosition + info.compressedSize);
         dpositions.push(dpos);
@@ -2855,10 +2951,6 @@
       cpositions: Float64Array.from(cpositions),
       dpositions: Float64Array.from(dpositions)
     };
-  }
-  function assembleChunkSliceResult(blocks, infos, minv, maxv) {
-    const { slices, cpositions, dpositions } = trimBlocks(blocks, infos, minv, maxv);
-    return { buffer: concatUint8Array(slices), cpositions, dpositions };
   }
   function mergeContiguous(slices) {
     const segments = [];
@@ -2880,15 +2972,13 @@
   }
   async function unzipChunkSegments(inputData, chunk, workerPool) {
     const { minv, maxv } = chunk;
-    if (workerPool) {
-      const blocks = scanBgzfBlocks(inputData, minv.blockPosition, maxv.blockPosition);
-      if (decompressedBytes(blocks) >= POOL_MIN_DECOMPRESSED_BYTES) {
-        const result = await workerPool.decompressBlocks(inputData, blocks);
-        const { slices, cpositions: cpositions2, dpositions: dpositions2 } = trimBlocks(result.blocks, blocks, minv, maxv);
-        return { segments: mergeContiguous(slices), cpositions: cpositions2, dpositions: dpositions2 };
-      }
+    const blocks = scanBgzfBlocks(inputData, minv.blockPosition, maxv.blockPosition);
+    const inflated = await inflateEachBlock(inputData, blocks, workerPool);
+    if (inflated) {
+      const { slices, cpositions: cpositions2, dpositions: dpositions2 } = trimBlocks(inflated, blocks, minv, maxv);
+      return { segments: mergeContiguous(slices), cpositions: cpositions2, dpositions: dpositions2 };
     }
-    const { buffer, cpositions, dpositions } = await unzipChunkSlice(inputData, chunk);
+    const { buffer, cpositions, dpositions } = await decompressChunkInOneCall(inputData, blocks, chunk);
     return { segments: [buffer], cpositions, dpositions };
   }
   var POOL_MIN_DECOMPRESSED_BYTES = 4e5;
@@ -2899,17 +2989,18 @@
     }
     return total;
   }
-  async function unzipChunkSlice(inputData, chunk, workerPool) {
-    const { minv, maxv } = chunk;
-    if (workerPool) {
-      const blocks = scanBgzfBlocks(inputData, minv.blockPosition, maxv.blockPosition);
-      if (decompressedBytes(blocks) >= POOL_MIN_DECOMPRESSED_BYTES) {
-        const result = await workerPool.decompressBlocks(inputData, blocks);
-        return assembleChunkSliceResult(result.blocks, blocks, minv, maxv);
-      }
+  async function inflateEachBlock(inputData, blocks, workerPool) {
+    if (workerPool && decompressedBytes(blocks) >= POOL_MIN_DECOMPRESSED_BYTES) {
+      return (await workerPool.decompressBlocks(inputData, blocks)).blocks;
     }
+    if (inflateFootprint(blocks) > MAX_INFLATE_BYTES) {
+      return (await inflateHere(inputData, blocks)).blocks;
+    }
+    return void 0;
+  }
+  async function decompressChunkInOneCall(inputData, blocks, { minv, maxv }) {
     try {
-      const result = await decompressChunkSlice(inputData, minv.blockPosition, minv.dataPosition, maxv.blockPosition, maxv.dataPosition);
+      const result = await decompressChunkSlice(scannedInput(inputData, blocks), minv.blockPosition, minv.dataPosition, maxv.blockPosition, maxv.dataPosition);
       return {
         buffer: result.buffer,
         cpositions: result.cpositions,
@@ -3942,7 +4033,7 @@
       return result;
     };
   }
-  function concatUint8Array2(args) {
+  function concatUint8Array(args) {
     let total = 0;
     for (const entry of args) {
       total += entry.length;
@@ -3965,11 +4056,11 @@
       if (carry) {
         const nl = segment.indexOf(NEWLINE);
         if (nl === -1) {
-          carry = concatUint8Array2([carry, segment]);
+          carry = concatUint8Array([carry, segment]);
           base += segment.length;
           continue;
         }
-        if (visit(concatUint8Array2([carry, segment.subarray(0, nl + 1)]), carryAt)) {
+        if (visit(concatUint8Array([carry, segment.subarray(0, nl + 1)]), carryAt)) {
           return true;
         }
         from = nl + 1;
