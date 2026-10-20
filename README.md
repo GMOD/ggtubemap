@@ -67,7 +67,7 @@ tm <- tubemap_layout(g, node_width = "compressed")
 URL, with its `.tbi` beside it:
 
 ```r
-walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f3.GRCh38.walks.bed.gz"
+walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f4.GRCh38.walks.bed.gz"
 str <- read_gfa(
   walks,
   region = "chr6:160,653,940-160,654,130",

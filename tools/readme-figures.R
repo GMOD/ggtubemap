@@ -38,7 +38,7 @@ chrm <- tubemap_layout(tubemap_example("hprc-chrM"), node_width = "compressed",
                        facet_by = "sample_name")
 save("hprc-chrM-facets.png", chrm, 9, mismatches = FALSE, legend = 0)
 
-walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f3.GRCh38.walks.bed.gz"
+walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f4.GRCh38.walks.bed.gz"
 samples <- c("HG00097", "HG00099", "HG00126", "HG00128", "HG00133", "HG002",
              "HG00140", "HG00146")
 haplotypes <- paste0(rep(samples, each = 2), "#", 1:2)

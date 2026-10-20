@@ -4992,7 +4992,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@2.1.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@3.0.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp) {
       super(message);
@@ -5024,7 +5024,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@2.1.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@3.0.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
@@ -5443,6 +5443,12 @@
     return out;
   }
   function placeAndLink(chunks, kept, place2, link) {
+    const offR = /* @__PURE__ */ new Set();
+    for (const id of kept) {
+      if (!chunks.some(({ path }) => path.occurrences.has(id))) {
+        offR.add(id);
+      }
+    }
     const best = /* @__PURE__ */ new Map();
     for (const { path, routes, walks, lengths } of chunks) {
       const handles = path.handles;
@@ -5458,7 +5464,7 @@
         let from = entry;
         for (const h of interior) {
           const inCut = kept.has(idOf(h));
-          any || (any = inCut);
+          any || (any = offR.has(idOf(h)));
           if (inCut && from !== NONE && kept.has(idOf(from))) {
             link(...canonicalLink(from, h));
           }
@@ -5512,7 +5518,7 @@
               const h = interiorAt(route, flip2, k);
               const id = idOf(h);
               const length = lengthOf(h);
-              if (kept.has(id)) {
+              if (offR.has(id)) {
                 const held = best.get(id);
                 if (!held || name < held.refName || name === held.refName && offset < held.start) {
                   best.set(id, {
@@ -5558,7 +5564,7 @@
     return links;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@2.1.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@3.0.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var WALK_STOP_KINDS = ["elsewhere", "break", "end"];
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -5643,7 +5649,7 @@
       nextRecord: last.nextRecord
     };
   }
-  function walkCut(runs, nodes, refName) {
+  function walkCut(runs, nodes, refName, { contained = false, context = 0 } = {}) {
     const onWindow = (id) => {
       var _a;
       return ((_a = nodes.get(id)) === null || _a === void 0 ? void 0 : _a.onWindow) === true;
@@ -5679,7 +5685,44 @@
     let reachStart = Infinity;
     let reachEnd = -Infinity;
     const spans = [];
-    for (const run of runs) {
+    const length = (id) => {
+      const node = nodes.get(id);
+      return node === void 0 ? 0 : node.end - node.start;
+    };
+    const containedSpans = (run) => {
+      const { ids } = run;
+      let from = 0;
+      let first = -1;
+      let last = -1;
+      for (let i = 0; i <= ids.length; i++) {
+        const node = i < ids.length ? nodes.get(ids[i]) : void 0;
+        if (i === ids.length || (node === null || node === void 0 ? void 0 : node.rank) === 0 && !node.onWindow) {
+          if (first >= 0) {
+            for (let bp = 0; first > from && bp < context; ) {
+              bp += length(ids[--first]);
+            }
+            for (let bp = 0; last < i - 1 && bp < context; ) {
+              bp += length(ids[++last]);
+            }
+            if (first === 0) {
+              goesOn(run.prev);
+            }
+            if (last === ids.length - 1) {
+              goesOn(run.next);
+            }
+            spans.push({ run, first, last });
+          }
+          from = i + 1;
+          first = -1;
+        } else if (node === null || node === void 0 ? void 0 : node.onWindow) {
+          if (first < 0) {
+            first = i;
+          }
+          last = i;
+        }
+      }
+    };
+    const detourSpan = (run) => {
       const { ids } = run;
       let first = -1;
       let last = -1;
@@ -5704,6 +5747,13 @@
           }
         }
         spans.push({ run, first, last });
+      }
+    };
+    for (const run of runs) {
+      if (contained) {
+        containedSpans(run);
+      } else {
+        detourSpan(run);
       }
     }
     const inReach = (id) => {
@@ -5730,10 +5780,6 @@
         kept.add(ids[i]);
       }
     }
-    const length = (id) => {
-      const node = nodes.get(id);
-      return node === void 0 ? 0 : node.end - node.start;
-    };
     const bpOf = (ids, from, to) => {
       let bp = 0;
       for (let i = from; i < to; i++) {
@@ -5801,6 +5847,29 @@
     }
     return { kept, fragments, open: [...open.values()] };
   }
+  function surelyKept(chunk, nodes, contained, into) {
+    var _a;
+    for (const id of chunk.nodes.keys()) {
+      if ((_a = nodes.get(id)) === null || _a === void 0 ? void 0 : _a.onWindow) {
+        into.add(id);
+      }
+    }
+    for (const { steps } of chunk.rows) {
+      const { ids } = steps;
+      let last = -1;
+      for (let i = 0; i < ids.length; i++) {
+        const node = nodes.get(ids[i]);
+        if (node === null || node === void 0 ? void 0 : node.onWindow) {
+          for (let j = last + 1; last >= 0 && j < i; j++) {
+            into.add(ids[j]);
+          }
+          last = i;
+        } else if (contained && (node === null || node === void 0 ? void 0 : node.rank) === 0) {
+          last = -1;
+        }
+      }
+    }
+  }
   function stopTable(stops) {
     const chunkRefNames = [];
     const refIndex = /* @__PURE__ */ new Map();
@@ -5834,6 +5903,7 @@
     });
     return table;
   }
+  var outranks = (node, held) => node.rank === 0 && (held.rank !== 0 || node.refName < held.refName || node.refName === held.refName && node.start < held.start);
   var WalkGraph = class {
     constructor(window) {
       this.nodes = /* @__PURE__ */ new Map();
@@ -5842,9 +5912,11 @@
       this.chunks = [];
       this.window = window;
     }
-    // A node with its position, unless the cut already holds it
+    // A node with its position, unless the cut already holds it at one that
+    // outranks it
     placeNode(id, node) {
-      if (this.nodes.has(id)) {
+      const held = this.nodes.get(id);
+      if (held && !outranks(node, held)) {
         return;
       }
       const { window } = this;
@@ -6019,15 +6091,16 @@
     const total = fragments.reduce((sum, f) => sum + f.ids.length, 0);
     return keptOverError(total, budget, window, filtered);
   }
-  function keptNodesError(nodes, limit, window, filtered) {
-    return keptOverError(nodes, limit, window, filtered);
+  function keptNodesError(nodes, limit, window, filtered, readTo = window.end) {
+    return keptOverError(nodes, limit, window, filtered, readTo);
   }
-  function keptOverError(kept, limit, window, filtered) {
+  function keptOverError(kept, limit, window, filtered, readTo = window.end) {
     if (kept <= limit) {
       return void 0;
     }
     const windowBp = window.end - window.start;
-    const fitsBp = Math.max(1, Math.floor(windowBp * limit / kept));
+    const readBp = Math.min(readTo, window.end) - window.start;
+    const fitsBp = Math.max(1, Math.floor(readBp * limit / kept));
     return new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)}${filtered ? "" : ", or choose fewer haplotypes,"} to see the graph`, limit, windowBp, fitsBp);
   }
   async function byteBudgetError(bytesTo, budget, window, chunk, names = BUDGET_NAMES) {
@@ -6050,7 +6123,7 @@
   }
   var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@2.1.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@3.0.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -6075,7 +6148,7 @@
     return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@2.1.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@3.0.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var FOLLOW_ROUNDS = 3;
   var FOLLOW_CHUNKS = 4;
@@ -6117,8 +6190,8 @@
         const read = this.walks.getHeaderLines().then((lines) => {
           var _a, _b;
           const header = walkHeader(lines);
-          if (header.format !== 3) {
-            throw new WalkFormatError(`This walk file is format ${(_a = header.format) !== null && _a !== void 0 ? _a : 1}; @jbrowse/graph-walks reads format 3, so rebuild it with gfa-to-tabix 1.1 or later`);
+          if (header.format !== 4) {
+            throw new WalkFormatError(`This walk file is format ${(_a = header.format) !== null && _a !== void 0 ? _a : 1}; @jbrowse/graph-walks reads format 4, so rebuild it with gfa-to-tabix 1.2 or later`);
           }
           const chunk = (_b = header.chunk) !== null && _b !== void 0 ? _b : 65536;
           return {
@@ -6163,8 +6236,8 @@
       return chunkQueryStart(start, chunk, lookback);
     }
     async cut(refName, region, opts = {}) {
-      var _a;
-      const { signal, keep, context = WALK_CONTEXT, stepBudget = Infinity, byteBudget = Infinity, links = true } = opts;
+      var _a, _b;
+      const { signal, keep, context = WALK_CONTEXT, stepBudget = Infinity, byteBudget = Infinity, links = true, contained = false, nodeLimit = Infinity } = opts;
       const { chunk, lookback } = await this.header({ signal });
       const from = chunkQueryStart(region.start, chunk, lookback);
       const bytesForRegions = (_a = this.walks.bytesForRegions) === null || _a === void 0 ? void 0 : _a.bind(this.walks);
@@ -6194,35 +6267,54 @@
       });
       const decoded = /* @__PURE__ */ new Set();
       const ends = [];
+      const surely = /* @__PURE__ */ new Set();
+      const filtered = keep !== void 0;
+      const decode = (cs, chunkRows) => {
+        if (decoded.has(cs)) {
+          return;
+        }
+        decoded.add(cs);
+        const chunkCut = decodeChunk(chunkRows, keep, opts.sequences);
+        rows.push(...chunkCut.rows);
+        for (const [id, node] of chunkCut.nodes) {
+          graph.placeNode(id, node);
+        }
+        graph.addSequences(chunkCut.sequences);
+        graph.addChunk(chunkCut.chunk);
+        ends.push(...chunkCut.ends);
+        if (Number.isFinite(nodeLimit)) {
+          surelyKept(chunkCut, graph.nodes, contained, surely);
+          if (surely.size > nodeLimit) {
+            surely.clear();
+            surelyKept({ nodes: graph.nodes, rows }, graph.nodes, contained, surely);
+          }
+          const over = keptNodesError(surely.size, nodeLimit, region, filtered, cs + chunk);
+          if (over) {
+            throw over;
+          }
+        }
+      };
       const readChunks = async (start, end) => {
         checkRange(refName, start, end);
-        const byChunk = /* @__PURE__ */ new Map();
+        let at;
+        let held = [];
         await this.walks.getLines(refName, start, end, {
           signal: reads.signal,
           lineCallback: (line) => {
             const cols = line.split("	");
             const cs = +cols[1];
-            const held = byChunk.get(cs);
-            if (held) {
-              held.push(cols);
-            } else {
-              byChunk.set(cs, [cols]);
+            if (cs !== at) {
+              if (at !== void 0) {
+                decode(at, held);
+              }
+              at = cs;
+              held = [];
             }
+            held.push(cols);
           }
         });
-        for (const [cs, chunkRows] of byChunk) {
-          if (decoded.has(cs)) {
-            continue;
-          }
-          decoded.add(cs);
-          const chunkCut = decodeChunk(chunkRows, keep, opts.sequences);
-          rows.push(...chunkCut.rows);
-          for (const [id, node] of chunkCut.nodes) {
-            graph.placeNode(id, node);
-          }
-          graph.addSequences(chunkCut.sequences);
-          graph.addChunk(chunkCut.chunk);
-          ends.push(...chunkCut.ends);
+        if (at !== void 0) {
+          decode(at, held);
         }
         if (links) {
           for (const [a, b] of pieceLinks(ends)) {
@@ -6232,15 +6324,19 @@
       };
       try {
         await readChunks(from, region.end);
-        const tooManyRead = stepBudgetError(rows, stepBudget, READ_STEPS_PER_KEPT, region, chunk, keep !== void 0, opts.budgetNames);
+        const tooManyRead = stepBudgetError(rows, stepBudget, READ_STEPS_PER_KEPT, region, chunk, filtered, opts.budgetNames);
         if (tooManyRead) {
           throw tooManyRead;
         }
         let first = from;
         let last = Math.floor((region.end - 1) / chunk) * chunk;
         const reach = FOLLOW_CHUNKS * chunk;
-        const [lo, hi] = [first - reach, last + reach];
-        cut = walkCut(joinPieces(rows), graph.nodes, refName);
+        const [lo, hi] = contained ? [
+          Math.floor((region.start - context) / chunk) * chunk,
+          Math.floor((region.end + context - 1) / chunk) * chunk
+        ] : [first - reach, last + reach];
+        const cutRows = () => walkCut(joinPieces(rows), graph.nodes, refName, { contained, context });
+        cut = cutRows();
         let spent = await bytesFor([{ start: from, end: region.end }]);
         for (let round = 0; round < FOLLOW_ROUNDS; round++) {
           const starts = cut.open.filter((c) => c.refName === refName && c.start >= lo && c.start <= hi).map((c) => c.start);
@@ -6258,7 +6354,7 @@
           first = Math.min(first, ...starts);
           last = Math.max(last, ...starts);
           await Promise.all(spans.map(({ start, end }) => readChunks(start, end)));
-          cut = walkCut(joinPieces(rows), graph.nodes, refName);
+          cut = cutRows();
         }
       } catch (error) {
         reads.abort();
@@ -6266,7 +6362,7 @@
       } finally {
         signal === null || signal === void 0 ? void 0 : signal.removeEventListener("abort", stop);
       }
-      const tooMany = keptStepsError(cut.fragments, stepBudget, region, keep !== void 0);
+      const tooMany = (_b = keptStepsError(cut.fragments, stepBudget, region, filtered)) !== null && _b !== void 0 ? _b : keptNodesError(cut.kept.size, nodeLimit, region, filtered);
       if (tooMany) {
         throw tooMany;
       }
@@ -6280,7 +6376,7 @@
      */
     async cutRegion(region, opts = {}) {
       var _a;
-      const { haplotypes, referenceSample, nodeLimit = Infinity, ...rest } = opts;
+      const { haplotypes, referenceSample, ...rest } = opts;
       const { signal } = opts;
       const header = await this.header({ signal });
       const sample = (_a = referenceSample !== null && referenceSample !== void 0 ? referenceSample : header.references[0]) !== null && _a !== void 0 ? _a : "";
@@ -6293,10 +6389,6 @@
         ...rest,
         keep: walksKept(haplotypes, refName)
       });
-      const tooMany = keptNodesError(kept.size, nodeLimit, region, !!(haplotypes === null || haplotypes === void 0 ? void 0 : haplotypes.length));
-      if (tooMany) {
-        throw tooMany;
-      }
       return { tables: graph.tables(kept, fragments), refName, sample };
     }
   };
