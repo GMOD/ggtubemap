@@ -5083,7 +5083,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@3.0.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@3.1.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp) {
       super(message);
@@ -5115,7 +5115,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@3.0.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@3.1.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
@@ -5655,7 +5655,7 @@
     return links;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@3.0.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@3.1.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var WALK_STOP_KINDS = ["elsewhere", "break", "end"];
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -5663,13 +5663,15 @@
   }
   function walkHeader(lines) {
     var _a, _b, _c;
-    const header = { references: [], haplotypes: [] };
+    const header = { references: [], haplotypes: [], long: [] };
     for (const line of lines) {
-      const [key, value = ""] = line.split("	");
+      const [key, value = "", start = "", end = ""] = line.split("	");
       if (key === "#reference") {
         header.references.push(value);
       } else if (key === "#haplotype") {
         header.haplotypes.push(value);
+      } else if (key === "#long") {
+        header.long.push({ refName: value, start: +start, end: +end });
       } else {
         (_a = header.format) !== null && _a !== void 0 ? _a : header.format = integerTag(line, "format");
         (_b = header.chunk) !== null && _b !== void 0 ? _b : header.chunk = integerTag(line, "chunk");
@@ -5683,6 +5685,19 @@
   }
   function chunkQueryStart(start, chunk, lookback = 1) {
     return Math.max(0, (Math.floor(start / chunk) - lookback) * chunk);
+  }
+  function walkQueryStart(header, refName, start, end) {
+    const { chunk, long } = header;
+    if (long.length === 0) {
+      return chunkQueryStart(start, chunk, lookbackChunks(header.maxNode, chunk));
+    }
+    let from = chunkQueryStart(start, chunk);
+    for (const pass of long) {
+      if (pass.refName === refName && pass.start < end && pass.end > start) {
+        from = Math.min(from, chunkQueryStart(pass.start, chunk));
+      }
+    }
+    return from;
   }
   function walkNameFilter(wanted, referenceHaplotype) {
     return wanted === void 0 || wanted.length === 0 ? void 0 : (name) => panSNMatchesPrefix(name, referenceHaplotype) || wanted.some((prefix) => panSNMatchesPrefix(name, prefix));
@@ -6214,7 +6229,7 @@
   }
   var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@3.0.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@3.1.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -6239,7 +6254,7 @@
     return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@3.0.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@3.1.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var FOLLOW_ROUNDS = 3;
   var FOLLOW_CHUNKS = 4;
@@ -6284,12 +6299,7 @@
           if (header.format !== 4) {
             throw new WalkFormatError(`This walk file is format ${(_a = header.format) !== null && _a !== void 0 ? _a : 1}; @jbrowse/graph-walks reads format 4, so rebuild it with gfa-to-tabix 1.2 or later`);
           }
-          const chunk = (_b = header.chunk) !== null && _b !== void 0 ? _b : 65536;
-          return {
-            ...header,
-            chunk,
-            lookback: lookbackChunks(header.maxNode, chunk)
-          };
+          return { ...header, chunk: (_b = header.chunk) !== null && _b !== void 0 ? _b : 65536 };
         });
         read.catch(() => {
           if (this.headerRead === read) {
@@ -6322,15 +6332,18 @@
       const lookup = await raceAbort(this.lookupRead, opts.signal);
       return resolveRefName(lookup, sample, refName);
     }
+    // The first base a cut over `start`, and `end` on `refName` when given,
+    // queries
     async queryStart(start, opts = {}) {
-      const { chunk, lookback } = await this.header(opts);
-      return chunkQueryStart(start, chunk, lookback);
+      const { refName = "", end = start + 1 } = opts;
+      return walkQueryStart(await this.header(opts), refName, start, end);
     }
     async cut(refName, region, opts = {}) {
       var _a, _b;
       const { signal, keep, context = WALK_CONTEXT, stepBudget = Infinity, byteBudget = Infinity, links = true, contained = false, nodeLimit = Infinity } = opts;
-      const { chunk, lookback } = await this.header({ signal });
-      const from = chunkQueryStart(region.start, chunk, lookback);
+      const header = await this.header({ signal });
+      const { chunk } = header;
+      const from = walkQueryStart(header, refName, region.start, region.end);
       const bytesForRegions = (_a = this.walks.bytesForRegions) === null || _a === void 0 ? void 0 : _a.bind(this.walks);
       const budgeted = Number.isFinite(byteBudget) && bytesForRegions !== void 0;
       const bytesFor = async (spans) => budgeted ? bytesForRegions(spans.map((span) => ({ refName, ...span })), { signal }) : 0;
