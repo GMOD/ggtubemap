@@ -15,6 +15,16 @@ test_that("haplotypes keeps the reference and the walks asked for", {
   expect_equal(vapply(g$tracks, `[[`, "", "name"), c("K12#1#chr", "IAI39#1#chr"))
 })
 
+test_that("a walk the file abridged cuts in full, as from a file that did not", {
+  abridged <- test_path("testdata", "ecoli_pggb_abridged.K12.walks.bed.gz")
+  expect_match(readLines(gzfile(abridged)), "\tabridged\t", all = FALSE)
+  tracks <- function(file) {
+    g <- read_gfa(file, region = "chr:1004501-1004961")
+    g$tracks[order(vapply(g$tracks, `[[`, "", "name"))]
+  }
+  expect_equal(tracks(abridged), tracks(walk_file))
+})
+
 test_that("a bare sequence name finds the PanSN one", {
   expect_error(read_gfa(walk_file, region = "chrX:1-10"), "no sequence chrX")
 })

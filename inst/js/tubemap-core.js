@@ -6736,7 +6736,13 @@
     const { graph, kept, fragments } = await reader.cut(
       anchor,
       { start, end },
-      { context, keep: walksKept(haplotypes, anchor), sequences: true, links: false }
+      {
+        context,
+        keep: walksKept(haplotypes, anchor),
+        expand: () => true,
+        sequences: true,
+        links: false
+      }
     );
     const tables = graph.tables(kept, fragments);
     const seq = tables.nodes.names.map((name) => graph.sequences.get(Number(name)) ?? null);
