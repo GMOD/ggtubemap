@@ -3568,7 +3568,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.11.0/node_modules/@gmod/tabix/esm/chunk.js
+  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/chunk.js
   var Chunk = class {
     constructor(minv, maxv, bin, endPosition = maxv.blockPosition + (1 << 16)) {
       __publicField(this, "minv");
@@ -3828,7 +3828,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.11.0/node_modules/@gmod/tabix/esm/long.js
+  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/long.js
   var TWO_PWR_32_DBL = 2 ** 32;
   function longFromBytesToUnsigned(source, i = 0) {
     const low = source[i] | source[i + 1] << 8 | source[i + 2] << 16 | source[i + 3] << 24;
@@ -3836,7 +3836,7 @@
     return (high >>> 0) * TWO_PWR_32_DBL + (low >>> 0);
   }
 
-  // node_modules/.pnpm/@gmod+tabix@3.11.0/node_modules/@gmod/tabix/esm/virtualOffset.js
+  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/virtualOffset.js
   var VirtualOffset = class {
     constructor(blockPosition, dataPosition) {
       __publicField(this, "blockPosition");
@@ -3855,7 +3855,7 @@
     return new VirtualOffset(bytes[offset + 7] * 1099511627776 + bytes[offset + 6] * 4294967296 + bytes[offset + 5] * 16777216 + bytes[offset + 4] * 65536 + bytes[offset + 3] * 256 + bytes[offset + 2], bytes[offset + 1] << 8 | bytes[offset]);
   }
 
-  // node_modules/.pnpm/@gmod+tabix@3.11.0/node_modules/@gmod/tabix/esm/util.js
+  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/util.js
   function optimizeChunks(chunks, lowest) {
     const n = chunks.length;
     if (n === 0) {
@@ -4080,7 +4080,7 @@
     return false;
   }
 
-  // node_modules/.pnpm/@gmod+tabix@3.11.0/node_modules/@gmod/tabix/esm/indexFile.js
+  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/indexFile.js
   function maxOffset(binIndex, end, minShift, depth) {
     if (end > 2 ** (minShift + depth * 3)) {
       return void 0;
@@ -4234,7 +4234,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.11.0/node_modules/@gmod/tabix/esm/csi.js
+  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/csi.js
   var CSI1_MAGIC = 21582659;
   var CSI2_MAGIC = 38359875;
   function lshift(num, bits) {
@@ -4381,7 +4381,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.11.0/node_modules/@gmod/tabix/esm/tbi.js
+  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/tbi.js
   var TBI_MAGIC = 21578324;
   var TBI_DEPTH = 5;
   var TBI_MIN_SHIFT = 14;
@@ -4441,12 +4441,15 @@
           if (bin > maxBinNumber + 1) {
             throw new Error("tabix index contains too many bins, please use a CSI index");
           }
+          if (bin <= maxBinNumber) {
+            for (let k = 0; k < chunkCount; k++) {
+              firstDataLine = minVirtualOffset(bytes, curr + 16 * k, 1, firstDataLine);
+            }
+          }
           curr += 16 * chunkCount;
         }
         const linearCount = dataView.getInt32(curr, true);
-        curr += 4;
-        firstDataLine = minVirtualOffset(bytes, curr, linearCount, firstDataLine);
-        curr += 8 * linearCount;
+        curr += 4 + 8 * linearCount;
       }
       function getIndices(refId) {
         const start = offsets[refId];
@@ -4510,7 +4513,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.11.0/node_modules/@gmod/tabix/esm/tabixIndexedFile.js
+  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/tabixIndexedFile.js
   var TAB = 9;
   var NEWLINE2 = 10;
   var CARRIAGE_RETURN = 13;
@@ -4967,6 +4970,9 @@
      */
     async readHeaderBytes(opts) {
       const { firstDataLine, maxBlockSize } = await this.getMetadata(opts);
+      if (firstDataLine?.blockPosition === 0 && firstDataLine.dataPosition === 0) {
+        return new Uint8Array(0);
+      }
       const maxFetch = (firstDataLine?.blockPosition ?? 0) + maxBlockSize;
       const buf = await this.filehandle.read(maxFetch, 0, opts);
       return unzip(buf);
