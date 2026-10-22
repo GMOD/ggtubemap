@@ -5089,18 +5089,18 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.0.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.2.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
-    constructor(message, limit, windowBp, fitsBp, unzoomable) {
+    constructor(message, limit, windowBp, fitsBp, overBytes) {
       super(message);
       this.regionTooLarge = true;
       this.name = "NodeLimitError";
       this.limit = limit;
       this.windowBp = windowBp;
       this.fitsBp = fitsBp;
-      this.zoomHelps = unzoomable === void 0;
-      if (unzoomable) {
-        this.bytes = unzoomable.bytes;
+      this.zoomHelps = overBytes === void 0 || overBytes.zoomHelps === true;
+      if (overBytes) {
+        this.bytes = overBytes.bytes;
       }
     }
   };
@@ -5125,7 +5125,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.0.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.2.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
@@ -5441,9 +5441,23 @@
       }
     };
   }
-  function decodeChunk(rows, keep, withSequences = false) {
-    var _a, _b, _c;
+  var refRows = (rows) => rows.filter((c) => c[3] === "ref").sort((a, b) => +a[6] - +b[6]);
+  function chunkRef(rows) {
     const path = new RefPath();
+    const lengths = /* @__PURE__ */ new Map();
+    for (const cols of refRows(rows)) {
+      const handles = tokens(cols[9], { id: 0 }, []);
+      const nodeLengths = numbers(cols[10]);
+      path.add(handles, nodeLengths);
+      for (let k = 0; k < handles.length; k++) {
+        lengths.set(idOf(handles[k]), nodeLengths[k]);
+      }
+    }
+    return { path, lengths };
+  }
+  function decodeChunk(rows, keep, withSequences = false, ref) {
+    var _a, _b, _c, _d;
+    const path = (_a = ref === null || ref === void 0 ? void 0 : ref.path) !== null && _a !== void 0 ? _a : new RefPath();
     const lengths = /* @__PURE__ */ new Map();
     const routes = [];
     const out = {
@@ -5451,11 +5465,11 @@
       rows: [],
       nodes: /* @__PURE__ */ new Map(),
       ends: [],
-      chunk: { path, routes, walks: [], lengths }
+      chunk: { path, routes, walks: [], lengths, refLengths: ref === null || ref === void 0 ? void 0 : ref.lengths }
     };
+    const placed = (id) => out.nodes.has(id) || (ref === null || ref === void 0 ? void 0 : ref.lengths.has(id)) === true;
     const previous = { id: 0 };
-    const refs = rows.filter((c) => c[3] === "ref").sort((a, b) => +a[6] - +b[6]);
-    for (const cols of refs) {
+    for (const cols of ref ? [] : refRows(rows)) {
       const anchor = cols[0];
       const handles = tokens(cols[9], { id: 0 }, []);
       const nodeLengths = numbers(cols[10]);
@@ -5519,7 +5533,7 @@
         const entry = tokens(cols[4], previous, []);
         const interior = tokens(cols[5], previous, []);
         const exit = tokens(cols[6], previous, []);
-        routes.push({ entry: (_a = entry[0]) !== null && _a !== void 0 ? _a : NONE, interior, exit: (_b = exit[0]) !== null && _b !== void 0 ? _b : NONE });
+        routes.push({ entry: (_b = entry[0]) !== null && _b !== void 0 ? _b : NONE, interior, exit: (_c = exit[0]) !== null && _c !== void 0 ? _c : NONE });
       }
     }
     const routeOf = (index) => {
@@ -5575,8 +5589,8 @@
           interior += routeOf(choices[k]).interior.length;
           for (const h of routeOf(choices[k]).interior) {
             const id = idOf(h);
-            if (!out.nodes.has(id)) {
-              const length = (_c = lengths.get(id)) !== null && _c !== void 0 ? _c : 0;
+            if (!placed(id)) {
+              const length = (_d = lengths.get(id)) !== null && _d !== void 0 ? _d : 0;
               out.nodes.set(id, { refName: name, start: 0, end: length, rank: 1 });
             }
           }
@@ -5608,7 +5622,7 @@
       link(from, to);
     };
     const best = /* @__PURE__ */ new Map();
-    for (const { path, routes, walks, lengths } of chunks) {
+    for (const { path, routes, walks, lengths, refLengths } of chunks) {
       const handles = path.handles;
       for (let k = 1; k < handles.length; k++) {
         if (kept.has(idOf(handles[k - 1])) && kept.has(idOf(handles[k]))) {
@@ -5634,8 +5648,8 @@
         wanted[index] = any ? 1 : 0;
       }
       const lengthOf = (h) => {
-        var _a;
-        return (_a = lengths.get(idOf(h))) !== null && _a !== void 0 ? _a : 0;
+        var _a, _b;
+        return (_b = (_a = lengths.get(idOf(h))) !== null && _a !== void 0 ? _a : refLengths === null || refLengths === void 0 ? void 0 : refLengths.get(idOf(h))) !== null && _b !== void 0 ? _b : 0;
       };
       const bp = new Float64Array(routes.length).fill(-1);
       const routeBp = (index) => {
@@ -5722,7 +5736,7 @@
     return links;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.0.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.2.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var WALK_STOP_KINDS = ["elsewhere", "break", "end"];
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -6356,11 +6370,11 @@
       fitsBp = cs + chunk - window.start;
     }
     const windowBp = window.end - window.start;
-    return fitsBp > 0 ? new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)} to see the graph`, budget, windowBp, fitsBp) : new RegionTooLargeError(`Too much graph here to fetch, even zoomed in (${megabytes(least !== null && least !== void 0 ? least : bytes)} against ${names.bytes} ${megabytes(budget)}). A satellite or rDNA array usually causes this: the graph folds the repeat into a few nodes that each haplotype loops through many times`, budget, windowBp, 1, { bytes });
+    return fitsBp > 0 ? new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)} to see the graph`, budget, windowBp, fitsBp, { bytes, zoomHelps: true }) : new RegionTooLargeError(`Too much graph here to fetch, even zoomed in (${megabytes(least !== null && least !== void 0 ? least : bytes)} against ${names.bytes} ${megabytes(budget)}). A satellite or rDNA array usually causes this: the graph folds the repeat into a few nodes that each haplotype loops through many times`, budget, windowBp, 1, { bytes });
   }
   var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.0.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.2.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -6385,11 +6399,12 @@
     return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.0.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.2.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var FOLLOW_ROUNDS = 3;
   var FOLLOW_CHUNKS = 4;
   var WALK_CONTEXT = 1e3;
+  var DETAIL_READS = 16;
   var WalkFormatError = class extends Error {
     constructor() {
       super(...arguments);
@@ -6403,6 +6418,24 @@
   }
   function withoutDetails(names) {
     return names.filter((name) => !name.includes("~"));
+  }
+  async function readInOrder(items, limit, signal, read, use) {
+    const reads = [];
+    const next = () => {
+      if (reads.length < items.length && !signal.aborted) {
+        const started = read(items[reads.length]);
+        reads.push(started);
+        started.then(next, () => {
+        });
+      }
+    };
+    for (let k = 0; k < limit; k++) {
+      next();
+    }
+    for (let i = 0; i < items.length; i++) {
+      signal.throwIfAborted();
+      use(items[i], await reads[i]);
+    }
   }
   function raceAbort(promise, signal) {
     if (!signal) {
@@ -6515,18 +6548,18 @@
         }
         decoded.add(cs);
         const chunkCut = decodeChunk(chunkRows, keep, opts.sequences);
-        let refRows;
+        let ref;
         for (const row of chunkCut.rows) {
           if (row.abridged && (expand === null || expand === void 0 ? void 0 : expand(row.name))) {
-            refRows !== null && refRows !== void 0 ? refRows : refRows = chunkRows.filter((cols) => cols[3] === "ref");
-            details.push({ refRows, row });
+            ref !== null && ref !== void 0 ? ref : ref = chunkRef(chunkRows);
+            details.push({ ref, row });
           } else {
             rows.push(row);
           }
         }
         place2(chunkCut, cs);
       };
-      const decodeDetail = async ({ refRows, row }) => {
+      const readDetail = async ({ row }) => {
         const { refName: sequence, start } = row.abridged.detail;
         checkRange(sequence, start, start + 1);
         const held = [];
@@ -6539,7 +6572,10 @@
             held.push(cols);
           }
         });
-        const chunkCut = decodeChunk([...refRows, ...held], (name) => name === row.name, opts.sequences);
+        return held;
+      };
+      const decodeDetail = ({ ref, row }, held) => {
+        const chunkCut = decodeChunk(held, (name) => name === row.name, opts.sequences, ref);
         for (const decodedRow of chunkCut.rows) {
           if (decodedRow.name === row.name) {
             rows.push(decodedRow);
@@ -6592,9 +6628,7 @@
         }
         const pending = details;
         details = [];
-        for (const detail of pending) {
-          await decodeDetail(detail);
-        }
+        await readInOrder(pending, DETAIL_READS, reads.signal, readDetail, decodeDetail);
         if (links) {
           for (const [a, b] of pieceLinks(ends)) {
             graph.addLinkEnds(a, b);
