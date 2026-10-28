@@ -38,6 +38,17 @@ test_that("subpath names and walks give the ruler its start", {
                c(tm$bases$x[1], tm$bases$x[tm$bases$node == "2"], NA, NA))
 })
 
+test_that("a walk's * start reads as unknown, and a segment of unknown length is refused", {
+  g <- read_gfa(write_gfa(sub("\t0\t10\t", "\t*\t*\t", gfa)))
+  expect_true(is.na(g$tracks[[2]]$index_of_first_base))
+  expect_error(read_gfa(write_gfa(sub("\tLN:i:7", "", gfa))), "Segment 3 has neither")
+})
+
+test_that("read_gfa reads a file:// URL", {
+  path <- write_gfa(gfa)
+  expect_equal(read_gfa(paste0("file://", path))$nodes$name, c("1", "2", "3", "4"))
+})
+
 test_that("read_gfa puts the named reference first", {
   g <- read_gfa(write_gfa(gfa), reference = "HG002#1#chr1")
   expect_equal(g$tracks[[1]]$name, "HG002#1#chr1")

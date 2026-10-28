@@ -75,6 +75,11 @@ read_gfa <- function(path, reference = NULL, region = NULL, haplotypes = NULL,
     sequence_length = ifelse(seq == "*", length_tag, nchar(seq)),
     stringsAsFactors = FALSE
   )
+  unsized <- nodes$name[is.na(nodes$sequence_length)]
+  if (length(unsized)) {
+    stop(sprintf("Segment %s has neither a sequence nor an LN tag.", unsized[1]),
+         call. = FALSE)
+  }
 
   paths <- lapply(fields[kind == "P"], function(f) {
     steps <- strsplit(f[3], ",", fixed = TRUE)[[1]]
@@ -87,7 +92,7 @@ read_gfa <- function(path, reference = NULL, region = NULL, haplotypes = NULL,
     oriented <- ifelse(startsWith(steps, "<"), "-", "")
     list(name = paste(f[2], f[3], f[4], sep = "#"),
          sequence = paste0(oriented, substring(steps, 2)),
-         index_of_first_base = as.numeric(f[5]))
+         index_of_first_base = if (f[5] == "*") NA_real_ else as.numeric(f[5]))
   })
   tracks <- c(paths, walks)
   if (length(tracks) == 0) {
@@ -110,7 +115,7 @@ order_tracks <- function(graph, reference) {
 }
 
 gfa_lines <- function(path) {
-  if (grepl("^(https?|ftp)://", path)) {
+  if (is_url(path)) {
     local <- tempfile()
     on.exit(unlink(local))
     utils::download.file(path, local, mode = "wb", quiet = TRUE)
