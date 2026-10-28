@@ -1,7 +1,18 @@
 the <- new.env(parent = emptyenv())
 
+.onLoad <- function(libname, pkgname) {
+  the$pid <- Sys.getpid()
+}
+
 js_context <- function() {
   if (is.null(the$ctx)) {
+    if (engine_forked(the$pid)) {
+      stop(
+        "V8 hangs starting in a forked worker, such as parallel::mclapply()'s: ",
+        "lay out in a socket cluster, such as parallel::makeCluster()'s",
+        call. = FALSE
+      )
+    }
     ctx <- V8::v8()
     ctx$source(system.file("js", "tubemap-core.js", package = "ggtubemap"))
     the$ctx <- ctx

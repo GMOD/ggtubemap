@@ -59,7 +59,7 @@ read_gfa <- function(path, reference = NULL, region = NULL, haplotypes = NULL,
   if (!is.null(region)) {
     return(order_tracks(cut_walks(path, region, haplotypes, context), reference))
   }
-  lines <- gfa_lines(path)
+  lines <- read_lines(path)
   fields <- strsplit(lines, "\t", fixed = TRUE)
   kind <- vapply(fields, `[`, "", 1)
 
@@ -112,18 +112,6 @@ order_tracks <- function(graph, reference) {
   }
   graph$tracks <- c(tracks[first[1]], tracks[-first[1]])
   graph
-}
-
-gfa_lines <- function(path) {
-  if (is_url(path)) {
-    local <- tempfile()
-    on.exit(unlink(local))
-    utils::download.file(path, local, mode = "wb", quiet = TRUE)
-    path <- local
-  }
-  con <- gzfile(path)
-  on.exit(close(con), add = TRUE, after = FALSE)
-  readLines(con)
 }
 
 # The start of a subpath, named `name[start-end]` as vg writes it or

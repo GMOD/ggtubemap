@@ -1,7 +1,7 @@
 // The one function R calls: JSON in, JSON out, every table columnar so
 // jsonlite reads it straight into a data frame. Shapes come out as flattened
 // polygons in sequenceTubeMap's draw order, panel by panel.
-import './polyfills.js'
+import './v8-host.mjs'
 import './walks.js'
 
 import {

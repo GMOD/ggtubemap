@@ -36,6 +36,18 @@ test_that("a byte range reads the same from a file and from a URL", {
   expect_identical(fetch_range(walk_file, 0, -1), readBin(walk_file, "raw", file.size(walk_file)))
 })
 
+test_that("a region is a 1-based locus, one base or a span, and a 0-based or reversed one is refused", {
+  expect_equal(parse_region("chr:7")[c("start", "end")], list(start = 6, end = 7))
+  expect_error(read_gfa(walk_file, region = "chr:0-10"), "1 <= start <= end")
+  expect_error(read_gfa(walk_file, region = "chr:200-100"), "1 <= start <= end")
+})
+
+test_that("a walk file with no index beside it names the index it needs", {
+  copy <- file.path(tempdir(), "lone.walks.bed.gz")
+  file.copy(walk_file, copy, overwrite = TRUE)
+  expect_error(read_gfa(copy, region = "chr:1004500-1004961"), "lone.walks.bed.gz.tbi does not exist")
+})
+
 test_that("a graph with no bases draws at normal node widths", {
   g <- read_gfa(walk_file, region = "chr:1004500-1004961")
   expect_true(all(is.na(g$nodes$seq)))

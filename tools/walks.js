@@ -4,19 +4,9 @@
 import { TabixIndexedFile } from '@gmod/tabix'
 import { WalkReader, walksKept } from '@jbrowse/graph-walks'
 
-import { fromBase64 } from './polyfills.js'
+import { rangeFile } from './v8-host.mjs'
 
-function rangeFile(location) {
-  const bytes = (position, length) => {
-    const [value] = console.r.call('ggtubemap:::fetch_range', [location, position, length])
-    return fromBase64(value ?? '')
-  }
-  return {
-    read: async (length, position) => bytes(position, length),
-    readFile: async () => bytes(0, -1),
-    close: async () => {},
-  }
-}
+const fetchRange = 'ggtubemap:::fetch_range'
 
 // the reference sample's walk first, as a tube map draws its reference on top
 function tracksOf({ nodes, walks }, reference) {
@@ -47,8 +37,9 @@ globalThis.cutWalks = async function ({
 }) {
   const reader = new WalkReader(
     new TabixIndexedFile({
-      filehandle: rangeFile(file),
-      tbiFilehandle: rangeFile(index),
+      filehandle: rangeFile(fetchRange, file),
+      [/\.csi([?#]|$)/.test(index) ? 'csiFilehandle' : 'tbiFilehandle']:
+        rangeFile(fetchRange, index),
       chunkCacheIdleTimeoutMs: 0,
     }),
   )

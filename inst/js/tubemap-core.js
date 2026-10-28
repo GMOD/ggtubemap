@@ -36,7 +36,8 @@
   var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
   var __privateMethod = (obj, member, method) => (__accessCheck(obj, member, "access private method"), method);
 
-  // tools/polyfills.js
+  // tools/v8-host.mjs
+  globalThis.performance ?? (globalThis.performance = { now: () => Date.now() });
   globalThis.structuredClone ?? (globalThis.structuredClone = (value) => JSON.parse(JSON.stringify(value)));
   var BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   function fromBase64(s) {
@@ -82,7 +83,11 @@
         } else if (cp < 2048) {
           out.push(192 | cp >> 6, 128 | cp & 63);
         } else if (cp < 65536) {
-          out.push(224 | cp >> 12, 128 | cp >> 6 & 63, 128 | cp & 63);
+          out.push(
+            224 | cp >> 12,
+            128 | cp >> 6 & 63,
+            128 | cp & 63
+          );
         } else {
           out.push(
             240 | cp >> 18,
@@ -93,6 +98,12 @@
         }
       }
       return Uint8Array.from(out);
+    }
+    encodeInto(text, dest) {
+      const bytes = this.encode(text);
+      const written = Math.min(bytes.length, dest.length);
+      dest.set(bytes.subarray(0, written));
+      return { read: text.length, written };
     }
   });
   if (!globalThis.AbortController) {
@@ -137,6 +148,18 @@
     const bytes = fromBase64(m[1]);
     return { ok: true, arrayBuffer: async () => bytes.buffer };
   });
+  function rangeFile(rFunction, location) {
+    const bytes = (position, length) => {
+      const [value] = console.r.call(rFunction, [location, position, length]);
+      return fromBase64(value ?? "");
+    };
+    return {
+      read: async (length, position) => bytes(position, length),
+      readFile: async () => bytes(0, -1),
+      close: async () => {
+      }
+    };
+  }
 
   // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.2/node_modules/@gmod/bgzf-filehandle/esm/constants.js
   var MAX_BGZF_BLOCK_SIZE = 1 << 16;
@@ -6714,18 +6737,7 @@
   };
 
   // tools/walks.js
-  function rangeFile(location) {
-    const bytes = (position, length) => {
-      const [value] = console.r.call("ggtubemap:::fetch_range", [location, position, length]);
-      return fromBase64(value ?? "");
-    };
-    return {
-      read: async (length, position) => bytes(position, length),
-      readFile: async () => bytes(0, -1),
-      close: async () => {
-      }
-    };
-  }
+  var fetchRange = "ggtubemap:::fetch_range";
   function tracksOf({ nodes, walks }, reference) {
     const tracks = [];
     for (let p = 0; p < walks.names.length; p++) {
@@ -6753,8 +6765,8 @@
   }) {
     const reader = new WalkReader(
       new TabixIndexedFile({
-        filehandle: rangeFile(file),
-        tbiFilehandle: rangeFile(index),
+        filehandle: rangeFile(fetchRange, file),
+        [/\.csi([?#]|$)/.test(index) ? "csiFilehandle" : "tbiFilehandle"]: rangeFile(fetchRange, index),
         chunkCacheIdleTimeoutMs: 0
       })
     );

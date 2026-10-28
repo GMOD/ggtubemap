@@ -205,8 +205,19 @@ Git tracks the layout bundle `inst/js/tubemap-core.js`. `pnpm bundle` builds it
 from `tools/bridge.js` and the `@jbrowse/tubemap-core` release pinned in
 `package.json`, and writes that version into its header. The bundle also holds
 `tools/walks.js`, the walk-file cut, with `@gmod/tabix` and
-`@jbrowse/graph-walks`, and `tools/polyfills.js` for the web globals R's V8
+`@jbrowse/graph-walks`, and `tools/v8-host.mjs` for the web globals R's V8
 lacks.
+
+ggtubemap copies some files from [ggbandage](https://github.com/GMOD/ggbandage):
+`R/import-standalone-*.R`, its byte-range, locus and V8 helpers, and
+`tools/v8-host.mjs`. Each copy's header names the ggbandage commit it came from.
+
+- `tools/check-standalone.sh` fails where a copy differs from that commit,
+  and with `--latest`, where ggbandage's main has changed the file since
+- `tools/check-standalone.sh --update <sha>` copies every file again from that
+  ggbandage commit
+- The `Standalone files` workflow runs the check on every push, and with
+  `--latest` weekly
 
 `pnpm update-core [version]` pins a tubemap-core release, the latest by default,
 rebuilds the bundle, and copies that release's goldens into
