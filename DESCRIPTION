@@ -26,7 +26,7 @@ Imports:
     jsonlite,
     V8
 Suggests:
-    testthat (>= 3.0.0)
+    testthat (>= 3.1.5)
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
