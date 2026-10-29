@@ -5112,7 +5112,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.2.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.4.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp, overBytes) {
       super(message);
@@ -5148,7 +5148,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.2.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.4.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
@@ -5421,6 +5421,19 @@
     }
     return { ids, rev };
   }
+  function skipsOver(jumps, fragments, region) {
+    const walked = new Set(fragments.map((f) => f.name));
+    const seen = /* @__PURE__ */ new Set();
+    const over = [];
+    for (const jump of jumps) {
+      const key = `${jump.name}	${jump.fragStart}	${jump.piece}`;
+      if (!walked.has(jump.name) && !seen.has(key) && jump.refStart < region.end && jump.refEnd > region.start) {
+        seen.add(key);
+        over.push(jump);
+      }
+    }
+    return over.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.fragStart - b.fragStart || a.piece - b.piece);
+  }
   function sliceBases(cols, from, ids, lengths, out) {
     const tag = cols.slice(from).find((c) => c.startsWith("SQ:Z:"));
     if (tag === void 0) {
@@ -5488,7 +5501,8 @@
       rows: [],
       nodes: /* @__PURE__ */ new Map(),
       ends: [],
-      chunk: { path, routes, walks: [], lengths, refLengths: ref === null || ref === void 0 ? void 0 : ref.lengths }
+      chunk: { path, routes, walks: [], lengths, refLengths: ref === null || ref === void 0 ? void 0 : ref.lengths },
+      skips: []
     };
     const placed = (id) => out.nodes.has(id) || (ref === null || ref === void 0 ? void 0 : ref.lengths.has(id)) === true;
     const previous = { id: 0 };
@@ -5567,6 +5581,18 @@
       return route;
     };
     for (const cols of rows) {
+      if (cols[3] === "skip") {
+        if (keep === void 0 || keep(cols[4])) {
+          out.skips.push({
+            name: cols[4],
+            fragStart: +cols[5],
+            piece: +cols[6],
+            refStart: +cols[9],
+            refEnd: +cols[10]
+          });
+        }
+        continue;
+      }
       if (cols[3] === "abridged") {
         const name2 = cols[4];
         if (keep === void 0 || keep(name2)) {
@@ -5759,7 +5785,7 @@
     return links;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.2.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.4.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var WALK_STOP_KINDS = ["elsewhere", "break", "end"];
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -6206,7 +6232,7 @@
      * name. graphTablesGFA writes them as the GFA they stand for, the same bytes
      * for the same rows.
      */
-    tables(kept, fragments) {
+    tables(kept, fragments, skips = []) {
       if (this.chunks.length > 0) {
         placeAndLink(this.chunks, kept, (id, node) => {
           const held2 = this.nodes.get(id);
@@ -6312,6 +6338,11 @@
             var _a, _b;
             return (_b = (_a = f.abridged) === null || _a === void 0 ? void 0 : _a.bp) !== null && _b !== void 0 ? _b : NaN;
           })
+        },
+        skips: {
+          names: skips.map((s) => s.name),
+          starts: Float64Array.from(skips, (s) => s.refStart),
+          ends: Float64Array.from(skips, (s) => s.refEnd)
         }
       };
     }
@@ -6397,7 +6428,7 @@
   }
   var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.2.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.4.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -6422,7 +6453,7 @@
     return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.2.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.4.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var FOLLOW_ROUNDS = 3;
   var FOLLOW_CHUNKS = 4;
@@ -6562,6 +6593,7 @@
       });
       const decoded = /* @__PURE__ */ new Set();
       const ends = [];
+      const jumps = [];
       const surely = /* @__PURE__ */ new Set();
       const filtered = keep !== void 0;
       let details = [];
@@ -6571,6 +6603,9 @@
         }
         decoded.add(cs);
         const chunkCut = decodeChunk(chunkRows, keep, opts.sequences);
+        for (const jump of chunkCut.skips) {
+          jumps.push(jump);
+        }
         let ref;
         for (const row of chunkCut.rows) {
           if (row.abridged && (expand === null || expand === void 0 ? void 0 : expand(row.name))) {
@@ -6709,7 +6744,7 @@
       if (tooMany) {
         throw tooMany;
       }
-      return { graph, ...cut };
+      return { graph, ...cut, skips: skipsOver(jumps, cut.fragments, region) };
     }
     /**
      * The graph under a region as tables: the reference sample's sequence over
@@ -6728,11 +6763,11 @@
         const names = await this.referenceSequences({ signal });
         throw new Error(`The walk file has no sequence ${region.refName} on ${sample}; it holds ${names.slice(0, 5).join(", ")}${names.length > 5 ? ", \u2026" : ""}`);
       }
-      const { graph, kept, fragments } = await this.cut(refName, region, {
+      const { graph, kept, fragments, skips } = await this.cut(refName, region, {
         ...rest,
         keep: walksKept(haplotypes, refName)
       });
-      return { tables: graph.tables(kept, fragments), refName, sample };
+      return { tables: graph.tables(kept, fragments, skips), refName, sample };
     }
   };
 
