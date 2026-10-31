@@ -5112,7 +5112,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.4.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.6.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp, overBytes) {
       super(message);
@@ -5148,7 +5148,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.4.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.6.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
@@ -5211,14 +5211,17 @@
     constructor() {
       this.handles = [];
       this.before = [0];
+      this.starts = [];
       this.occurrences = /* @__PURE__ */ new Map();
     }
-    add(handles, lengths) {
+    add(handles, lengths, start) {
       for (let k = 0; k < handles.length; k++) {
         const h = handles[k];
         const i = this.handles.length;
         this.handles.push(h);
         this.before.push(this.before[i] + lengths[k]);
+        this.starts.push(start);
+        start += lengths[k];
         const id = idOf(h);
         const list = this.occurrences.get(id);
         if (list) {
@@ -5343,7 +5346,7 @@
     if (i === void 0) {
       throw new WalkRowError("a walk row starts off its chunk");
     }
-    visit.step(h);
+    visit.step(h, i);
     const follow = (target, count) => {
       const forward2 = path.handles[i] === h;
       const j = counted2 ? i + (forward2 ? count : -count) : path.reach(i, h, target);
@@ -5377,7 +5380,7 @@
       if (i === void 0) {
         throw new WalkRowError("a route lands off its chunk");
       }
-      visit.step(h);
+      visit.step(h, i);
     }
     follow(end, tail);
     if (h !== end) {
@@ -5387,10 +5390,14 @@
   function decodeWalk(path, routes, cols, choices, n) {
     const ids = new Int32Array(n);
     const rev = new Uint8Array(n);
+    const refStarts = new Float64Array(n).fill(Number.NaN);
     let at = 0;
-    const push = (h) => {
+    const push = (h, i) => {
       if (at >= n) {
         throw new WalkRowError("a walk row decodes to more steps than it states");
+      }
+      if (i !== void 0) {
+        refStarts[at] = path.starts[i];
       }
       ids[at] = idOf(h);
       rev[at++] = h & 1;
@@ -5400,11 +5407,11 @@
       stretch(from, to, forward2) {
         if (forward2) {
           for (let j = from + 1; j <= to; j++) {
-            push(path.handles[j]);
+            push(path.handles[j], j);
           }
         } else {
           for (let j = from - 1; j >= to; j--) {
-            push(otherStrand(path.handles[j]));
+            push(otherStrand(path.handles[j]), j);
           }
         }
       },
@@ -5419,15 +5426,16 @@
     if (at !== n) {
       throw new WalkRowError(`a walk row decodes to ${at} steps, not ${n}`);
     }
-    return { ids, rev };
+    return { ids, rev, refStarts };
   }
-  function skipsOver(jumps, fragments, region) {
+  function skipsOver(jumps, fragments, region, crossed = []) {
     const walked = new Set(fragments.map((f) => f.name));
+    const own = new Set(crossed);
     const seen = /* @__PURE__ */ new Set();
     const over = [];
-    for (const jump of jumps) {
+    for (const jump of [...crossed, ...jumps]) {
       const key = `${jump.name}	${jump.fragStart}	${jump.piece}`;
-      if (!walked.has(jump.name) && !seen.has(key) && jump.refStart < region.end && jump.refEnd > region.start) {
+      if ((own.has(jump) || !walked.has(jump.name)) && !seen.has(key) && jump.refStart < region.end && jump.refEnd > region.start) {
         seen.add(key);
         over.push(jump);
       }
@@ -5484,7 +5492,7 @@
     for (const cols of refRows(rows)) {
       const handles = tokens(cols[9], { id: 0 }, []);
       const nodeLengths = numbers(cols[10]);
-      path.add(handles, nodeLengths);
+      path.add(handles, nodeLengths, +cols[6]);
       for (let k = 0; k < handles.length; k++) {
         lengths.set(idOf(handles[k]), nodeLengths[k]);
       }
@@ -5500,6 +5508,7 @@
       sequences: /* @__PURE__ */ new Map(),
       rows: [],
       nodes: /* @__PURE__ */ new Map(),
+      revisits: [],
       ends: [],
       chunk: { path, routes, walks: [], lengths, refLengths: ref === null || ref === void 0 ? void 0 : ref.lengths },
       skips: []
@@ -5511,7 +5520,8 @@
       const handles = tokens(cols[9], { id: 0 }, []);
       const nodeLengths = numbers(cols[10]);
       const hapOffset = +cols[6];
-      path.add(handles, nodeLengths);
+      const first = path.starts.length;
+      path.add(handles, nodeLengths, hapOffset);
       if (withSequences) {
         sliceBases(cols, 11, handles.map(idOf), nodeLengths, out.sequences);
       }
@@ -5520,13 +5530,11 @@
         const id = idOf(handles[k]);
         const length = nodeLengths[k];
         lengths.set(id, length);
-        if (!out.nodes.has(id)) {
-          out.nodes.set(id, {
-            refName: cols[4],
-            start,
-            end: start + length,
-            rank: 0
-          });
+        const node = { refName: cols[4], start, end: start + length, rank: 0 };
+        if (out.nodes.has(id)) {
+          out.revisits.push({ id, ...node });
+        } else {
+          out.nodes.set(id, node);
         }
         start += length;
       }
@@ -5547,7 +5555,8 @@
           n: handles.length,
           steps: {
             ids: Int32Array.from(handles, idOf),
-            rev: Uint8Array.from(handles, (h) => h & 1)
+            rev: Uint8Array.from(handles, (h) => h & 1),
+            refStarts: Float64Array.from(path.starts.slice(first))
           },
           ...tags(cols, 11, anchor)
         });
@@ -5785,7 +5794,7 @@
     return links;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.4.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.6.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var WALK_STOP_KINDS = ["elsewhere", "break", "end"];
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -5868,10 +5877,20 @@
     const n = pieces.reduce((sum, p) => sum + p.n, 0);
     const ids = new Int32Array(n);
     const rev = new Uint8Array(n);
+    const refStarts = new Float64Array(n).fill(Number.NaN);
+    const pieceStarts = [];
+    const pieceChunks = [];
     let at = 0;
     for (const p of pieces) {
+      if (at > 0) {
+        pieceStarts.push(at);
+      }
+      pieceChunks.push(p.chunkStart);
       ids.set(p.steps.ids, at);
       rev.set(p.steps.rev, at);
+      if (p.steps.refStarts) {
+        refStarts.set(p.steps.refStarts, at);
+      }
       at += p.n;
     }
     const first = pieces[0];
@@ -5881,8 +5900,11 @@
       fragStart: first.fragStart,
       hapOffset: first.hapOffset,
       firstPiece: first.piece,
+      pieceStarts,
+      pieceChunks,
       ids,
       rev,
+      refStarts,
       prev: first.prev,
       next: last.next,
       prevRecord: first.prevRecord,
@@ -5890,14 +5912,26 @@
       ...first.abridged ? { abridged: first.abridged } : {}
     };
   }
-  function walkCut(runs, nodes, refName, { contained = false, context = 0 } = {}) {
-    const onWindow = (id) => {
-      var _a;
-      return ((_a = nodes.get(id)) === null || _a === void 0 ? void 0 : _a.onWindow) === true;
-    };
+  function walkCut(runs, nodes, refName, { contained = false, context = 0, crossingBp = CROSSING_BP } = {}) {
     const reference = (id) => {
       const node = nodes.get(id);
       return (node === null || node === void 0 ? void 0 : node.rank) === 0 ? node : void 0;
+    };
+    let windowStart = Infinity;
+    let windowEnd = -Infinity;
+    for (const node of nodes.values()) {
+      if (node.onWindow) {
+        windowStart = Math.min(windowStart, node.start);
+        windowEnd = Math.max(windowEnd, node.end);
+      }
+    }
+    const passStart = (run, i, node) => {
+      var _a;
+      return passAt(node, (_a = run.refStarts) === null || _a === void 0 ? void 0 : _a[i]);
+    };
+    const stepOnWindow = (run, i) => {
+      var _a;
+      return passOnWindow(nodes.get(run.ids[i]), (_a = run.refStarts) === null || _a === void 0 ? void 0 : _a[i], windowStart, windowEnd);
     };
     const open = /* @__PURE__ */ new Map();
     const goesOn = (chunk) => {
@@ -5920,7 +5954,9 @@
       if (to.refName !== refName) {
         return i - dir;
       }
-      const adjacent = i === at + dir && (to.start === from.end || to.end === from.start);
+      const fromStart = passStart(run, at, from);
+      const toStart = passStart(run, i, to);
+      const adjacent = i === at + dir && (toStart === fromStart + from.end - from.start || toStart + to.end - to.start === fromStart);
       return adjacent ? at : i;
     };
     let reachStart = Infinity;
@@ -5937,7 +5973,8 @@
       let last = -1;
       for (let i = 0; i <= ids.length; i++) {
         const node = i < ids.length ? nodes.get(ids[i]) : void 0;
-        if (i === ids.length || (node === null || node === void 0 ? void 0 : node.rank) === 0 && !node.onWindow) {
+        const on = i < ids.length && stepOnWindow(run, i);
+        if (i === ids.length || (node === null || node === void 0 ? void 0 : node.rank) === 0 && !on) {
           if (first >= 0) {
             for (let bp = 0; first > from && bp < context; ) {
               bp += length(ids[--first]);
@@ -5955,7 +5992,7 @@
           }
           from = i + 1;
           first = -1;
-        } else if (node === null || node === void 0 ? void 0 : node.onWindow) {
+        } else if (on) {
           if (first < 0) {
             first = i;
           }
@@ -5968,7 +6005,7 @@
       let first = -1;
       let last = -1;
       for (let i = 0; i < ids.length; i++) {
-        if (onWindow(ids[i])) {
+        if (stepOnWindow(run, i)) {
           if (first < 0) {
             first = i;
           }
@@ -5982,72 +6019,18 @@
           for (const i of [first, last]) {
             const node = reference(ids[i]);
             if (node) {
-              reachStart = Math.min(reachStart, node.start);
-              reachEnd = Math.max(reachEnd, node.end);
+              const start = passStart(run, i, node);
+              reachStart = Math.min(reachStart, start);
+              reachEnd = Math.max(reachEnd, start + node.end - node.start);
             }
           }
         }
         spans.push({ run, first, last });
       }
     };
-    let windowStart = Infinity;
-    let windowEnd = -Infinity;
-    for (const node of nodes.values()) {
-      if (node.onWindow) {
-        windowStart = Math.min(windowStart, node.start);
-        windowEnd = Math.max(windowEnd, node.end);
-      }
-    }
-    const abridgedSpan = (run) => {
-      const a = reference(run.ids[0]);
-      const b = reference(run.ids.at(-1));
-      if ((a === null || a === void 0 ? void 0 : a.refName) !== refName || (b === null || b === void 0 ? void 0 : b.refName) !== refName) {
-        return;
-      }
-      if (Math.max(a.end, b.end) > windowStart && Math.min(a.start, b.start) < windowEnd) {
-        spans.push({ run, first: 0, last: run.ids.length - 1 });
-      }
-    };
-    for (const run of runs) {
-      if (run.abridged) {
-        abridgedSpan(run);
-      } else if (contained) {
-        containedSpans(run);
-      } else {
-        detourSpan(run);
-      }
-    }
-    const inReach = (id) => {
-      const node = reference(id);
-      return onWindow(id) || (node === null || node === void 0 ? void 0 : node.refName) === refName && node.end > reachStart && node.start < reachEnd;
-    };
-    const kept = /* @__PURE__ */ new Set();
-    for (const [id, node] of nodes) {
-      if (node.onWindow) {
-        kept.add(id);
-      }
-    }
-    for (const span of spans) {
-      const { ids } = span.run;
-      if (span.run.name === refName) {
-        while (span.first > 0 && inReach(ids[span.first - 1])) {
-          span.first--;
-        }
-        while (span.last < ids.length - 1 && inReach(ids[span.last + 1])) {
-          span.last++;
-        }
-      }
-      for (let i = span.first; i <= span.last; i++) {
-        kept.add(ids[i]);
-      }
-    }
-    const abridgedRuns = new Set(spans.filter((span) => span.run.abridged).map((span) => span.run));
-    const bpOf = (ids, from, to) => {
-      let bp = 0;
-      for (let i = from; i < to; i++) {
-        bp += length(ids[i]);
-      }
-      return bp;
+    const across = /* @__PURE__ */ new Map();
+    const goesAcross = (chunk) => {
+      across.set(`${chunk.refName}:${chunk.start}`, chunk);
     };
     const byRecord = /* @__PURE__ */ new Map();
     for (const run of runs) {
@@ -6066,6 +6049,170 @@
         neighbours.set(run, [list[i - 1], list[i + 1]]);
       });
     }
+    const skips = [];
+    const side = (run, i) => {
+      const node = reference(run.ids[i]);
+      if ((node === null || node === void 0 ? void 0 : node.refName) !== refName) {
+        return 0;
+      }
+      const start = passStart(run, i, node);
+      return start + node.end - node.start <= windowStart ? -1 : start >= windowEnd ? 1 : 0;
+    };
+    const chunkSide = (chunk) => (chunk === null || chunk === void 0 ? void 0 : chunk.refName) !== refName ? 0 : chunk.start >= windowEnd ? 1 : chunk.start < windowStart ? -1 : 0;
+    const pieceOf = (run, i) => {
+      var _a;
+      return run.abridged ? i === 0 ? run.firstPiece : run.abridged.pieces.at(-1) : run.firstPiece + ((_a = run.pieceStarts) !== null && _a !== void 0 ? _a : []).filter((s) => s <= i).length;
+    };
+    const jump = (a, b) => {
+      const [x, y] = [a, b].map(([run2, i2]) => {
+        const node = reference(run2.ids[i2]);
+        const start = passStart(run2, i2, node);
+        return [start, start + node.end - node.start];
+      });
+      const [run, i] = a;
+      return {
+        name: run.name,
+        fragStart: run.fragStart,
+        piece: pieceOf(run, i),
+        refStart: Math.min(x[1], y[1]),
+        refEnd: Math.max(x[0], y[0])
+      };
+    };
+    const abridgedAt = (other, piece, i) => (other === null || other === void 0 ? void 0 : other.abridged) && pieceOf(other, i) === piece ? [other, i] : void 0;
+    const bpBetween = (run, from, to) => {
+      let bp = 0;
+      for (let i = from; i < to; i++) {
+        bp += length(run.ids[i]);
+      }
+      return bp;
+    };
+    const chunksOf = (run, from, to) => {
+      var _a;
+      const starts = /* @__PURE__ */ new Set();
+      for (let p = pieceOf(run, from); p <= pieceOf(run, to); p++) {
+        const start = (_a = run.pieceChunks) === null || _a === void 0 ? void 0 : _a[p - run.firstPiece];
+        if (start !== void 0) {
+          starts.add(start);
+        }
+      }
+      return [...starts].map((start) => ({ refName, start }));
+    };
+    const crossings = (run) => {
+      var _a;
+      const { ids } = run;
+      const last = ids.length - 1;
+      const [before, after] = (_a = neighbours.get(run)) !== null && _a !== void 0 ? _a : [];
+      let at = -1;
+      for (let i = 0; i <= last; i++) {
+        if (reference(ids[i]) === void 0) {
+          continue;
+        }
+        if (at >= 0) {
+          if (side(run, at) * side(run, i) < 0) {
+            const offBp = bpBetween(run, at + 1, i);
+            if (i > at + 1 && offBp <= crossingBp) {
+              const { refStart, refEnd } = jump([run, at], [run, i]);
+              spans.push({
+                run,
+                first: at + 1,
+                last: i - 1,
+                crossing: { refStart, refEnd, reverse: side(run, at) > 0 }
+              });
+            } else if (i > at + 1) {
+              skips.push({
+                ...jump([run, at], [run, i]),
+                offBp,
+                offSteps: i - at - 1,
+                chunks: chunksOf(run, at + 1, i - 1)
+              });
+            } else {
+              skips.push(jump([run, at], [run, i]));
+            }
+          }
+        } else {
+          if (side(run, i) * chunkSide(run.prev) < 0) {
+            goesAcross(run.prev);
+          }
+          const far2 = i === 0 ? abridgedAt(before, run.firstPiece - 1, 1) : void 0;
+          if (far2 && side(far2[0], far2[1]) * side(run, 0) < 0) {
+            skips.push(jump(far2, [run, 0]));
+          }
+        }
+        at = i;
+      }
+      if (at < 0) {
+        return;
+      }
+      if (side(run, at) * chunkSide(run.next) < 0) {
+        goesAcross(run.next);
+      }
+      const far = at === last ? abridgedAt(after, pieceOf(run, last) + 1, 0) : void 0;
+      if (far && side(run, last) * side(far[0], far[1]) < 0) {
+        skips.push(jump([run, last], far));
+      }
+    };
+    const stepsOnWindow = (run) => run.ids.some((_, i) => stepOnWindow(run, i));
+    const abridgedSpan = (run) => {
+      const a = reference(run.ids[0]);
+      const b = reference(run.ids.at(-1));
+      if ((a === null || a === void 0 ? void 0 : a.refName) !== refName || (b === null || b === void 0 ? void 0 : b.refName) !== refName) {
+        return;
+      }
+      if (Math.max(a.end, b.end) > windowStart && Math.min(a.start, b.start) < windowEnd) {
+        spans.push({ run, first: 0, last: run.ids.length - 1 });
+      }
+    };
+    for (const run of runs) {
+      if (run.abridged) {
+        abridgedSpan(run);
+      } else if (run.name !== refName && !stepsOnWindow(run)) {
+        crossings(run);
+      } else if (contained) {
+        containedSpans(run);
+      } else {
+        detourSpan(run);
+      }
+    }
+    const inReach = (run, i) => {
+      if (stepOnWindow(run, i)) {
+        return true;
+      }
+      const node = reference(run.ids[i]);
+      if ((node === null || node === void 0 ? void 0 : node.refName) !== refName) {
+        return false;
+      }
+      const start = passStart(run, i, node);
+      return start + node.end - node.start > reachStart && start < reachEnd;
+    };
+    const kept = /* @__PURE__ */ new Set();
+    for (const [id, node] of nodes) {
+      if (node.onWindow) {
+        kept.add(id);
+      }
+    }
+    for (const span of spans) {
+      const { run } = span;
+      const { ids } = run;
+      if (run.name === refName) {
+        while (span.first > 0 && inReach(run, span.first - 1)) {
+          span.first--;
+        }
+        while (span.last < ids.length - 1 && inReach(run, span.last + 1)) {
+          span.last++;
+        }
+      }
+      for (let i = span.first; i <= span.last; i++) {
+        kept.add(ids[i]);
+      }
+    }
+    const abridgedRuns = new Set(spans.filter((span) => span.run.abridged).map((span) => span.run));
+    const bpOf = (ids, from, to) => {
+      let bp = 0;
+      for (let i = from; i < to; i++) {
+        bp += length(ids[i]);
+      }
+      return bp;
+    };
     const ends = /* @__PURE__ */ new Map();
     const runEnd = (run) => {
       var _a, _b;
@@ -6093,7 +6240,7 @@
       return gap ? { kind: "break", ...gap, ...cut } : { kind: "end", ...cut };
     };
     const fragments = [];
-    for (const { run, first: f, last: l } of spans) {
+    for (const { run, first: f, last: l, crossing } of spans) {
       const { ids, rev } = run;
       if (abridgedRuns.has(run)) {
         fragments.push({
@@ -6127,12 +6274,28 @@
         ids: ids.subarray(first, last + 1),
         rev: rev.subarray(first, last + 1),
         before: stop(run, false, hapStart - run.hapOffset),
-        after: stop(run, true, runEnd(run) - hapEnd)
+        after: stop(run, true, runEnd(run) - hapEnd),
+        ...crossing ? { crossing } : {}
       });
     }
-    return { kept, fragments, open: [...open.values()] };
+    return {
+      kept,
+      fragments,
+      open: [...open.values()],
+      across: [...across.values()],
+      skips
+    };
   }
-  function surelyKept(chunk, nodes, contained, into) {
+  var CROSSING_BP = 65536;
+  var passAt = (node, at = Number.NaN) => Number.isNaN(at) ? node.start : at;
+  function passOnWindow(node, at, start, end) {
+    if (!(node === null || node === void 0 ? void 0 : node.onWindow)) {
+      return false;
+    }
+    const from = passAt(node, at);
+    return from < end && from + node.end - node.start > start;
+  }
+  function surelyKept(chunk, nodes, { contained, start, end }, into) {
     var _a;
     for (const id of chunk.nodes.keys()) {
       if ((_a = nodes.get(id)) === null || _a === void 0 ? void 0 : _a.onWindow) {
@@ -6140,11 +6303,11 @@
       }
     }
     for (const { steps } of chunk.rows) {
-      const { ids } = steps;
+      const { ids, refStarts } = steps;
       let last = -1;
       for (let i = 0; i < ids.length; i++) {
         const node = nodes.get(ids[i]);
-        if (node === null || node === void 0 ? void 0 : node.onWindow) {
+        if (passOnWindow(node, refStarts === null || refStarts === void 0 ? void 0 : refStarts[i], start, end)) {
           for (let j = last + 1; last >= 0 && j < i; j++) {
             into.add(ids[j]);
           }
@@ -6188,7 +6351,7 @@
     });
     return table;
   }
-  var outranks = (node, held) => node.rank === 0 && (held.rank !== 0 || node.refName < held.refName || node.refName === held.refName && node.start < held.start);
+  var outranks = (node, held) => node.onWindow !== held.onWindow ? node.onWindow : node.rank === 0 && (held.rank !== 0 || node.refName < held.refName || node.refName === held.refName && node.start < held.start);
   var WalkGraph = class {
     constructor(window) {
       this.nodes = /* @__PURE__ */ new Map();
@@ -6200,15 +6363,15 @@
     // A node with its position, unless the cut already holds it at one that
     // outranks it
     placeNode(id, node) {
-      const held = this.nodes.get(id);
-      if (held && !outranks(node, held)) {
-        return;
-      }
       const { window } = this;
-      this.nodes.set(id, {
+      const placed = {
         ...node,
         onWindow: node.rank === 0 && node.refName === window.refName && node.end > window.start - window.context && node.start < window.end + window.context
-      });
+      };
+      const held = this.nodes.get(id);
+      if (!held || outranks(placed, held)) {
+        this.nodes.set(id, placed);
+      }
     }
     // A link between two endpoints, each id * 2 + 1 when reversed
     addLinkEnds(source, target) {
@@ -6342,7 +6505,15 @@
         skips: {
           names: skips.map((s) => s.name),
           starts: Float64Array.from(skips, (s) => s.refStart),
-          ends: Float64Array.from(skips, (s) => s.refEnd)
+          ends: Float64Array.from(skips, (s) => s.refEnd),
+          offBp: Float64Array.from(skips, (s) => {
+            var _a;
+            return (_a = s.offBp) !== null && _a !== void 0 ? _a : NaN;
+          }),
+          offSteps: Float64Array.from(skips, (s) => {
+            var _a;
+            return (_a = s.offSteps) !== null && _a !== void 0 ? _a : NaN;
+          })
         }
       };
     }
@@ -6428,7 +6599,7 @@
   }
   var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.4.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.6.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -6453,7 +6624,7 @@
     return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.4.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@4.6.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var FOLLOW_ROUNDS = 3;
   var FOLLOW_CHUNKS = 4;
@@ -6562,7 +6733,7 @@
     }
     async cut(refName, region, opts = {}) {
       var _a, _b;
-      const { signal, keep, context = WALK_CONTEXT, stepBudget = Infinity, byteBudget = Infinity, links = true, contained = false, nodeLimit = Infinity, expand } = opts;
+      const { signal, keep, context = WALK_CONTEXT, stepBudget = Infinity, byteBudget = Infinity, crossingBp = CROSSING_BP, links = true, contained = false, nodeLimit = Infinity, expand } = opts;
       const header = await this.header({ signal });
       const { chunk } = header;
       const from = walkQueryStart(header, refName, region.start, region.end);
@@ -6595,6 +6766,11 @@
       const ends = [];
       const jumps = [];
       const surely = /* @__PURE__ */ new Set();
+      const bounds = {
+        contained,
+        start: region.start - context,
+        end: region.end + context
+      };
       const filtered = keep !== void 0;
       let details = [];
       const decode = (cs, chunkRows) => {
@@ -6645,16 +6821,19 @@
         for (const [id, node] of chunkCut.nodes) {
           graph.placeNode(id, node);
         }
+        for (const { id, ...node } of chunkCut.revisits) {
+          graph.placeNode(id, node);
+        }
         graph.addSequences(chunkCut.sequences);
         graph.addChunk(chunkCut.chunk);
         for (const end of chunkCut.ends) {
           ends.push(end);
         }
         if (Number.isFinite(nodeLimit)) {
-          surelyKept(chunkCut, graph.nodes, contained, surely);
+          surelyKept(chunkCut, graph.nodes, bounds, surely);
           if (surely.size > nodeLimit) {
             surely.clear();
-            surelyKept({ nodes: graph.nodes, rows }, graph.nodes, contained, surely);
+            surelyKept({ nodes: graph.nodes, rows }, graph.nodes, bounds, surely);
           }
           const over = keptNodesError(surely.size, nodeLimit, region, filtered, cs + chunk);
           if (over) {
@@ -6702,21 +6881,28 @@
         let first = from;
         let last = Math.floor((region.end - 1) / chunk) * chunk;
         const reach = FOLLOW_CHUNKS * chunk;
+        const [farLo, farHi] = [first - reach, last + reach];
         const [lo, hi] = contained ? [
           Math.floor((region.start - context) / chunk) * chunk,
           Math.floor((region.end + context - 1) / chunk) * chunk
-        ] : [first - reach, last + reach];
-        const cutRows = () => walkCut(joinPieces(rows), graph.nodes, refName, { contained, context });
+        ] : [farLo, farHi];
+        const within = (c, from2, to) => c.refName === refName && c.start >= from2 && c.start <= to;
+        const cutRows = () => walkCut(joinPieces(rows), graph.nodes, refName, {
+          contained,
+          context,
+          crossingBp
+        });
         cut = cutRows();
         let spent = await bytesFor([{ start: from, end: region.end }]);
         for (let round = 0; round < FOLLOW_ROUNDS; round++) {
           let reachFirst = first;
           let reachLast = last;
-          for (const c of cut.open) {
-            if (c.refName === refName && c.start >= lo && c.start <= hi) {
-              reachFirst = Math.min(reachFirst, c.start);
-              reachLast = Math.max(reachLast, c.start);
-            }
+          for (const c of [
+            ...cut.open.filter((c2) => within(c2, lo, hi)),
+            ...cut.across.filter((c2) => within(c2, farLo, farHi))
+          ]) {
+            reachFirst = Math.min(reachFirst, c.start);
+            reachLast = Math.max(reachLast, c.start);
           }
           const spans = [
             { start: reachFirst, end: first },
@@ -6744,7 +6930,11 @@
       if (tooMany) {
         throw tooMany;
       }
-      return { graph, ...cut, skips: skipsOver(jumps, cut.fragments, region) };
+      return {
+        graph,
+        ...cut,
+        skips: skipsOver(jumps, cut.fragments, region, cut.skips)
+      };
     }
     /**
      * The graph under a region as tables: the reference sample's sequence over
