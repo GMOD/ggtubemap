@@ -3591,7 +3591,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/chunk.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/chunk.js
   var Chunk = class {
     constructor(minv, maxv, bin, endPosition = maxv.blockPosition + (1 << 16)) {
       __publicField(this, "minv");
@@ -3851,7 +3851,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/long.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/long.js
   var TWO_PWR_32_DBL = 2 ** 32;
   function longFromBytesToUnsigned(source, i = 0) {
     const low = source[i] | source[i + 1] << 8 | source[i + 2] << 16 | source[i + 3] << 24;
@@ -3859,7 +3859,7 @@
     return (high >>> 0) * TWO_PWR_32_DBL + (low >>> 0);
   }
 
-  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/virtualOffset.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/virtualOffset.js
   var VirtualOffset = class {
     constructor(blockPosition, dataPosition) {
       __publicField(this, "blockPosition");
@@ -3878,7 +3878,7 @@
     return new VirtualOffset(bytes[offset + 7] * 1099511627776 + bytes[offset + 6] * 4294967296 + bytes[offset + 5] * 16777216 + bytes[offset + 4] * 65536 + bytes[offset + 3] * 256 + bytes[offset + 2], bytes[offset + 1] << 8 | bytes[offset]);
   }
 
-  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/util.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/util.js
   function optimizeChunks(chunks, lowest) {
     const n = chunks.length;
     if (n === 0) {
@@ -4103,7 +4103,7 @@
     return false;
   }
 
-  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/indexFile.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/indexFile.js
   function maxOffset(binIndex, end, minShift, depth) {
     if (end > 2 ** (minShift + depth * 3)) {
       return void 0;
@@ -4208,7 +4208,8 @@
           }
         }
       }
-      const merged = optimizeChunks(chunks, this.lowestOffset(ba, min, indexData));
+      const lowest = this.lowestOffset(ba, min, indexData);
+      const merged = optimizeChunks(chunks, lowest);
       const past = maxOffset(ba.binIndex, max, indexData.minShift, indexData.depth);
       if (past) {
         let n = merged.length;
@@ -4216,6 +4217,15 @@
           n--;
         }
         merged.length = n;
+      }
+      const span = 2 ** (indexData.minShift + 3);
+      let floor = lowest && this.lowestOffset(ba, Math.floor(min / span) * span, indexData);
+      if (floor && lowest && floor.compareTo(lowest) > 0) {
+        floor = lowest;
+      }
+      for (let i = 0; floor && i < merged.length && merged[i].minv.compareTo(floor) < 0; i++) {
+        const c = merged[i];
+        merged[i] = new Chunk(floor, c.maxv, c.bin, c.endPosition);
       }
       return merged;
     }
@@ -4257,7 +4267,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/csi.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/csi.js
   var CSI1_MAGIC = 21582659;
   var CSI2_MAGIC = 38359875;
   function lshift(num, bits) {
@@ -4404,7 +4414,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/tbi.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/tbi.js
   var TBI_MAGIC = 21578324;
   var TBI_DEPTH = 5;
   var TBI_MIN_SHIFT = 14;
@@ -4536,7 +4546,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.12.0/node_modules/@gmod/tabix/esm/tabixIndexedFile.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/tabixIndexedFile.js
   var TAB = 9;
   var NEWLINE2 = 10;
   var CARRIAGE_RETURN = 13;
@@ -4782,6 +4792,10 @@
       __publicField(this, "filehandle");
       __publicField(this, "index");
       __publicField(this, "chunkCache");
+      // Every chunk handed to the cache, by key, so a later chunk lying inside one
+      // can read it instead of fetching its own span. An entry the cache has
+      // dropped is pruned when found.
+      __publicField(this, "requested", /* @__PURE__ */ new Map());
       /**
        * The parsed header, as a shared read — see {@link getParsedHeader}. One
        * entry, never evicted, which is what a memo is.
@@ -4828,6 +4842,35 @@
      */
     clearChunkCache() {
       this.chunkCache.clear();
+      this.requested.clear();
+    }
+    /**
+     * Swaps each chunk for the smallest cached or in-flight chunk that contains
+     * it, so a pan whose chunk starts later in an entry already read reuses it.
+     * The scan reads the container from its own start, and skips the lines before
+     * the query as it does at any chunk's start. A container that would overlap
+     * a neighbouring chunk stays unused, since the overlap would yield its lines
+     * twice. See docs/optimizations.md.
+     */
+    withCachedContainers(chunks) {
+      const out = [];
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const prev = out[out.length - 1];
+        const next = chunks[i + 1];
+        let best;
+        if (!this.chunkCache.has(chunk)) {
+          for (const [key, held] of this.requested) {
+            if (!this.chunkCache.has(held)) {
+              this.requested.delete(key);
+            } else if (held.minv.compareTo(chunk.minv) <= 0 && held.maxv.compareTo(chunk.maxv) >= 0 && (!prev || held.minv.compareTo(prev.maxv) >= 0) && (!next || held.maxv.compareTo(next.minv) <= 0) && (!best || held.fetchedSize() < best.fetchedSize())) {
+              best = held;
+            }
+          }
+        }
+        out.push(best ?? chunk);
+      }
+      return out;
     }
     /**
      * Estimates the compressed byte size of the index chunks covering the given
@@ -4876,7 +4919,7 @@
       if (start === end) {
         return;
       }
-      const chunks = await this.index.blocksForRange(refName, start, end, options);
+      const chunks = this.withCachedContainers(await this.index.blocksForRange(refName, start, end, options));
       const isVCF = metadata.format === "VCF";
       const refCol = metadata.columnNumbers.ref || 0;
       const startCol = metadata.columnNumbers.start || 0;
@@ -4900,6 +4943,7 @@
       const ensureReadsStarted = (count) => {
         while (reads.length < Math.min(count, chunks.length)) {
           const c = chunks[reads.length];
+          this.requested.set(c.toString(), c);
           const read = this.chunkCache.get(c, signal);
           void read.catch(() => {
           });
