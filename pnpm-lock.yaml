@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@gmod/tabix':
-        specifier: 3.13.0
-        version: 3.13.0
+        specifier: 3.13.1
+        version: 3.13.1
       '@jbrowse/graph-walks':
         specifier: 4.6.0
         version: 4.6.0
@@ -185,8 +185,8 @@ packages:
   '@gmod/shared-read-cache@2.1.0':
     resolution: {integrity: sha512-AyiUt0hiEGl7lWc1fuigbXR/RToIw3h72dalaRoSNau9WL9ux9rEfkcsXDYTgSDudehfAEQac1jTvn2zrfnELQ==}
 
-  '@gmod/tabix@3.13.0':
-    resolution: {integrity: sha512-pOWzGY7sm79zVGRq7EH9PiupqcfELLWdAHUAKjUiwMIErJWzr//FVeIdA/Dx7+8yVN2n+gbTqNIF4xBghOs3lA==}
+  '@gmod/tabix@3.13.1':
+    resolution: {integrity: sha512-usyBxD1EQ/wfIzeT/wQsqJBT6aGZwgaIFG94lBYFhWdK+csHjQU7t9i/iIjDSCIcZFTFiQ1TFp3McCMf4aH/4A==}
 
   '@jbrowse/graph-walks@4.6.0':
     resolution: {integrity: sha512-haKxTI/qGQQc1NAhR2064XCq4miv1arvMDs2BcOd8iwus/Tno1A5xpbM/nqocXWfiEQ3OxtDb8aKR6lvMwV9Dw==}
@@ -297,7 +297,7 @@ snapshots:
 
   '@gmod/shared-read-cache@2.1.0': {}
 
-  '@gmod/tabix@3.13.0':
+  '@gmod/tabix@3.13.1':
     dependencies:
       '@gmod/bgzf-filehandle': 6.8.2
       '@gmod/shared-read-cache': 2.1.0

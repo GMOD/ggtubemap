@@ -3591,7 +3591,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/chunk.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/chunk.js
   var Chunk = class {
     constructor(minv, maxv, bin, endPosition = maxv.blockPosition + (1 << 16)) {
       __publicField(this, "minv");
@@ -3851,7 +3851,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/long.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/long.js
   var TWO_PWR_32_DBL = 2 ** 32;
   function longFromBytesToUnsigned(source, i = 0) {
     const low = source[i] | source[i + 1] << 8 | source[i + 2] << 16 | source[i + 3] << 24;
@@ -3859,7 +3859,7 @@
     return (high >>> 0) * TWO_PWR_32_DBL + (low >>> 0);
   }
 
-  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/virtualOffset.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/virtualOffset.js
   var VirtualOffset = class {
     constructor(blockPosition, dataPosition) {
       __publicField(this, "blockPosition");
@@ -3878,7 +3878,7 @@
     return new VirtualOffset(bytes[offset + 7] * 1099511627776 + bytes[offset + 6] * 4294967296 + bytes[offset + 5] * 16777216 + bytes[offset + 4] * 65536 + bytes[offset + 3] * 256 + bytes[offset + 2], bytes[offset + 1] << 8 | bytes[offset]);
   }
 
-  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/util.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/util.js
   function optimizeChunks(chunks, lowest) {
     const n = chunks.length;
     if (n === 0) {
@@ -3968,12 +3968,12 @@
       }
     }
   }
-  function minVirtualOffset(bytes, offset, count, current) {
+  function minVirtualOffset(bytes, offset, count, current, stride = 8) {
     let minBlock = current ? current.blockPosition : Infinity;
     let minData = current ? current.dataPosition : 0;
     let found = false;
     for (let i = 0; i < count; i++) {
-      const p = offset + i * 8;
+      const p = offset + i * stride;
       const block = bytes[p + 7] * 1099511627776 + bytes[p + 6] * 4294967296 + bytes[p + 5] * 16777216 + bytes[p + 4] * 65536 + bytes[p + 3] * 256 + bytes[p + 2];
       const data = bytes[p + 1] << 8 | bytes[p];
       if (block < minBlock || block === minBlock && data < minData) {
@@ -4070,8 +4070,7 @@
     return merged;
   }
   var NEWLINE = 10;
-  function forEachLinePiece(segments, visit) {
-    let base = 0;
+  function forEachLinePiece(segments, base, visit) {
     let carry;
     let carryAt = 0;
     for (const segment of segments) {
@@ -4102,8 +4101,35 @@
     }
     return false;
   }
+  function sliceSegments(segments, from, to) {
+    const out = [];
+    let at = 0;
+    for (const segment of segments) {
+      const lo = Math.max(from - at, 0);
+      const hi = Math.min(to - at, segment.length);
+      if (lo < hi) {
+        out.push(segment.subarray(lo, hi));
+      }
+      at += segment.length;
+    }
+    return out;
+  }
+  function chunkBufferOffset(cpositions, dpositions, v) {
+    let lo = 0;
+    let hi = cpositions.length - 1;
+    while (lo < hi) {
+      const mid = lo + hi + 1 >>> 1;
+      if (cpositions[mid] <= v.blockPosition) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    const blockStart = lo === 0 ? 0 : dpositions[lo];
+    return blockStart - dpositions[0] + v.dataPosition;
+  }
 
-  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/indexFile.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/indexFile.js
   function maxOffset(binIndex, end, minShift, depth) {
     if (end > 2 ** (minShift + depth * 3)) {
       return void 0;
@@ -4218,14 +4244,14 @@
         }
         merged.length = n;
       }
-      const span = 2 ** (indexData.minShift + 3);
-      let floor = lowest && this.lowestOffset(ba, Math.floor(min / span) * span, indexData);
-      if (floor && lowest && floor.compareTo(lowest) > 0) {
-        floor = lowest;
-      }
-      for (let i = 0; floor && i < merged.length && merged[i].minv.compareTo(floor) < 0; i++) {
-        const c = merged[i];
-        merged[i] = new Chunk(floor, c.maxv, c.bin, c.endPosition);
+      const first = merged[0];
+      if (first && lowest) {
+        const span = 2 ** (indexData.minShift + 3);
+        const window = this.lowestOffset(ba, Math.floor(min / span) * span, indexData);
+        const floor = window && window.compareTo(lowest) < 0 ? window : lowest;
+        if (first.minv.compareTo(floor) < 0) {
+          merged[0] = new Chunk(floor, first.maxv, first.bin, first.endPosition);
+        }
       }
       return merged;
     }
@@ -4267,7 +4293,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/csi.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/csi.js
   var CSI1_MAGIC = 21582659;
   var CSI2_MAGIC = 38359875;
   function lshift(num, bits) {
@@ -4414,7 +4440,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/tbi.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/tbi.js
   var TBI_MAGIC = 21578324;
   var TBI_DEPTH = 5;
   var TBI_MIN_SHIFT = 14;
@@ -4475,9 +4501,7 @@
             throw new Error("tabix index contains too many bins, please use a CSI index");
           }
           if (bin <= maxBinNumber) {
-            for (let k = 0; k < chunkCount; k++) {
-              firstDataLine = minVirtualOffset(bytes, curr + 16 * k, 1, firstDataLine);
-            }
+            firstDataLine = minVirtualOffset(bytes, curr, chunkCount, firstDataLine, 16);
           }
           curr += 16 * chunkCount;
         }
@@ -4546,7 +4570,7 @@
     }
   };
 
-  // node_modules/.pnpm/@gmod+tabix@3.13.0/node_modules/@gmod/tabix/esm/tabixIndexedFile.js
+  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/tabixIndexedFile.js
   var TAB = 9;
   var NEWLINE2 = 10;
   var CARRIAGE_RETURN = 13;
@@ -4793,8 +4817,8 @@
       __publicField(this, "index");
       __publicField(this, "chunkCache");
       // Every chunk handed to the cache, by key, so a later chunk lying inside one
-      // can read it instead of fetching its own span. An entry the cache has
-      // dropped is pruned when found.
+      // can read it instead of fetching its own span. withCachedContainers prunes
+      // the entries the cache has dropped.
       __publicField(this, "requested", /* @__PURE__ */ new Map());
       /**
        * The parsed header, as a shared read — see {@link getParsedHeader}. One
@@ -4847,12 +4871,23 @@
     /**
      * Swaps each chunk for the smallest cached or in-flight chunk that contains
      * it, so a pan whose chunk starts later in an entry already read reuses it.
-     * The scan reads the container from its own start, and skips the lines before
-     * the query as it does at any chunk's start. A container that would overlap
-     * a neighbouring chunk stays unused, since the overlap would yield its lines
-     * twice. See docs/optimizations.md.
+     * The scan reads only the wanted chunk's span of the container, so a query
+     * returns the same lines whatever the cache holds. A container that would
+     * overlap a neighbouring chunk stays unused, since the overlap would yield
+     * its lines twice. See docs/optimizations.md.
+     *
+     * `has` builds a string key, so the loop calls it only on a chunk that
+     * already contains this one, and a sweep prunes dropped entries once they
+     * outnumber the cache.
      */
     withCachedContainers(chunks) {
+      if (this.requested.size > 2 * this.chunkCache.size) {
+        for (const [key, held] of this.requested) {
+          if (!this.chunkCache.has(held)) {
+            this.requested.delete(key);
+          }
+        }
+      }
       const out = [];
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
@@ -4860,10 +4895,8 @@
         const next = chunks[i + 1];
         let best;
         if (!this.chunkCache.has(chunk)) {
-          for (const [key, held] of this.requested) {
-            if (!this.chunkCache.has(held)) {
-              this.requested.delete(key);
-            } else if (held.minv.compareTo(chunk.minv) <= 0 && held.maxv.compareTo(chunk.maxv) >= 0 && (!prev || held.minv.compareTo(prev.maxv) >= 0) && (!next || held.maxv.compareTo(next.minv) <= 0) && (!best || held.fetchedSize() < best.fetchedSize())) {
+          for (const held of this.requested.values()) {
+            if (held.minv.compareTo(chunk.minv) <= 0 && held.maxv.compareTo(chunk.maxv) >= 0 && (!prev || held.minv.compareTo(prev.maxv) >= 0) && (!next || held.maxv.compareTo(next.minv) <= 0) && (!best || held.fetchedSize() < best.fetchedSize()) && this.chunkCache.has(held)) {
               best = held;
             }
           }
@@ -4919,7 +4952,8 @@
       if (start === end) {
         return;
       }
-      const chunks = this.withCachedContainers(await this.index.blocksForRange(refName, start, end, options));
+      const wanted = await this.index.blocksForRange(refName, start, end, options);
+      const chunks = this.withCachedContainers(wanted);
       const isVCF = metadata.format === "VCF";
       const refCol = metadata.columnNumbers.ref || 0;
       const startCol = metadata.columnNumbers.start || 0;
@@ -4953,15 +4987,24 @@
       ensureReadsStarted(1);
       for (let ci = 0, cl = chunks.length; ci < cl; ci++) {
         const c = chunks[ci];
-        const { segments, cpositions, dpositions } = await reads[ci];
+        const read = await reads[ci];
+        const { cpositions, dpositions } = read;
         downloadedBytes += c.fetchedSize();
         onProgress?.(downloadedBytes, totalBytes);
         const minvDataPosition = c.minv.dataPosition;
+        const want = wanted[ci];
+        let segments = read.segments;
+        let from = 0;
+        if (want !== c) {
+          from = chunkBufferOffset(cpositions, dpositions, want.minv);
+          const to = chunkBufferOffset(cpositions, dpositions, want.maxv) + 1;
+          segments = sliceSegments(segments, from, to);
+        }
         if (gaf) {
-          if (forEachLinePiece(segments, (buffer, base) => scanGafChunk(buffer, base, cpositions, dpositions, minvDataPosition, gaf))) {
+          if (forEachLinePiece(segments, from, (buffer, base) => scanGafChunk(buffer, base, cpositions, dpositions, minvDataPosition, gaf))) {
             return;
           }
-        } else if (forEachLinePiece(segments, (buffer, base) => {
+        } else if (forEachLinePiece(segments, from, (buffer, base) => {
           let blockStart = 0;
           let pos = 0;
           while (blockStart < buffer.length) {
