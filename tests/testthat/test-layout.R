@@ -129,6 +129,12 @@ test_that("a node merged from runs with and without sequence prints no bases", {
   expect_equal(nrow(tm$bases), 0)
 })
 
+test_that("mismatches keep their read's columns when there are none", {
+  tm <- tubemap_layout(tubemap_example("example-6"), show_reads = FALSE)
+  expect_equal(nrow(tm$mismatches), 0)
+  expect_true(all(c("name", "strand", "mapping_quality") %in% names(tm$mismatches)))
+})
+
 test_that("read mismatches carry their read", {
   tm <- tubemap_layout(tubemap_example("brca1"))
   mm <- tm$mismatches

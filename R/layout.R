@@ -211,14 +211,12 @@ new_tubemap <- function(out, node_width) {
 
   nodes <- as_frame(out$nodes)
   mismatches <- as_frame(out$mismatches)
-  if (nrow(mismatches) > 0) {
-    mismatches <- cbind(
-      mismatches,
-      track_info[match(mismatches$read_id, track_info$id),
-                 c("name", "strand", "mapping_quality")]
-    )
-    rownames(mismatches) <- NULL
-  }
+  mismatches <- cbind(
+    mismatches,
+    track_info[match(mismatches$read_id, track_info$id),
+               c("name", "strand", "mapping_quality")]
+  )
+  rownames(mismatches) <- NULL
 
   structure(
     list(
