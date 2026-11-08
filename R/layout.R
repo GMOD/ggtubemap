@@ -46,12 +46,20 @@ as_rows <- function(x) {
   }
 }
 
+# A data frame goes out as JSON already, one object per row without its NA
+# fields, which jsonlite writes far faster than a list of rows
 normalize_nodes <- function(nodes) {
-  lapply(as_rows(nodes), function(n) {
-    n <- rename_fields(n, "sequence_length", "sequenceLength")
-    n$name <- as.character(n$name)
-    n
-  })
+  if (is.data.frame(nodes)) {
+    nodes <- rename_fields(nodes, "sequence_length", "sequenceLength")
+    nodes$name <- as.character(nodes$name)
+    jsonlite::toJSON(nodes, dataframe = "rows", digits = NA)
+  } else {
+    lapply(nodes, function(n) {
+      n <- rename_fields(n, "sequence_length", "sequenceLength")
+      n$name <- as.character(n$name)
+      n
+    })
+  }
 }
 
 normalize_tracks <- function(tracks, type) {
@@ -63,8 +71,8 @@ normalize_tracks <- function(tracks, type) {
       c("sourceTrackID", "sequenceNew", "firstNodeOffset",
         "finalNodeCoverLength", "indexOfFirstBase")
     )
-    # a list, never a bare string, so a one-node path stays a JSON array
-    t$sequence <- as.list(as.character(unlist(t$sequence)))
+    # I() keeps a one-node path a JSON array under auto_unbox
+    t$sequence <- I(as.character(unlist(t$sequence)))
     if (is.null(t$sourceTrackID)) t$sourceTrackID <- if (type == "read") 1L else 0L
     if (type == "read") t$type <- "read"
     t
@@ -160,7 +168,7 @@ tubemap_layout <- function(graph, reads = graph$reads,
     steps = curve_steps
   )
   json <- jsonlite::toJSON(request, auto_unbox = TRUE, null = "null",
-                           na = "null", digits = NA)
+                           na = "null", digits = NA, json_verbatim = TRUE)
   out <- jsonlite::fromJSON(js_call("tubemapLayout", as.character(json)))
   if (is.null(out)) {
     stop("No visible track is left to lay out.", call. = FALSE)
