@@ -3,13 +3,21 @@
 Git tracks the layout bundle `inst/js/tubemap-core.js`. `pnpm bundle` builds it
 from `tools/bridge.js` and the `@jbrowse/tubemap-core` release pinned in
 `package.json`, and writes that version into its header. The bundle also holds
-`tools/walks.js`, the walk-file cut, with `@gmod/tabix` and
-`@jbrowse/graph-walks`, and `tools/v8-host.mjs` for the web globals R's V8
-lacks.
+`tools/walks.js`, the walk-file cut, with `@jbrowse/graph-walks`, and
+`tools/v8-host.mjs` for the web globals R's V8 lacks. R serves the cut every
+byte range and file size it asks for, through `fetch_range()` and
+`fetch_size()`.
 
 ggtubemap copies some files from [ggbandage](https://github.com/GMOD/ggbandage):
 `R/import-standalone-*.R`, its byte-range, locus and V8 helpers, and
 `tools/v8-host.mjs`. Each copy's header names the ggbandage commit it came from.
+ggbandage's
+[developing.md](https://github.com/GMOD/ggbandage/blob/main/docs/developing.md)
+says why the bytes come from R and how it reads walk files.
+
+The walk-file fixtures in `tests/testthat/testdata` are ggbandage's, in walk
+format 7; its `tests/testthat/testdata/build.sh` rebuilds them with
+gfa-to-tabix.
 
 - `tools/check-standalone.sh` fails where a copy differs from that commit,
   and with `--latest`, where ggbandage's main has changed the file since

@@ -8,7 +8,7 @@ read_gfa(path, reference = NULL, region = NULL, haplotypes = NULL, context = 0)
 }
 \arguments{
 \item{path}{A GFA file, optionally gzipped, local or a URL; or a
-\code{.walks.bed.gz} file with \code{region}.}
+gfa-to-tabix 4.0 \code{.walks.gz} file with \code{region}.}
 
 \item{reference}{The name of the path to draw as the reference, which the
 layout puts first. By default the first path in the file.}
@@ -37,13 +37,15 @@ a walk's start, or the start in a path named as a subpath (\code{name[start-end]
 or \code{name:start-end}), or else 0.
 
 With \code{region}, \code{path} is a \href{https://github.com/GMOD/gfa-to-tabix}{gfa-to-tabix}
-\code{--walks} file with its \code{.tbi}, local or a URL, such as the HPRC release
-2.1 walk file the JBrowse HPRC demo hosts. Range requests fetch only the
-blocks the region needs, and the reference sample's walk comes first.
+\code{--walks} file, a \code{.walks.gz} with its \code{.walks.gz.idx} directory beside it,
+local or a URL, such as the HPRC release 2.1 walk file the JBrowse HPRC demo
+hosts. gfa-to-tabix 4.0 and later write these, in walk format 7. Range
+requests fetch only the blocks the region needs, and the reference sample's
+walk comes first.
 }
 \examples{
 \dontrun{
-walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f5.GRCh38.walks.bed.gz"
+walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38.GRCh38.walks.gz"
 g <- read_gfa(walks, region = "chr6:160,653,940-160,654,130",
               haplotypes = c("HG00097#1", "HG00133#2"))
 }

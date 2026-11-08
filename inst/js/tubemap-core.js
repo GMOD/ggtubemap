@@ -25,16 +25,8 @@
  */
 (() => {
   var __defProp = Object.defineProperty;
-  var __typeError = (msg) => {
-    throw TypeError(msg);
-  };
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
-  var __accessCheck = (obj, member, msg) => member.has(obj) || __typeError("Cannot " + msg);
-  var __privateGet = (obj, member, getter) => (__accessCheck(obj, member, "read from private field"), getter ? getter.call(obj) : member.get(obj));
-  var __privateAdd = (obj, member, value) => member.has(obj) ? __typeError("Cannot add the same private member more than once") : member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
-  var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
-  var __privateMethod = (obj, member, method) => (__accessCheck(obj, member, "access private method"), method);
 
   // tools/v8-host.mjs
   globalThis.performance ?? (globalThis.performance = { now: () => Date.now() });
@@ -73,7 +65,7 @@
       return out;
     }
   });
-  globalThis.TextEncoder ?? (globalThis.TextEncoder = class TextEncoder2 {
+  globalThis.TextEncoder ?? (globalThis.TextEncoder = class TextEncoder {
     encode(text = "") {
       const out = [];
       for (const ch of text) {
@@ -148,17 +140,1755 @@
     const bytes = fromBase64(m[1]);
     return { ok: true, arrayBuffer: async () => bytes.buffer };
   });
-  function rangeFile(rFunction, location) {
+  function rangeFile(rangeFunction, sizeFunction, location) {
     const bytes = (position, length) => {
-      const [value] = console.r.call(rFunction, [location, position, length]);
+      const [value] = console.r.call(rangeFunction, [location, position, length]);
       return fromBase64(value ?? "");
     };
     return {
+      source: location,
       read: async (length, position) => bytes(position, length),
-      readFile: async () => bytes(0, -1),
+      readFile: async (options) => {
+        const encoding = typeof options === "string" ? options : options?.encoding;
+        return encoding ? new TextDecoder().decode(bytes(0, -1)) : bytes(0, -1);
+      },
+      stat: async () => {
+        const [size] = console.r.call(sizeFunction, [location]);
+        return { size: Number(size) };
+      },
       close: async () => {
       }
     };
+  }
+
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  var RegionTooLargeError = class extends Error {
+    constructor(message, limit, windowBp, fitsBp, overBytes) {
+      super(message);
+      this.regionTooLarge = true;
+      this.name = "NodeLimitError";
+      this.limit = limit;
+      this.windowBp = windowBp;
+      this.fitsBp = fitsBp;
+      this.zoomHelps = overBytes === void 0 || overBytes.zoomHelps === true;
+      if (overBytes) {
+        this.bytes = overBytes.bytes;
+      }
+    }
+  };
+  var SEP = "#";
+  function panSNSample(refName) {
+    return refName.split(SEP)[0];
+  }
+  function panSNContig(refName) {
+    const parts = refName.split(SEP);
+    return parts.length >= 3 ? parts.slice(2).join(SEP) : parts.length === 2 ? parts[1] : refName;
+  }
+  function panSNHaplotype(refName) {
+    const parts = refName.split(SEP);
+    return parts.length >= 3 ? `${parts[0]}${SEP}${parts[1]}` : void 0;
+  }
+  function panSNMatchesPrefix(refName, prefix) {
+    return prefix !== void 0 && (refName === prefix || refName.startsWith(prefix + SEP));
+  }
+  var precise = (n) => Number.parseFloat(n.toPrecision(3));
+  function bpString(bp) {
+    const mb = precise(bp / 1e6);
+    return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
+  }
+
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  var NONE = -1;
+  var idOf = (handle) => (handle - (handle & 1)) / 2;
+  var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
+  function tokens(field, previous, out) {
+    if (field === ".") {
+      return out;
+    }
+    let v = 0;
+    let neg = false;
+    for (let p = 0; p <= field.length; p++) {
+      const ch = p < field.length ? field.charCodeAt(p) : 44;
+      if (ch === 44) {
+        const d = neg ? -v : v;
+        const r = d & 1;
+        previous.id += (d - r) / 2;
+        out.push(previous.id * 2 + r);
+        v = 0;
+        neg = false;
+      } else if (ch === 45) {
+        neg = true;
+      } else {
+        v = v * 10 + (ch - 48);
+      }
+    }
+    return out;
+  }
+  function numbers(field) {
+    return field === "." ? [] : field.split(",").map(Number);
+  }
+  var EARLIER_FORMAT_6 = "from a gfa-to-tabix that wrote format 6 before pass counts and abridged rows per piece, so rebuild the walk file with gfa-to-tabix 3.0 or later";
+  function passCounts(cols, n) {
+    const field = cols[11];
+    const counts = field === "." ? new Array(n).fill(1) : numbers(field !== null && field !== void 0 ? field : "");
+    if (field === void 0 || field.startsWith("SQ:Z:")) {
+      throw new WalkRowError(`a ref row with no passes, ${EARLIER_FORMAT_6}`);
+    } else if (counts.length !== n || counts.some((c) => !Number.isInteger(c) || c < 1)) {
+      throw new WalkRowError(`a ref row's passes do not count its ${n} steps`);
+    }
+    return counts;
+  }
+  var forwardEnds = (a, b) => 2 - (a & 1) - (b & 1);
+  function canonicalLink(a, b) {
+    const forward2 = forwardEnds(a, b);
+    return forward2 > 1 || forward2 === 1 && a <= otherStrand(b) ? [a, b] : [otherStrand(b), otherStrand(a)];
+  }
+  function parseCopy(token) {
+    const at = token.indexOf("@");
+    return at < 0 ? [+token, NONE] : [+token.slice(0, at), +token.slice(at + 1)];
+  }
+  var RefPath = class {
+    constructor() {
+      this.handles = [];
+      this.before = [0];
+      this.starts = [];
+      this.occurrences = /* @__PURE__ */ new Map();
+    }
+    add(handles, lengths, start) {
+      for (let k = 0; k < handles.length; k++) {
+        const h = handles[k];
+        const i = this.handles.length;
+        this.handles.push(h);
+        this.before.push(this.before[i] + lengths[k]);
+        this.starts.push(start);
+        start += lengths[k];
+        const id = idOf(h);
+        const list = this.occurrences.get(id);
+        if (list) {
+          list.push(i);
+        } else {
+          this.occurrences.set(id, [i]);
+        }
+      }
+    }
+    // bp of R's steps before position i
+    bp(i) {
+      return this.before[i];
+    }
+    first(handle) {
+      var _a;
+      return (_a = this.occurrences.get(idOf(handle))) === null || _a === void 0 ? void 0 : _a[0];
+    }
+    // occurrence k of the handle's node, counting R's positions holding it from 0
+    copy(handle, k) {
+      var _a;
+      return (_a = this.occurrences.get(idOf(handle))) === null || _a === void 0 ? void 0 : _a[k];
+    }
+    nearest(handle, i) {
+      const at = this.occurrences.get(idOf(handle));
+      if (!at) {
+        return void 0;
+      }
+      let lo = 0;
+      let hi = at.length;
+      while (lo < hi) {
+        const mid = lo + hi >> 1;
+        if (at[mid] <= i) {
+          lo = mid + 1;
+        } else {
+          hi = mid;
+        }
+      }
+      const before = at[lo - 1];
+      const after = at[lo];
+      if (before === void 0 || after === void 0) {
+        return before !== null && before !== void 0 ? before : after;
+      }
+      return after - i <= i - before ? after : before;
+    }
+    // The position a stretch along R from position i, reading R the way `h`
+    // does there, first holds `target`, i itself included
+    reach(i, h, target) {
+      var _a;
+      const forward2 = this.handles[i] === h;
+      let found;
+      for (const j of (_a = this.occurrences.get(idOf(target))) !== null && _a !== void 0 ? _a : []) {
+        if (forward2 && j >= i && this.handles[j] === target) {
+          if (found === void 0 || j < found) {
+            found = j;
+          }
+        } else if (!forward2 && j <= i && otherStrand(this.handles[j]) === target) {
+          if (found === void 0 || j > found) {
+            found = j;
+          }
+        }
+      }
+      return found;
+    }
+    handleAt(i, forward2) {
+      return forward2 ? this.handles[i] : otherStrand(this.handles[i]);
+    }
+  };
+  var WalkRowError = class extends Error {
+  };
+  var orientedEntry = (route, flip2) => flip2 ? route.exit === NONE ? NONE : otherStrand(route.exit) : route.entry;
+  var orientedExit = (route, flip2) => flip2 ? route.entry === NONE ? NONE : otherStrand(route.entry) : route.exit;
+  var interiorAt = (route, flip2, k) => flip2 ? otherStrand(route.interior[route.interior.length - 1 - k]) : route.interior[k];
+  function parseChoices(field) {
+    const choices = [];
+    if (field !== ".") {
+      let previous = 0;
+      const parts = [0, NONE, NONE];
+      let part = 0;
+      let v = 0;
+      let neg = false;
+      let any = false;
+      for (let p = 0; p <= field.length; p++) {
+        const ch = p < field.length ? field.charCodeAt(p) : 44;
+        if (ch === 44 || ch === 58 || ch === 64) {
+          if (any) {
+            parts[part] = neg ? -v : v;
+          }
+          v = 0;
+          neg = false;
+          any = false;
+          if (ch === 44) {
+            const d = parts[0];
+            const r = d & 1;
+            previous += (d - r) / 2;
+            choices.push(previous, r, parts[1], parts[2]);
+            parts[0] = 0;
+            parts[1] = NONE;
+            parts[2] = NONE;
+            part = 0;
+          } else {
+            part = ch === 58 ? 1 : 2;
+          }
+        } else if (ch === 45) {
+          neg = true;
+        } else {
+          v = v * 10 + (ch - 48);
+          any = true;
+        }
+      }
+    }
+    return choices;
+  }
+  function traverse(path, routes, start, startCopy, choices, n, visit) {
+    const routeOf = (index) => {
+      const route = routes[index];
+      if (!route) {
+        throw new WalkRowError(`route ${index} is not in the chunk`);
+      }
+      return route;
+    };
+    let emitted = 0;
+    let k = 0;
+    if (choices.length > 0 && orientedEntry(routeOf(choices[0]), choices[1] === 1) === NONE) {
+      if (!visit.route(choices[0], choices[1] === 1)) {
+        return;
+      }
+      emitted += routeOf(choices[0]).interior.length;
+      k = 4;
+    }
+    let h = start;
+    let i = startCopy === NONE ? path.first(h) : path.copy(h, startCopy);
+    if (i === void 0) {
+      throw new WalkRowError("a walk row starts off its chunk");
+    }
+    visit.step(h, i);
+    emitted++;
+    const follow = (target, copy) => {
+      const forward2 = path.handles[i] === h;
+      const j = copy === NONE ? path.reach(i, h, target) : path.copy(target, copy);
+      if (j === void 0 || (forward2 ? j < i : j > i) || path.handleAt(j, forward2) !== target) {
+        throw new WalkRowError("a walk row runs off its chunk");
+      }
+      if (j !== i) {
+        visit.stretch(i, j, forward2);
+        emitted += Math.abs(j - i);
+      }
+      i = j;
+      h = target;
+    };
+    for (; k < choices.length; k += 4) {
+      const index = choices[k];
+      const flip2 = choices[k + 1] === 1;
+      const route = routeOf(index);
+      const entry = orientedEntry(route, flip2);
+      if (entry === NONE) {
+        throw new WalkRowError("an open route after the first choice");
+      }
+      follow(entry, choices[k + 2]);
+      if (!visit.route(index, flip2)) {
+        return;
+      }
+      emitted += route.interior.length;
+      const exit = orientedExit(route, flip2);
+      if (exit === NONE) {
+        return;
+      }
+      h = exit;
+      const copy = choices[k + 3];
+      i = copy === NONE ? path.nearest(h, i) : path.copy(h, copy);
+      if (i === void 0) {
+        throw new WalkRowError("a route lands off its chunk");
+      }
+      visit.step(h, i);
+      emitted++;
+    }
+    const tail = n - emitted;
+    if (tail < 0) {
+      throw new WalkRowError(`a walk row decodes to more than its ${n} steps`);
+    }
+    if (tail > 0) {
+      const forward2 = path.handles[i] === h;
+      const j = i + (forward2 ? tail : -tail);
+      if (j < 0 || j >= path.handles.length) {
+        throw new WalkRowError("a walk row runs off its chunk");
+      }
+      visit.stretch(i, j, forward2);
+    }
+  }
+  function decodeWalk(path, routes, cols, choices) {
+    const n = +cols[8];
+    const ids = new Int32Array(n);
+    const rev = new Uint8Array(n);
+    const refStarts = new Float64Array(n).fill(Number.NaN);
+    const against = new Uint8Array(n);
+    let at = 0;
+    const push = (h, i) => {
+      if (at >= n) {
+        throw new WalkRowError("a walk row decodes to more steps than it states");
+      }
+      if (i !== void 0) {
+        refStarts[at] = path.starts[i];
+        against[at] = path.handles[i] === h ? 0 : 1;
+      }
+      ids[at] = idOf(h);
+      rev[at++] = h & 1;
+    };
+    const [start, startCopy] = parseCopy(cols[9]);
+    traverse(path, routes, start, startCopy, choices, n, {
+      step: push,
+      stretch(from, to, forward2) {
+        if (forward2) {
+          for (let j = from + 1; j <= to; j++) {
+            push(path.handles[j], j);
+          }
+        } else {
+          for (let j = from - 1; j >= to; j--) {
+            push(otherStrand(path.handles[j]), j);
+          }
+        }
+      },
+      route(index, flip2) {
+        const route = routes[index];
+        for (let k = 0; k < route.interior.length; k++) {
+          push(interiorAt(route, flip2, k));
+        }
+        return true;
+      }
+    });
+    if (at !== n) {
+      throw new WalkRowError(`a walk row decodes to ${at} steps, not ${n}`);
+    }
+    return { ids, rev, refStarts, against };
+  }
+  function sliceBases(cols, from, ids, lengths, out) {
+    const tag = cols.slice(from).find((c) => c.startsWith("SQ:Z:"));
+    if (tag === void 0) {
+      return;
+    }
+    let at = 5;
+    for (let k = 0; k < ids.length; k++) {
+      const length = lengths[k];
+      out.set(ids[k], tag.slice(at, at + length));
+      at += length;
+    }
+  }
+  function abridgedRow(cols, path, tileStart) {
+    const count2 = (k) => {
+      var _a;
+      const n = Number(cols[k]);
+      if ((_a = cols[7]) === null || _a === void 0 ? void 0 : _a.includes(",")) {
+        throw new WalkRowError(`an abridged row of several pieces, ${EARLIER_FORMAT_6}: ${cols.join("	")}`);
+      } else if (cols[k] === "" || !Number.isInteger(n) || n < 0) {
+        throw new WalkRowError(`not an abridged row of one piece: ${cols.join("	")}`);
+      }
+      return n;
+    };
+    const [h0, k0] = parseCopy(cols[10]);
+    const [h1, k1] = parseCopy(cols[11]);
+    const i0 = k0 === NONE ? path.first(h0) : path.copy(h0, k0);
+    const i1 = i0 === void 0 ? void 0 : k1 === NONE ? path.nearest(h1, i0) : path.copy(h1, k1);
+    const at = (i) => i === void 0 ? Number.NaN : path.starts[i];
+    const againstAt = (i, h) => i !== void 0 && path.handles[i] !== h ? 1 : 0;
+    return {
+      chunkStart: tileStart,
+      name: cols[4],
+      fragStart: +cols[5],
+      hapOffset: count2(6),
+      piece: count2(7),
+      n: 2,
+      steps: {
+        ids: Int32Array.from([h0, h1], idOf),
+        rev: Uint8Array.from([h0, h1], (h) => h & 1),
+        refStarts: Float64Array.from([at(i0), at(i1)]),
+        against: Uint8Array.from([againstAt(i0, h0), againstAt(i1, h1)])
+      },
+      abridged: {
+        steps: count2(8),
+        bp: count2(9),
+        detail: {
+          refName: cols[0],
+          start: tileStart,
+          name: `${tileStart}:${cols[12]}`
+        }
+      }
+    };
+  }
+  var refRows = (rows) => rows.filter((c) => c[3] === "ref").sort((a, b) => +a[6] - +b[6]);
+  function chunkRef(rows) {
+    const path = new RefPath();
+    const lengths = /* @__PURE__ */ new Map();
+    for (const cols of refRows(rows)) {
+      const handles = tokens(cols[9], { id: 0 }, []);
+      const nodeLengths = numbers(cols[10]);
+      path.add(handles, nodeLengths, +cols[6]);
+      for (let k = 0; k < handles.length; k++) {
+        lengths.set(idOf(handles[k]), nodeLengths[k]);
+      }
+    }
+    return { path, lengths };
+  }
+  function decodeChunk(rows, tileStart, keep, withSequences = false, ref) {
+    var _a, _b, _c, _d;
+    const path = (_a = ref === null || ref === void 0 ? void 0 : ref.path) !== null && _a !== void 0 ? _a : new RefPath();
+    const lengths = /* @__PURE__ */ new Map();
+    const routes = [];
+    const out = {
+      sequences: /* @__PURE__ */ new Map(),
+      rows: [],
+      nodes: /* @__PURE__ */ new Map(),
+      revisits: [],
+      ends: [],
+      chunk: { path, routes, walks: [], lengths, refLengths: ref === null || ref === void 0 ? void 0 : ref.lengths }
+    };
+    const placed = (id) => out.nodes.has(id) || (ref === null || ref === void 0 ? void 0 : ref.lengths.has(id)) === true;
+    const previous = { id: 0 };
+    for (const cols of ref ? [] : refRows(rows)) {
+      const handles = tokens(cols[9], { id: 0 }, []);
+      const nodeLengths = numbers(cols[10]);
+      const passes = passCounts(cols, handles.length);
+      const hapOffset = +cols[6];
+      const first = path.starts.length;
+      path.add(handles, nodeLengths, hapOffset);
+      if (withSequences) {
+        sliceBases(cols, 11, handles.map(idOf), nodeLengths, out.sequences);
+      }
+      let start = hapOffset;
+      for (let k = 0; k < handles.length; k++) {
+        const id = idOf(handles[k]);
+        const length = nodeLengths[k];
+        lengths.set(id, length);
+        const node = {
+          refName: cols[4],
+          start,
+          end: start + length,
+          rank: 0,
+          passes: passes[k]
+        };
+        if (out.nodes.has(id)) {
+          out.revisits.push({ id, ...node });
+        } else {
+          out.nodes.set(id, node);
+        }
+        start += length;
+      }
+      out.ends.push({
+        name: cols[4],
+        fragStart: +cols[5],
+        piece: +cols[7],
+        first: handles[0],
+        last: handles.at(-1)
+      });
+      if (keep === void 0 || keep(cols[4])) {
+        out.rows.push({
+          chunkStart: tileStart,
+          name: cols[4],
+          fragStart: +cols[5],
+          hapOffset,
+          piece: +cols[7],
+          n: handles.length,
+          steps: {
+            ids: Int32Array.from(handles, idOf),
+            rev: Uint8Array.from(handles, (h) => h & 1),
+            refStarts: Float64Array.from(path.starts.slice(first)),
+            against: new Uint8Array(handles.length)
+          }
+        });
+      }
+    }
+    for (const cols of rows) {
+      if (cols[3] === "nodes") {
+        const ids = numbers(cols[4]);
+        const nodeLengths = numbers(cols[5]);
+        let id = 0;
+        for (let k = 0; k < ids.length; k++) {
+          id += ids[k];
+          ids[k] = id;
+          lengths.set(id, nodeLengths[k]);
+        }
+        if (withSequences) {
+          sliceBases(cols, 6, ids, nodeLengths, out.sequences);
+        }
+      } else if (cols[3] === "route") {
+        const entry = tokens(cols[4], previous, []);
+        const interior = tokens(cols[5], previous, []);
+        const exit = tokens(cols[6], previous, []);
+        routes.push({ entry: (_b = entry[0]) !== null && _b !== void 0 ? _b : NONE, interior, exit: (_c = exit[0]) !== null && _c !== void 0 ? _c : NONE });
+      }
+    }
+    const routeOf = (index) => {
+      const route = routes[index];
+      if (!route) {
+        throw new WalkRowError(`route ${index} is not in the chunk`);
+      }
+      return route;
+    };
+    for (const cols of rows) {
+      if (cols[3] === "abridged") {
+        const name2 = cols[4];
+        if (keep === void 0 || keep(name2)) {
+          out.rows.push(abridgedRow(cols, path, tileStart));
+        }
+        continue;
+      }
+      if (cols[3] !== "walk") {
+        continue;
+      }
+      const choices = parseChoices(cols[10]);
+      out.chunk.walks.push({ cols, choices });
+      const name = cols[4];
+      if (keep === void 0 || keep(name)) {
+        let interior = 0;
+        for (let k = 0; k < choices.length; k += 4) {
+          interior += routeOf(choices[k]).interior.length;
+          for (const h of routeOf(choices[k]).interior) {
+            const id = idOf(h);
+            if (!placed(id)) {
+              const length = (_d = lengths.get(id)) !== null && _d !== void 0 ? _d : 0;
+              out.nodes.set(id, {
+                refName: name,
+                start: 0,
+                end: length,
+                rank: 1,
+                passes: 0
+              });
+            }
+          }
+        }
+        const steps = decodeWalk(path, routes, cols, choices);
+        const n = steps.ids.length;
+        out.ends.push({
+          name,
+          fragStart: +cols[5],
+          piece: +cols[7],
+          first: steps.ids[0] * 2 + steps.rev[0],
+          last: steps.ids[n - 1] * 2 + steps.rev[n - 1]
+        });
+        out.rows.push({
+          chunkStart: tileStart,
+          name,
+          fragStart: +cols[5],
+          hapOffset: +cols[6],
+          piece: +cols[7],
+          n,
+          interior,
+          steps
+        });
+      }
+    }
+    return out;
+  }
+  function placeAndLink(chunks, kept, place2, link) {
+    const offR = /* @__PURE__ */ new Set();
+    for (const id of kept) {
+      if (!chunks.some(({ path }) => path.occurrences.has(id))) {
+        offR.add(id);
+      }
+    }
+    const linkCanonical = (a, b) => {
+      const [from, to] = canonicalLink(a, b);
+      link(from, to);
+    };
+    const best = /* @__PURE__ */ new Map();
+    for (const { path, routes, walks, lengths, refLengths } of chunks) {
+      const handles = path.handles;
+      for (let k = 1; k < handles.length; k++) {
+        if (kept.has(idOf(handles[k - 1])) && kept.has(idOf(handles[k]))) {
+          linkCanonical(handles[k - 1], handles[k]);
+        }
+      }
+      const wanted = new Uint8Array(routes.length);
+      for (let index = 0; index < routes.length; index++) {
+        const { entry, interior, exit } = routes[index];
+        let any = false;
+        let from = entry;
+        for (const h of interior) {
+          const inCut = kept.has(idOf(h));
+          any || (any = offR.has(idOf(h)));
+          if (inCut && from !== NONE && kept.has(idOf(from))) {
+            linkCanonical(from, h);
+          }
+          from = h;
+        }
+        if (from !== NONE && exit !== NONE && kept.has(idOf(from)) && kept.has(idOf(exit))) {
+          linkCanonical(from, exit);
+        }
+        wanted[index] = any ? 1 : 0;
+      }
+      const lengthOf = (h) => {
+        var _a, _b;
+        return (_b = (_a = lengths.get(idOf(h))) !== null && _a !== void 0 ? _a : refLengths === null || refLengths === void 0 ? void 0 : refLengths.get(idOf(h))) !== null && _b !== void 0 ? _b : 0;
+      };
+      const bp = new Float64Array(routes.length).fill(-1);
+      const routeBp = (index) => {
+        if (bp[index] < 0) {
+          bp[index] = routes[index].interior.reduce((s, h) => s + lengthOf(h), 0);
+        }
+        return bp[index];
+      };
+      const taken = new Uint8Array(routes.length);
+      for (const { cols, choices } of walks) {
+        let remaining = 0;
+        for (let k = 0; k < choices.length; k += 4) {
+          const index = choices[k];
+          if (wanted[index] && !taken[index]) {
+            remaining++;
+          }
+        }
+        if (remaining === 0) {
+          continue;
+        }
+        const name = cols[4];
+        let offset = +cols[6];
+        const [start, startCopy] = parseCopy(cols[9]);
+        traverse(path, routes, start, startCopy, choices, +cols[8], {
+          step(h) {
+            offset += lengthOf(h);
+          },
+          stretch(from, to, forward2) {
+            offset += forward2 ? path.bp(to + 1) - path.bp(from + 1) : path.bp(from) - path.bp(to);
+          },
+          route(index, flip2) {
+            if (!wanted[index] || taken[index]) {
+              offset += routeBp(index);
+              return true;
+            }
+            taken[index] = 1;
+            const route = routes[index];
+            for (let k = 0; k < route.interior.length; k++) {
+              const h = interiorAt(route, flip2, k);
+              const id = idOf(h);
+              const length = lengthOf(h);
+              if (offR.has(id)) {
+                const held = best.get(id);
+                if (!held || name < held.refName || name === held.refName && offset < held.start) {
+                  best.set(id, {
+                    refName: name,
+                    start: offset,
+                    end: offset + length,
+                    rank: 1,
+                    passes: 0
+                  });
+                }
+              }
+              offset += length;
+            }
+            remaining--;
+            return remaining > 0;
+          }
+        });
+      }
+    }
+    for (const [id, node] of best) {
+      place2(id, node);
+    }
+  }
+  function referenceNodes(rows) {
+    const nodes = [];
+    for (const cols of rows) {
+      if (cols[3] !== "ref") {
+        continue;
+      }
+      const handles = tokens(cols[9], { id: 0 }, []);
+      const nodeLengths = numbers(cols[10]);
+      const passes = passCounts(cols, handles.length);
+      let start = +cols[6];
+      for (let k = 0; k < handles.length; k++) {
+        const length = nodeLengths[k];
+        nodes.push({
+          id: idOf(handles[k]),
+          refName: cols[4],
+          start,
+          end: start + length,
+          rank: 0,
+          passes: passes[k]
+        });
+        start += length;
+      }
+    }
+    return nodes;
+  }
+  function pieceLinks(ends) {
+    const byPath = /* @__PURE__ */ new Map();
+    for (const e of ends) {
+      const key = `${e.name}	${e.fragStart}`;
+      let pieces = byPath.get(key);
+      if (!pieces) {
+        pieces = /* @__PURE__ */ new Map();
+        byPath.set(key, pieces);
+      }
+      pieces.set(e.piece, e);
+    }
+    const links = [];
+    for (const pieces of byPath.values()) {
+      for (const [piece, e] of pieces) {
+        const next = pieces.get(piece + 1);
+        if (next) {
+          links.push(canonicalLink(e.last, next.first));
+        }
+      }
+    }
+    return links;
+  }
+
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
+  var ATTACH_BP = 65536;
+  function squeezer(holes, refName) {
+    const spans = holes.filter((h) => h.refName === refName).sort((a, b) => a.start - b.start);
+    return spans.length === 0 ? (bp) => bp : (bp) => {
+      let out = bp;
+      for (const { start, end } of spans) {
+        if (end > bp) {
+          break;
+        }
+        out -= end - start;
+      }
+      return out;
+    };
+  }
+  function adjacentSteps(d, squeeze) {
+    return d.ownBp === 0 && d.leaveReversed === d.rejoinReversed && squeeze(d.leavePos) === squeeze(d.rejoinPos);
+  }
+  function departureStretch(d) {
+    const leaveBase = d.leaveReversed ? d.leavePos : d.leavePos - 1;
+    const rejoinBase = d.rejoinReversed ? d.rejoinPos - 1 : d.rejoinPos;
+    const lo = Math.max(0, Math.min(leaveBase, rejoinBase));
+    return [lo, Math.max(lo, leaveBase, rejoinBase) + 1];
+  }
+  var count = (field, row, least = 0) => {
+    const n = Number(field);
+    if (field === void 0 || field === "" || !Number.isInteger(n) || n < least) {
+      throw new WalkRowError(`not a walk format 6 row: ${row.join("	")}`);
+    }
+    return n;
+  };
+  var strand = (field, row) => {
+    if (field !== "+" && field !== "-") {
+      throw new WalkRowError(`not a walk format 6 row: ${row.join("	")}`);
+    }
+    return field === "-";
+  };
+  function parseDepartureRow(cols, from = 3) {
+    const n = (k) => count(cols[from + k], cols);
+    const passes = (k) => count(cols[from + k], cols, 1);
+    if (cols.length - from === 9) {
+      throw new WalkRowError(`a departure record with no pass counts, ${EARLIER_FORMAT_6}: ${cols.join("	")}`);
+    }
+    return {
+      name: cols[from + 1],
+      hapStart: n(2),
+      ownBp: n(3),
+      missingBp: n(4),
+      leavePos: n(5),
+      leaveReversed: strand(cols[from + 6], cols),
+      leavePasses: passes(7),
+      rejoinPos: n(8),
+      rejoinReversed: strand(cols[from + 9], cols),
+      rejoinPasses: passes(10),
+      fromSteps: false
+    };
+  }
+  function departureOwnTiles(cols, from = 3) {
+    const field = cols[from + 11];
+    const starts = field === "." || field === void 0 ? [] : field.split(",");
+    return starts.map((start) => {
+      const n = Number(start);
+      if (start === "" || !Number.isSafeInteger(n) || n < 0) {
+        throw new WalkRowError(`a departure record's ownTiles is not a list of tile starts: ${cols.join("	")}`);
+      }
+      return n;
+    });
+  }
+
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  function integerTag(line, tag) {
+    const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
+    return match ? +match[1] : void 0;
+  }
+  function walkHeader(lines) {
+    var _a, _b, _c;
+    const header = {
+      references: [],
+      haplotypes: [],
+      holes: []
+    };
+    for (const line of lines) {
+      const [key, value = "", start = "", end = ""] = line.split("	");
+      if (key === "#reference") {
+        header.references.push(value);
+      } else if (key === "#haplotype") {
+        header.haplotypes.push(value);
+      } else if (key === "#hole") {
+        header.holes.push({ refName: value, start: +start, end: +end });
+      } else {
+        (_a = header.format) !== null && _a !== void 0 ? _a : header.format = integerTag(line, "format");
+        (_b = header.tile) !== null && _b !== void 0 ? _b : header.tile = integerTag(line, "tile");
+        (_c = header.revisited) !== null && _c !== void 0 ? _c : header.revisited = integerTag(line, "revisited");
+      }
+    }
+    return header;
+  }
+  function walkNameFilter(wanted, referenceHaplotype) {
+    return wanted === void 0 || wanted.length === 0 ? void 0 : (name) => panSNMatchesPrefix(name, referenceHaplotype) || wanted.some((prefix) => panSNMatchesPrefix(name, prefix));
+  }
+  function walksKept(wanted, refName) {
+    var _a;
+    return walkNameFilter(wanted, (_a = panSNHaplotype(refName)) !== null && _a !== void 0 ? _a : refName);
+  }
+  function joinPieces(rows) {
+    const byPath = /* @__PURE__ */ new Map();
+    const runs = [];
+    for (const row of rows) {
+      if (row.abridged) {
+        runs.push(decodeRun([row]));
+        continue;
+      }
+      const key = `${row.name}	${row.fragStart}`;
+      const list = byPath.get(key);
+      if (list) {
+        list.push(row);
+      } else {
+        byPath.set(key, [row]);
+      }
+    }
+    for (const pieces of byPath.values()) {
+      pieces.sort((a, b) => a.piece - b.piece);
+      let from = 0;
+      for (let i = 1; i <= pieces.length; i++) {
+        if (i === pieces.length || pieces[i].piece !== pieces[i - 1].piece + 1) {
+          runs.push(decodeRun(pieces.slice(from, i)));
+          from = i;
+        }
+      }
+    }
+    return runs;
+  }
+  function decodeRun(pieces) {
+    const n = pieces.reduce((sum, p) => sum + p.n, 0);
+    const ids = new Int32Array(n);
+    const rev = new Uint8Array(n);
+    const refStarts = new Float64Array(n).fill(Number.NaN);
+    const against = new Uint8Array(n);
+    const pieceStarts = [];
+    const pieceChunks = [];
+    let at = 0;
+    for (const p of pieces) {
+      if (at > 0) {
+        pieceStarts.push(at);
+      }
+      pieceChunks.push(p.chunkStart);
+      ids.set(p.steps.ids, at);
+      rev.set(p.steps.rev, at);
+      if (p.steps.refStarts) {
+        refStarts.set(p.steps.refStarts, at);
+      }
+      if (p.steps.against) {
+        against.set(p.steps.against, at);
+      }
+      at += p.n;
+    }
+    const first = pieces[0];
+    return {
+      name: first.name,
+      fragStart: first.fragStart,
+      hapOffset: first.hapOffset,
+      firstPiece: first.piece,
+      pieceStarts,
+      pieceChunks,
+      ids,
+      rev,
+      refStarts,
+      against,
+      ...first.abridged ? { abridged: first.abridged } : {}
+    };
+  }
+  function walkCut(runs, nodes, refName, records, { contained = false, context = 0, attachBp = ATTACH_BP, squeeze = (bp) => bp, drawn, attach = [] } = {}) {
+    let windowStart = Infinity;
+    let windowEnd = -Infinity;
+    for (const node of nodes.values()) {
+      if (node.onWindow) {
+        windowStart = Math.min(windowStart, node.start);
+        windowEnd = Math.max(windowEnd, node.end);
+      }
+    }
+    const length = (id) => {
+      const node = nodes.get(id);
+      return node === void 0 ? 0 : node.end - node.start;
+    };
+    if (drawn) {
+      for (const run of runs) {
+        for (let i = 0; i < run.ids.length; i++) {
+          const start = run.refStarts[i];
+          const end = start + length(run.ids[i]);
+          if (start < drawn.end && end > drawn.start) {
+            windowStart = Math.min(windowStart, start);
+            windowEnd = Math.max(windowEnd, end);
+          }
+        }
+      }
+    }
+    const passesOf = (id) => {
+      var _a, _b;
+      return (_b = (_a = nodes.get(id)) === null || _a === void 0 ? void 0 : _a.passes) !== null && _b !== void 0 ? _b : 0;
+    };
+    const onR = (run, i) => !Number.isNaN(run.refStarts[i]);
+    const prefixes = /* @__PURE__ */ new Map();
+    const before = (run) => {
+      let out = prefixes.get(run);
+      if (!out) {
+        out = new Float64Array(run.ids.length + 1);
+        for (let i = 0; i < run.ids.length; i++) {
+          out[i + 1] = out[i] + length(run.ids[i]);
+        }
+        prefixes.set(run, out);
+      }
+      return out;
+    };
+    const stepOnWindow = (run, i) => {
+      const start = run.refStarts[i];
+      const bp = before(run);
+      return !Number.isNaN(start) && start < windowEnd && start + bp[i + 1] - bp[i] > windowStart;
+    };
+    const spans = [];
+    const containedSpans = (run) => {
+      const { ids } = run;
+      let from = 0;
+      let first = -1;
+      let last = -1;
+      for (let i = 0; i <= ids.length; i++) {
+        const on = i < ids.length && stepOnWindow(run, i);
+        if (i === ids.length || onR(run, i) && !on) {
+          if (first >= 0) {
+            for (let bp = 0; first > from && bp < context; ) {
+              bp += length(ids[--first]);
+            }
+            for (let bp = 0; last < i - 1 && bp < context; ) {
+              bp += length(ids[++last]);
+            }
+            spans.push({ run, first, last });
+          }
+          from = i + 1;
+          first = -1;
+        } else if (on) {
+          if (first < 0) {
+            first = i;
+          }
+          last = i;
+        }
+      }
+    };
+    const stretchSpan = (run) => {
+      let first = -1;
+      let last = -1;
+      for (let i = 0; i < run.ids.length; i++) {
+        if (stepOnWindow(run, i)) {
+          if (first < 0) {
+            first = i;
+          }
+          last = i;
+        }
+      }
+      if (first >= 0) {
+        spans.push({ run, first, last });
+      }
+    };
+    const abridgedSpan = (run) => {
+      const a = run.refStarts[0];
+      const b = run.refStarts[1];
+      if (Number.isNaN(a) || Number.isNaN(b)) {
+        return;
+      }
+      const ends = [a + length(run.ids[0]), b + length(run.ids[1])];
+      if (Math.max(ends[0], ends[1]) > windowStart && Math.min(a, b) < windowEnd) {
+        spans.push({ run, first: 0, last: 1 });
+      }
+    };
+    for (const run of runs) {
+      if (run.abridged) {
+        abridgedSpan(run);
+      } else if (contained) {
+        containedSpans(run);
+      } else {
+        stretchSpan(run);
+      }
+    }
+    const kept = /* @__PURE__ */ new Set();
+    for (const [id, node] of nodes) {
+      if (node.onWindow) {
+        kept.add(id);
+      }
+    }
+    for (const span of spans) {
+      for (let i = span.first; i <= span.last; i++) {
+        kept.add(span.run.ids[i]);
+      }
+    }
+    const runEnd = (run) => {
+      var _a, _b;
+      return run.hapOffset + ((_b = (_a = run.abridged) === null || _a === void 0 ? void 0 : _a.bp) !== null && _b !== void 0 ? _b : before(run)[run.ids.length]);
+    };
+    const fragments = [];
+    for (const { run, first, last } of spans) {
+      const { ids, rev } = run;
+      if (run.abridged) {
+        fragments.push({
+          name: run.name,
+          fragStart: run.fragStart,
+          hapStart: run.hapOffset,
+          hapEnd: runEnd(run),
+          ids,
+          rev,
+          refStarts: run.refStarts,
+          against: run.against,
+          trimmedBefore: 0,
+          trimmedAfter: 0,
+          abridged: run.abridged
+        });
+        continue;
+      }
+      const bp = before(run);
+      const hapStart = run.hapOffset + bp[first];
+      const hapEnd = run.hapOffset + bp[last + 1];
+      fragments.push({
+        name: run.name,
+        fragStart: run.fragStart,
+        hapStart,
+        hapEnd,
+        ids: ids.subarray(first, last + 1),
+        rev: rev.subarray(first, last + 1),
+        refStarts: run.refStarts.subarray(first, last + 1),
+        against: run.against.subarray(first, last + 1),
+        trimmedBefore: hapStart - run.hapOffset,
+        trimmedAfter: runEnd(run) - hapEnd
+      });
+    }
+    const breakpoint = (run, i, leave) => {
+      const reversed = run.against[i] === 1;
+      const start = run.refStarts[i];
+      return {
+        pos: reversed === leave ? start : start + length(run.ids[i]),
+        reversed
+      };
+    };
+    const departures = [];
+    for (const run of runs) {
+      if (run.abridged || run.name === refName) {
+        continue;
+      }
+      const { ids, rev, refStarts, against } = run;
+      const bp = before(run);
+      const bounds = pieceBounds(run);
+      for (let p = 0; p + 1 < bounds.length; p++) {
+        let last = -1;
+        for (let i = bounds[p]; i < bounds[p + 1]; i++) {
+          const start = refStarts[i];
+          if (Number.isNaN(start)) {
+            continue;
+          }
+          if (last >= 0) {
+            const ownBp = bp[i] - bp[last + 1];
+            const leaveReversed = against[last] === 1;
+            const rejoinReversed = against[i] === 1;
+            const leavePos = leaveReversed ? refStarts[last] : refStarts[last] + bp[last + 1] - bp[last];
+            const rejoinPos = rejoinReversed ? start + bp[i + 1] - bp[i] : start;
+            const ends = {
+              ownBp,
+              leavePos,
+              leaveReversed,
+              rejoinPos,
+              rejoinReversed
+            };
+            if (!adjacentSteps(ends, squeeze)) {
+              const [lo, hi] = departureStretch(ends);
+              if (lo < windowEnd && hi > windowStart) {
+                const d = {
+                  name: run.name,
+                  hapStart: run.hapOffset + bp[last + 1],
+                  ownBp,
+                  missingBp: 0,
+                  leavePos,
+                  leaveReversed,
+                  leavePasses: passesOf(ids[last]),
+                  rejoinPos,
+                  rejoinReversed,
+                  rejoinPasses: passesOf(ids[i]),
+                  fromSteps: true
+                };
+                if (i > last + 1 && ownBp <= attachBp) {
+                  d.steps = {
+                    ids: ids.subarray(last + 1, i),
+                    rev: rev.subarray(last + 1, i)
+                  };
+                  for (let k = last + 1; k < i; k++) {
+                    kept.add(ids[k]);
+                  }
+                }
+                departures.push(d);
+              }
+            }
+          }
+          last = i;
+        }
+      }
+    }
+    const edgeKey = (name, pos, reversed, hap) => `${name}	${pos}	${reversed ? "-" : "+"}	${hap}`;
+    const leaves = /* @__PURE__ */ new Map();
+    const rejoins = /* @__PURE__ */ new Map();
+    for (const run of [...runs, ...attach]) {
+      if (run.abridged) {
+        continue;
+      }
+      const bp = before(run);
+      const bounds = pieceBounds(run);
+      for (let p = 0; p + 1 < bounds.length; p++) {
+        let first = -1;
+        let last = -1;
+        for (let i = bounds[p]; i < bounds[p + 1]; i++) {
+          if (onR(run, i)) {
+            if (first < 0) {
+              first = i;
+            }
+            last = i;
+          }
+        }
+        if (first < 0) {
+          continue;
+        }
+        const leave = breakpoint(run, last, true);
+        leaves.set(edgeKey(run.name, leave.pos, leave.reversed, run.hapOffset + bp[last + 1]), [run, last, bounds[p + 1]]);
+        const rejoin = breakpoint(run, first, false);
+        rejoins.set(edgeKey(run.name, rejoin.pos, rejoin.reversed, run.hapOffset + bp[first]), [run, first, bounds[p]]);
+      }
+    }
+    const unattached = [];
+    for (const d of records) {
+      if (d.ownBp <= attachBp) {
+        const ids = [];
+        const rev = [];
+        const leave = leaves.get(edgeKey(d.name, d.leavePos, d.leaveReversed, d.hapStart));
+        if (leave) {
+          const [run, i, end] = leave;
+          for (let k = i + 1; k < end; k++) {
+            ids.push(run.ids[k]);
+            rev.push(run.rev[k]);
+          }
+        }
+        const rejoin = rejoins.get(edgeKey(d.name, d.rejoinPos, d.rejoinReversed, d.hapStart + d.ownBp));
+        if (rejoin) {
+          const [run, i, start] = rejoin;
+          for (let k = start; k < i; k++) {
+            ids.push(run.ids[k]);
+            rev.push(run.rev[k]);
+          }
+        }
+        if (ids.length > 0) {
+          d.steps = { ids: Int32Array.from(ids), rev: Uint8Array.from(rev) };
+          for (const id of ids) {
+            kept.add(id);
+          }
+        }
+        if (!leave || !rejoin) {
+          unattached.push({ departure: d });
+        }
+      }
+      departures.push(d);
+    }
+    departures.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || a.hapStart - b.hapStart || a.leavePos - b.leavePos);
+    return { kept, fragments, departures, unattached };
+  }
+  function pieceBounds(run) {
+    const bounds = [0];
+    for (const start of run.pieceStarts) {
+      bounds.push(start);
+    }
+    bounds.push(run.ids.length);
+    return bounds;
+  }
+  function surelyKept(chunk, nodes, { contained, start, end }, into) {
+    var _a;
+    for (const id of chunk.nodes.keys()) {
+      if ((_a = nodes.get(id)) === null || _a === void 0 ? void 0 : _a.onWindow) {
+        into.add(id);
+      }
+    }
+    for (const { steps } of chunk.rows) {
+      const { ids, refStarts } = steps;
+      let last = -1;
+      for (let i = 0; i < ids.length; i++) {
+        const node = nodes.get(ids[i]);
+        const at = refStarts === null || refStarts === void 0 ? void 0 : refStarts[i];
+        const onR = at !== void 0 && !Number.isNaN(at);
+        if ((node === null || node === void 0 ? void 0 : node.onWindow) && onR && at < end && at + node.end - node.start > start) {
+          for (let j = last + 1; last >= 0 && j < i; j++) {
+            into.add(ids[j]);
+          }
+          last = i;
+        } else if (contained && onR) {
+          last = -1;
+        }
+      }
+    }
+  }
+  var outranks = (node, held) => node.onWindow !== held.onWindow ? node.onWindow : node.rank === 0 && (held.rank !== 0 || node.refName < held.refName || node.refName === held.refName && node.start < held.start);
+  var WalkGraph = class {
+    constructor(window) {
+      this.nodes = /* @__PURE__ */ new Map();
+      this.sequences = /* @__PURE__ */ new Map();
+      this.links = [];
+      this.chunks = [];
+      this.window = window;
+    }
+    // A node with its position, unless the cut already holds it at one that
+    // outranks it
+    placeNode(id, node) {
+      const { window } = this;
+      const placed = {
+        ...node,
+        onWindow: node.rank === 0 && node.refName === window.refName && node.end > window.start - window.context && node.start < window.end + window.context
+      };
+      const held = this.nodes.get(id);
+      if (!held || outranks(placed, held)) {
+        this.nodes.set(id, placed);
+      }
+    }
+    // A link between two endpoints, each id * 2 + 1 when reversed
+    addLinkEnds(source, target) {
+      this.links.push(source, target);
+    }
+    addChunk(chunk) {
+      this.chunks.push(chunk);
+    }
+    // Bases of nodes a chunk's rows give, for a window that asks for them
+    addSequences(sequences) {
+      if (this.window.sequences) {
+        for (const [id, bases] of sequences) {
+          this.sequences.set(id, bases);
+        }
+      }
+    }
+    /**
+     * The cut as typed arrays, which the worker transfers rather than copies:
+     * nodes by reference position, each link once in the order its L line
+     * sorts, then a walk per fragment, the reference's first and the rest by
+     * name, and the departures with their own steps. graphTablesGFA writes
+     * them as the GFA they stand for, the same bytes for the same rows.
+     */
+    tables(kept, fragments, departures) {
+      if (this.chunks.length > 0) {
+        placeAndLink(this.chunks, kept, (id, node) => {
+          const held2 = this.nodes.get(id);
+          if (held2) {
+            this.nodes.set(id, { ...held2, ...node });
+          }
+        }, (a, b) => {
+          this.links.push(a, b);
+        });
+      }
+      const held = [];
+      for (const id of kept) {
+        const node = this.nodes.get(id);
+        if (node) {
+          held.push({ ...node, id });
+        }
+      }
+      held.sort((x, y) => x.refName < y.refName ? -1 : x.refName > y.refName ? 1 : x.start - y.start || x.id - y.id);
+      const index = /* @__PURE__ */ new Map();
+      const names = [];
+      const refNames = [];
+      const refIndex = /* @__PURE__ */ new Map();
+      const lengths = new Int32Array(held.length);
+      const refs = new Int32Array(held.length);
+      const starts = new Float64Array(held.length);
+      const ranks = new Int32Array(held.length);
+      const passes = new Int32Array(held.length);
+      held.forEach(({ id, refName, start, end, rank, passes: n }, i) => {
+        index.set(id, i);
+        names.push(String(id));
+        let ref = refIndex.get(refName);
+        if (ref === void 0) {
+          ref = refNames.length;
+          refIndex.set(refName, ref);
+          refNames.push(refName);
+        }
+        lengths[i] = end - start;
+        refs[i] = ref;
+        starts[i] = start;
+        ranks[i] = rank;
+        passes[i] = n;
+      });
+      const nodeIndex = (id) => {
+        let i = index.get(id);
+        if (i === void 0) {
+          i = names.length;
+          index.set(id, i);
+          names.push(String(id));
+        }
+        return i;
+      };
+      const byLine = /* @__PURE__ */ new Map();
+      for (let i = 0; i < this.links.length; i += 2) {
+        const a = this.links[i];
+        const b = this.links[i + 1];
+        const source = Math.floor(a / 2);
+        const target = Math.floor(b / 2);
+        if (kept.has(source) && kept.has(target)) {
+          byLine.set(`${source}	${a % 2 ? "-" : "+"}	${target}	${b % 2 ? "-" : "+"}`, i);
+        }
+      }
+      const lines = [...byLine.keys()].sort();
+      const from = new Int32Array(lines.length);
+      const to = new Int32Array(lines.length);
+      const strands = new Uint8Array(lines.length);
+      lines.forEach((line, k) => {
+        const i = byLine.get(line);
+        const a = this.links[i];
+        const b = this.links[i + 1];
+        from[k] = nodeIndex(Math.floor(a / 2));
+        to[k] = nodeIndex(Math.floor(b / 2));
+        strands[k] = a % 2 | b % 2 << 1;
+      });
+      const walks = this.referenceFirst(fragments);
+      const offsets = new Int32Array(walks.length + 1);
+      walks.forEach(({ ids }, p) => {
+        offsets[p + 1] = offsets[p] + ids.length;
+      });
+      const steps = new Int32Array(offsets[walks.length]);
+      const reversed = new Uint8Array(steps.length);
+      walks.forEach(({ ids, rev }, p) => {
+        const at = offsets[p];
+        for (let j = 0; j < ids.length; j++) {
+          steps[at + j] = nodeIndex(ids[j]);
+        }
+        reversed.set(rev, at);
+      });
+      return {
+        nodes: { names, lengths, refs, starts, ranks, refNames, passes },
+        links: { from, to, strands },
+        walks: {
+          names: walks.map((f) => f.name),
+          starts: Float64Array.from(walks, (f) => f.hapStart),
+          ends: Float64Array.from(walks, (f) => f.hapEnd),
+          offsets,
+          steps,
+          reversed,
+          trimmedBefore: Float64Array.from(walks, (f) => f.trimmedBefore),
+          trimmedAfter: Float64Array.from(walks, (f) => f.trimmedAfter),
+          abridgedSteps: Float64Array.from(walks, (f) => {
+            var _a, _b;
+            return (_b = (_a = f.abridged) === null || _a === void 0 ? void 0 : _a.steps) !== null && _b !== void 0 ? _b : NaN;
+          }),
+          abridgedBp: Float64Array.from(walks, (f) => {
+            var _a, _b;
+            return (_b = (_a = f.abridged) === null || _a === void 0 ? void 0 : _a.bp) !== null && _b !== void 0 ? _b : NaN;
+          })
+        },
+        departures: departureTable(departures, nodeIndex)
+      };
+    }
+    // The view anchors on the first walk when no walk names the assembly, as
+    // gbz-base's cut has it; in file order that was whichever haplotype the
+    // chunk listed first, CHM13 on a GRCh38 window
+    referenceFirst(fragments) {
+      const { refName } = this.window;
+      return [...fragments].sort((a, b) => Number(b.name === refName) - Number(a.name === refName) || (a.name < b.name ? -1 : a.name > b.name ? 1 : a.hapStart - b.hapStart));
+    }
+  };
+  function departureTable(departures, nodeIndex) {
+    const n = departures.length;
+    const offsets = new Int32Array(n + 1);
+    departures.forEach((d, k) => {
+      var _a, _b;
+      offsets[k + 1] = offsets[k] + ((_b = (_a = d.steps) === null || _a === void 0 ? void 0 : _a.ids.length) !== null && _b !== void 0 ? _b : 0);
+    });
+    const steps = new Int32Array(offsets[n]);
+    const reversed = new Uint8Array(steps.length);
+    departures.forEach((d, k) => {
+      if (d.steps) {
+        const at = offsets[k];
+        for (let j = 0; j < d.steps.ids.length; j++) {
+          steps[at + j] = nodeIndex(d.steps.ids[j]);
+        }
+        reversed.set(d.steps.rev, at);
+      }
+    });
+    return {
+      names: departures.map((d) => d.name),
+      hapStarts: Float64Array.from(departures, (d) => d.hapStart),
+      ownBp: Float64Array.from(departures, (d) => d.ownBp),
+      missingBp: Float64Array.from(departures, (d) => d.missingBp),
+      leavePos: Float64Array.from(departures, (d) => d.leavePos),
+      leaveReversed: Uint8Array.from(departures, (d) => d.leaveReversed ? 1 : 0),
+      leavePasses: Int32Array.from(departures, (d) => d.leavePasses),
+      rejoinPos: Float64Array.from(departures, (d) => d.rejoinPos),
+      rejoinReversed: Uint8Array.from(departures, (d) => d.rejoinReversed ? 1 : 0),
+      rejoinPasses: Int32Array.from(departures, (d) => d.rejoinPasses),
+      fromSteps: Uint8Array.from(departures, (d) => d.fromSteps ? 1 : 0),
+      offsets,
+      steps,
+      reversed
+    };
+  }
+  var BUDGET_NAMES = {
+    steps: "the step budget",
+    bytes: "a byte budget of"
+  };
+  var ALONG_R_PER_STEP = 4;
+  var readSteps = (row) => {
+    var _a;
+    const interior = (_a = row.interior) !== null && _a !== void 0 ? _a : 0;
+    return interior + (row.n - interior) / ALONG_R_PER_STEP;
+  };
+  function stepBudgetError(rows, stepBudget, readPerKept, window, tile, filtered, names = BUDGET_NAMES) {
+    var _a;
+    let total = 0;
+    const perChunk = /* @__PURE__ */ new Map();
+    const walks = /* @__PURE__ */ new Set();
+    for (const row of rows) {
+      const steps = readSteps(row);
+      total += steps;
+      perChunk.set(row.chunkStart, ((_a = perChunk.get(row.chunkStart)) !== null && _a !== void 0 ? _a : 0) + steps);
+      walks.add(row.name);
+    }
+    const budget = stepBudget * readPerKept;
+    if (total <= budget) {
+      return void 0;
+    }
+    const windowBp = window.end - window.start;
+    let read = 0;
+    let fitsBp = 0;
+    for (const cs of [...perChunk.keys()].sort((a, b) => a - b)) {
+      read += perChunk.get(cs);
+      if (read > budget) {
+        break;
+      }
+      fitsBp = Math.max(fitsBp, cs + tile - window.start);
+    }
+    const fewerFit = !filtered && walks.size > 2 && 2 * total / walks.size <= budget;
+    return new RegionTooLargeError(fitsBp > 0 ? `Zoom in to about ${bpString(fitsBp)}${fewerFit ? ", or choose fewer haplotypes," : ""} to see the graph` : `Too many haplotype steps here to draw ${filtered ? "these haplotypes" : "every haplotype"} (${Math.round(read).toLocaleString()} steps read, a step along the reference counting a quarter, over ${readPerKept} \xD7 ${names.steps} of ${stepBudget.toLocaleString()}); choose fewer haplotypes`, budget, windowBp, Math.max(fitsBp, 1));
+  }
+  function keptStepsError(fragments, departures, budget, window, filtered) {
+    const total = fragments.reduce((sum, f) => sum + f.ids.length, 0) + departures.reduce((sum, d) => {
+      var _a, _b;
+      return sum + ((_b = (_a = d.steps) === null || _a === void 0 ? void 0 : _a.ids.length) !== null && _b !== void 0 ? _b : 0);
+    }, 0);
+    return keptOverError(total, budget, window, filtered);
+  }
+  function keptNodesError(nodes, limit, window, filtered, readTo = window.end) {
+    return keptOverError(nodes, limit, window, filtered, readTo);
+  }
+  function keptOverError(kept, limit, window, filtered, readTo = window.end) {
+    if (kept <= limit) {
+      return void 0;
+    }
+    const windowBp = window.end - window.start;
+    const readBp = Math.min(readTo, window.end) - window.start;
+    const fitsBp = Math.max(1, Math.floor(readBp * limit / kept));
+    return new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)}${filtered ? "" : ", or choose fewer haplotypes,"} to see the graph`, limit, windowBp, fitsBp);
+  }
+  function byteBudgetError(bytesTo, budget, window, tile, names = BUDGET_NAMES) {
+    const bytes = bytesTo(window.end);
+    if (bytes <= budget) {
+      return void 0;
+    }
+    let fitsBp = 0;
+    let least;
+    for (let cs = Math.floor(window.start / tile) * tile; cs < window.end; cs += tile) {
+      const read = bytesTo(cs + 1);
+      least !== null && least !== void 0 ? least : least = read;
+      if (read > budget) {
+        break;
+      }
+      fitsBp = cs + tile - window.start;
+    }
+    const windowBp = window.end - window.start;
+    return fitsBp > 0 ? new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)} to see the graph`, budget, windowBp, fitsBp, { bytes, zoomHelps: true }) : new RegionTooLargeError(`Too much graph here to fetch, even zoomed in (${megabytes(least !== null && least !== void 0 ? least : bytes)} against ${names.bytes} ${megabytes(budget)}). A satellite or rDNA array usually causes this: the graph folds the repeat into a few nodes that each haplotype loops through many times`, budget, windowBp, 1, { bytes });
+  }
+  var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
+
+  // node_modules/.pnpm/generic-filehandle2@2.5.1/node_modules/generic-filehandle2/esm/util.js
+  async function toBytes(src) {
+    return src.bytes ? src.bytes() : new Uint8Array(await src.arrayBuffer());
+  }
+  async function readBody(src, encoding, onProgress) {
+    if (encoding === "utf8" || encoding === "utf-8") {
+      return src.text();
+    } else if (encoding) {
+      throw new Error(`unsupported encoding: ${encoding}`);
+    }
+    return onProgress && "body" in src ? toBytesWithProgress(src, onProgress) : toBytes(src);
+  }
+  function splitReadFileOptions(options) {
+    return typeof options === "string" ? { encoding: options, opts: {} } : { encoding: options?.encoding, opts: options ?? {} };
+  }
+  function parseContentRangeSize(contentRange) {
+    const size = /\/(\d+)$/.exec(contentRange ?? "")?.[1];
+    return size === void 0 ? void 0 : parseInt(size, 10);
+  }
+  function parseContentLength(res) {
+    const header = res.headers.get("content-length");
+    const parsed = header === null ? Number.NaN : Number(header);
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : void 0;
+  }
+  var PROGRESS_THROTTLE_MS = 50;
+  async function toBytesWithProgress(res, onProgress) {
+    const total = parseContentLength(res);
+    const body = res.body;
+    if (!body || total === void 0) {
+      const bytes = await toBytes(res);
+      onProgress(bytes.byteLength, total ?? bytes.byteLength);
+      return bytes;
+    }
+    const reader = body.getReader();
+    let out = new Uint8Array(total);
+    let received = 0;
+    let lastTick = Date.now();
+    onProgress(0, total);
+    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+      if (received + chunk.value.byteLength > out.length) {
+        const grown = new Uint8Array(Math.max(received + chunk.value.byteLength, out.length * 2));
+        grown.set(out.subarray(0, received));
+        out = grown;
+      }
+      out.set(chunk.value, received);
+      received += chunk.value.byteLength;
+      const now = Date.now();
+      if (now - lastTick >= PROGRESS_THROTTLE_MS) {
+        lastTick = now;
+        onProgress(received, total);
+      }
+    }
+    onProgress(received, total);
+    return received === out.length ? out : out.slice(0, received);
+  }
+
+  // node_modules/.pnpm/generic-filehandle2@2.5.1/node_modules/generic-filehandle2/esm/remoteFile.js
+  function mergeHeaders(...sources) {
+    const merged = /* @__PURE__ */ new Map();
+    for (const source of sources) {
+      for (const [name, value] of Object.entries(source ?? {})) {
+        merged.set(name.toLowerCase(), [name, value]);
+      }
+    }
+    return Object.fromEntries(merged.values());
+  }
+  function discardBody(res) {
+    const body = res.body;
+    if (typeof body?.cancel === "function") {
+      body.cancel().catch(() => void 0);
+    }
+  }
+  function isByteOffset(n) {
+    return Number.isSafeInteger(n) && n >= 0;
+  }
+  function isNetworkFailure(e) {
+    return typeof e === "object" && e !== null && "name" in e && e.name === "TypeError";
+  }
+  function getMessage(e) {
+    const r = typeof e === "object" && e !== null && "message" in e && typeof e.message === "string" ? e.message : `${e}`;
+    return r.replace(/\.$/, "");
+  }
+  var RemoteFile = class {
+    constructor(source, opts = {}) {
+      __publicField(this, "url");
+      __publicField(this, "_stat");
+      __publicField(this, "statProbe");
+      __publicField(this, "fetchImplementation");
+      __publicField(this, "baseHeaders");
+      __publicField(this, "baseOverrides");
+      __publicField(this, "baseSignal");
+      this.url = source;
+      this.baseHeaders = opts.headers ?? {};
+      this.baseOverrides = opts.overrides ?? {};
+      this.baseSignal = opts.signal;
+      this.fetchImplementation = opts.fetch ?? globalThis.fetch.bind(globalThis);
+    }
+    /** the URL this handle fetches — see {@link GenericFilehandle.source} */
+    get source() {
+      return this.url;
+    }
+    buildRequest(opts, extraHeaders) {
+      const signal = opts.signal ?? this.baseSignal;
+      return {
+        // defaults first: `overrides` is documented as extra fetch params, so a
+        // caller passing e.g. mode/redirect/method has to be able to win
+        method: "GET",
+        redirect: "follow",
+        mode: "cors",
+        ...this.baseOverrides,
+        ...opts.overrides,
+        headers: mergeHeaders(this.baseHeaders, opts.headers, extraHeaders),
+        ...signal ? { signal } : {}
+      };
+    }
+    async fetch(input, init2) {
+      const wrapError = (e) => isNetworkFailure(e) && !init2?.signal?.aborted ? new Error(`${getMessage(e)} fetching ${input}`, { cause: e }) : e;
+      let response;
+      try {
+        response = await this.fetchImplementation(input, init2);
+      } catch (e) {
+        if (`${e}`.includes("Failed to fetch")) {
+          console.warn(`generic-filehandle: refetching ${input} to attempt to work around chrome CORS header caching bug`);
+          try {
+            response = await this.fetchImplementation(input, {
+              ...init2,
+              cache: "reload"
+            });
+          } catch (e2) {
+            throw wrapError(e2);
+          }
+        } else {
+          throw wrapError(e);
+        }
+      }
+      return response;
+    }
+    async read(length, position, opts = {}) {
+      if (!isByteOffset(length) || !isByteOffset(position)) {
+        throw new TypeError(`read() called with an invalid length or position (length=${length}, position=${position}). The index file may be corrupt.`);
+      }
+      return length === 0 ? new Uint8Array(0) : this.fetchBytes(length, position, opts);
+    }
+    /**
+     * The bytes for one byte range — the seam a subclass that can serve those
+     * bytes some other way overrides.
+     *
+     * The alternative is overriding {@link fetch}, and for a subclass holding a
+     * byte cache that is the wrong altitude: it has bytes, so it has to wrap them
+     * in a `Response` that `read` immediately unwraps again. Both halves copy.
+     * Measured against JBrowse's `RemoteFileWithRangeCache` on a fully warm cache
+     * with no network at all, that round trip was **69-77% of the entire read** —
+     * 6.15ms vs 1.90ms for 16MB, and the same ratio down to 256KB.
+     *
+     * So: override this to serve bytes, override {@link fetch} to change how
+     * requests are made. Overriding neither leaves the ranged GET below, and the
+     * default implementation still goes through `this.fetch`, so a subclass that
+     * only wraps `fetch` keeps working untouched.
+     */
+    async fetchBytes(length, position, opts) {
+      const res = await this.fetch(this.url, this.buildRequest(opts, {
+        range: `bytes=${position}-${position + length - 1}`
+      }));
+      if (res.status === 416) {
+        discardBody(res);
+        return new Uint8Array(0);
+      }
+      this.checkOk(res);
+      if (res.status === 200 && position === 0 || res.status === 206) {
+        const size = parseContentRangeSize(res.headers.get("content-range"));
+        if (size !== void 0) {
+          this._stat = { size };
+        }
+        const resData = opts.onProgress ? await toBytesWithProgress(res, opts.onProgress) : await toBytes(res);
+        if (!this._stat && res.status === 200) {
+          this._stat = { size: resData.byteLength };
+        }
+        return resData.byteLength <= length ? resData : resData.slice(0, length);
+      }
+      discardBody(res);
+      throw new Error(res.status === 200 ? `${this.url} fetch returned status 200, expected 206` : `HTTP ${res.status} fetching ${this.url}`);
+    }
+    checkOk(res) {
+      if (!res.ok) {
+        discardBody(res);
+        throw new Error(`HTTP ${res.status} fetching ${this.url}`);
+      }
+    }
+    async readFile(options) {
+      const { encoding, opts } = splitReadFileOptions(options);
+      const res = await this.fetch(this.url, this.buildRequest(opts));
+      this.checkOk(res);
+      const body = await this.readFileBody(res, encoding, opts.onProgress);
+      if (res.status === 200 && typeof body !== "string") {
+        this._stat = { size: body.byteLength };
+      }
+      return body;
+    }
+    /**
+     * Reads the body of a whole-file response. A subclass overrides it to learn
+     * when that body starts and ends, which `fetch` cannot tell it: `fetch`
+     * returns at the headers.
+     */
+    readFileBody(res, encoding, onProgress) {
+      return readBody(res, encoding, onProgress);
+    }
+    async stat() {
+      if (!this._stat) {
+        this.statProbe ?? (this.statProbe = this.read(10, 0).finally(() => {
+          this.statProbe = void 0;
+        }));
+        await this.statProbe;
+      }
+      return this._stat ?? { size: 0 };
+    }
+    close() {
+      return Promise.resolve();
+    }
+  };
+
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  function qualifiedKey(assemblyName, refName) {
+    return `${assemblyName}	${refName}`;
+  }
+  function refNameLookup(names) {
+    const lookup = /* @__PURE__ */ new Map();
+    for (const name of names) {
+      lookup.set(name, name);
+      const sample = panSNSample(name);
+      if (sample !== name) {
+        const contig = panSNContig(name);
+        lookup.set(qualifiedKey(sample, contig), name);
+        const haplotype = panSNHaplotype(name);
+        if (haplotype !== void 0) {
+          lookup.set(qualifiedKey(haplotype, contig), name);
+        }
+      }
+    }
+    return lookup;
+  }
+  function resolveRefName(lookup, assemblyName, refName) {
+    var _a;
+    return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
+  }
+
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
+  function checkRange(refName, start, end) {
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      throw new Error(`${refName}:${start}-${end} is not a finite range to query the graph's index for`);
+    }
   }
 
   // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.4/node_modules/@gmod/bgzf-filehandle/esm/constants.js
@@ -872,20 +2602,20 @@
     var base = null;
     var base_index = 0;
     var end;
-    var count = Buf16(MAXBITS + 1);
+    var count2 = Buf16(MAXBITS + 1);
     var offs = Buf16(MAXBITS + 1);
     var extra = null;
     var extra_index = 0;
     var here_bits, here_op, here_val;
     for (len = 0; len <= MAXBITS; len++) {
-      count[len] = 0;
+      count2[len] = 0;
     }
     for (sym = 0; sym < codes; sym++) {
-      count[lens[lens_index + sym]]++;
+      count2[lens[lens_index + sym]]++;
     }
     root = bits;
     for (max = MAXBITS; max >= 1; max--) {
-      if (count[max] !== 0) {
+      if (count2[max] !== 0) {
         break;
       }
     }
@@ -899,7 +2629,7 @@
       return 0;
     }
     for (min = 1; min < max; min++) {
-      if (count[min] !== 0) {
+      if (count2[min] !== 0) {
         break;
       }
     }
@@ -909,7 +2639,7 @@
     left = 1;
     for (len = 1; len <= MAXBITS; len++) {
       left <<= 1;
-      left -= count[len];
+      left -= count2[len];
       if (left < 0) {
         return -1;
       }
@@ -919,7 +2649,7 @@
     }
     offs[1] = 0;
     for (len = 1; len < MAXBITS; len++) {
-      offs[len + 1] = offs[len] + count[len];
+      offs[len + 1] = offs[len] + count2[len];
     }
     for (sym = 0; sym < codes; sym++) {
       if (lens[lens_index + sym] !== 0) {
@@ -982,7 +2712,7 @@
         huff = 0;
       }
       sym++;
-      if (--count[len] === 0) {
+      if (--count2[len] === 0) {
         if (len === max) {
           break;
         }
@@ -996,7 +2726,7 @@
         curr = len - drop;
         left = 1 << curr;
         while (curr + drop < max) {
-          left -= count[curr + drop];
+          left -= count2[curr + drop];
           if (left <= 0) {
             break;
           }
@@ -2774,17 +4504,6 @@
     }
     return decompress_all(input);
   }
-  async function decompressChunkSlice(input, minBlockPosition, minDataPosition, maxBlockPosition, maxDataPosition) {
-    if (!wrapper_wasm) {
-      await init();
-    }
-    const result = decompress_chunk_slice(input, minBlockPosition, minDataPosition, maxBlockPosition, maxDataPosition);
-    const buffer = result.take_buffer();
-    const cpositions = result.take_cpositions();
-    const dpositions = result.take_dpositions();
-    result.free();
-    return { buffer, cpositions, dpositions };
-  }
 
   // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.4/node_modules/@gmod/bgzf-filehandle/esm/inflateBlocks.js
   var MAX_INFLATE_BYTES = 8 * 1024 * 1024;
@@ -2863,14 +4582,6 @@
     output.set(run, offset);
     return run.length;
   }
-  function splitBlocks(decompressed, blocks, startBlock, endBlock, out) {
-    let offset = 0;
-    for (let b = startBlock; b < endBlock; b++) {
-      const blockSize = blocks[b].decompressedSize;
-      out[b] = decompressed.subarray(offset, offset + blockSize);
-      offset += blockSize;
-    }
-  }
   async function inflateInRuns(input, blocks) {
     let total = 0;
     for (const block of blocks) {
@@ -2883,11 +4594,6 @@
       offset += await decompressAllInto(input.subarray(inputOffset, inputOffset + inputLength), output, offset);
     }
     return output;
-  }
-  async function inflateHere(input, blocks) {
-    const resultBlocks = new Array(blocks.length);
-    splitBlocks(await inflateInRuns(input, blocks), blocks, 0, blocks.length, resultBlocks);
-    return { blocks: resultBlocks };
   }
 
   // node_modules/.pnpm/@gmod+bgzf-filehandle@6.8.4/node_modules/@gmod/bgzf-filehandle/esm/util.js
@@ -2970,3793 +4676,263 @@
       throw wrapGzipHeaderError(error);
     }
   }
-  function trimBlocks(blocks, infos, minv, maxv) {
-    const cpositions = [];
-    const dpositions = [];
-    const slices = [];
-    let dpos = minv.dataPosition;
-    for (let i = 0; i < blocks.length; i++) {
-      const block = blocks[i];
-      const info = infos[i];
-      const isLast = info.filePosition >= maxv.blockPosition;
-      cpositions.push(info.filePosition);
-      dpositions.push(dpos);
-      const start = i === 0 ? minv.dataPosition : 0;
-      const end = isLast ? Math.min(maxv.dataPosition + 1, block.length) : block.length;
-      if (start < end) {
-        slices.push(block.subarray(start, end));
-      }
-      dpos += Math.max(0, block.length - start);
-      if (isLast) {
-        cpositions.push(info.filePosition + info.compressedSize);
-        dpositions.push(dpos);
-        break;
-      }
-    }
-    return {
-      slices,
-      // Float64Array to match the wasm path's shape exactly — a caller must not
-      // be able to tell which one produced its result
-      cpositions: Float64Array.from(cpositions),
-      dpositions: Float64Array.from(dpositions)
-    };
-  }
-  function mergeContiguous(slices) {
-    const segments = [];
-    let current;
-    for (const slice of slices) {
-      if (current?.buffer === slice.buffer && current.byteOffset + current.length === slice.byteOffset) {
-        current = new Uint8Array(current.buffer, current.byteOffset, current.length + slice.length);
-      } else {
-        if (current) {
-          segments.push(current);
-        }
-        current = slice;
-      }
-    }
-    if (current) {
-      segments.push(current);
-    }
-    return segments;
-  }
-  async function unzipChunkSegments(inputData, chunk, workerPool) {
-    const { minv, maxv } = chunk;
-    const blocks = scanBgzfBlocks(inputData, minv.blockPosition, maxv.blockPosition);
-    const inflated = await inflateEachBlock(inputData, blocks, workerPool);
-    if (inflated) {
-      const { slices, cpositions: cpositions2, dpositions: dpositions2 } = trimBlocks(inflated, blocks, minv, maxv);
-      return { segments: mergeContiguous(slices), cpositions: cpositions2, dpositions: dpositions2 };
-    }
-    const { buffer, cpositions, dpositions } = await decompressChunkInOneCall(inputData, blocks, chunk);
-    return { segments: [buffer], cpositions, dpositions };
-  }
-  var POOL_MIN_DECOMPRESSED_BYTES = 4e5;
-  function decompressedBytes(blocks) {
-    let total = 0;
-    for (const block of blocks) {
-      total += block.decompressedSize;
-    }
-    return total;
-  }
-  async function inflateEachBlock(inputData, blocks, workerPool) {
-    if (workerPool && decompressedBytes(blocks) >= POOL_MIN_DECOMPRESSED_BYTES) {
-      return (await workerPool.decompressBlocks(inputData, blocks)).blocks;
-    }
-    if (inflateFootprint(blocks) > MAX_INFLATE_BYTES) {
-      return (await inflateHere(inputData, blocks)).blocks;
-    }
-    return void 0;
-  }
-  async function decompressChunkInOneCall(inputData, blocks, { minv, maxv }) {
-    try {
-      const result = await decompressChunkSlice(scannedInput(inputData, blocks), minv.blockPosition, minv.dataPosition, maxv.blockPosition, maxv.dataPosition);
-      return {
-        buffer: result.buffer,
-        cpositions: result.cpositions,
-        dpositions: result.dpositions
-      };
-    } catch (error) {
-      throw wrapGzipHeaderError(error);
-    }
-  }
 
-  // node_modules/.pnpm/@gmod+shared-read-cache@2.1.0/node_modules/@gmod/shared-read-cache/esm/throwIfAborted.js
-  function throwIfAborted(signal) {
-    if (signal?.aborted) {
-      throw abortReason(signal);
-    }
-  }
-  function abortReason(signal) {
-    const reason = signal.reason;
-    return reason === void 0 ? new DOMException("This operation was aborted", "AbortError") : reason;
-  }
-
-  // node_modules/.pnpm/@gmod+shared-read-cache@2.1.0/node_modules/@gmod/shared-read-cache/esm/SharedReadCache.js
-  function isSubscribable(signal) {
-    return typeof signal?.addEventListener === "function";
-  }
-  var SharedReadCache = class {
-    constructor({ fill, maxSize = Infinity, sizeOf = () => 1, cacheKey = (key) => String(key), idleTimeoutMs = 0, budget } = {}) {
-      __publicField(this, "entries", /* @__PURE__ */ new Map());
-      __publicField(this, "total", 0);
-      // maintained rather than counted, because evict() needs it on every settle
-      __publicField(this, "settledCount", 0);
-      __publicField(this, "limit");
-      __publicField(this, "shared");
-      __publicField(this, "fill");
-      __publicField(this, "sizeOf");
-      __publicField(this, "toCacheKey");
-      __publicField(this, "idleTimeoutMs");
-      __publicField(this, "sweepTimer");
-      this.fill = fill;
-      this.limit = maxSize;
-      this.shared = budget && { budget, membership: budget.register(this) };
-      this.sizeOf = sizeOf;
-      this.toCacheKey = cacheKey;
-      this.idleTimeoutMs = idleTimeoutMs > 0 && Number.isFinite(idleTimeoutMs) ? idleTimeoutMs : void 0;
-    }
-    /** Number of entries held, including reads still in flight. */
-    get size() {
-      return this.entries.size;
-    }
-    /** Sum of {@link SharedReadCacheOptions.sizeOf} over the settled entries. */
-    get totalSize() {
-      return this.total;
-    }
-    get maxSize() {
-      return this.limit;
-    }
-    /** Lowering it evicts immediately. */
-    set maxSize(maxSize) {
-      this.limit = maxSize;
-      this.evict();
-    }
-    /** How many caller signals the entry under `key` holds. Exposed for tests. */
-    waiterCount(key) {
-      return this.entries.get(this.toCacheKey(key))?.pending?.signals.size ?? 0;
-    }
-    async get(key, signal, fill) {
-      throwIfAborted(signal);
-      const cacheKey = this.toCacheKey(key);
-      let entry = this.entries.get(cacheKey);
-      if (entry && this.isDoomed(entry)) {
-        this.release(cacheKey);
-        entry = void 0;
-      }
-      if (entry) {
-        this.touch(cacheKey, entry);
-      } else {
-        entry = this.start(cacheKey, key, fill);
-      }
-      if (entry.pending) {
-        this.join(entry.pending, signal);
-      }
-      try {
-        return await this.settleFor(entry, signal);
-      } finally {
-        throwIfAborted(signal);
-      }
-    }
-    /** The shared read, raced against this caller's own abort. */
-    settleFor(entry, signal) {
-      if (!entry.pending || !isSubscribable(signal)) {
-        return entry.promise;
-      }
-      let reject;
-      const aborted = new Promise((_resolve, rejectAborted) => {
-        reject = rejectAborted;
-      });
-      const onAbort = () => {
-        reject(abortReason(signal));
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
-      return Promise.race([entry.promise, aborted]).finally(() => {
-        signal.removeEventListener("abort", onAbort);
-      });
-    }
-    /**
-     * The promise cached under `key`, or `undefined`. Marks the entry
-     * most-recently-used, but does not register the caller as a waiter.
-     */
-    getIfCached(key) {
-      const cacheKey = this.toCacheKey(key);
-      const entry = this.entries.get(cacheKey);
-      if (!entry) {
-        return void 0;
-      }
-      if (this.isDoomed(entry)) {
-        this.release(cacheKey);
-        return void 0;
-      }
-      this.touch(cacheKey, entry);
-      return entry.promise;
-    }
-    /** Whether {@link get} would hit, without touching the LRU order. */
-    has(key) {
-      const entry = this.entries.get(this.toCacheKey(key));
-      return entry !== void 0 && !this.isDoomed(entry);
-    }
-    delete(key) {
-      this.release(this.toCacheKey(key));
-    }
-    clear() {
-      this.entries.clear();
-      this.shared?.budget.charge(this.shared.membership, -this.total);
-      this.total = 0;
-      this.settledCount = 0;
-      this.stopSweep();
-    }
-    // lruSpare() reads map order and reports seq, so the two move together
-    touch(cacheKey, entry) {
-      this.entries.delete(cacheKey);
-      this.entries.set(cacheKey, entry);
-      entry.lastTouched = Date.now();
-      entry.seq = this.stamp();
-    }
-    stamp() {
-      return this.shared?.budget.nextSeq() ?? 0;
-    }
-    /** In flight, but every caller waiting on it has already given up. */
-    isDoomed(entry) {
-      return entry.pending?.controller.signal.aborted === true;
-    }
-    /**
-     * Evict entries nothing has read for
-     * {@link SharedReadCacheOptions.idleTimeoutMs}. A no-op without one.
-     */
-    sweepIdle() {
-      const timeout = this.idleTimeoutMs;
-      if (timeout === void 0) {
-        return;
-      }
-      const cutoff = Date.now() - timeout;
-      for (const [cacheKey, entry] of this.entries) {
-        if (!entry.pending && entry.lastTouched <= cutoff) {
-          this.release(cacheKey);
-        }
-      }
-      if (this.settledCount === 0) {
-        this.stopSweep();
-      }
-    }
-    // The timer holds the cache weakly, so a dropped cache is collected without
-    // a dispose() call.
-    startSweep() {
-      const timeout = this.idleTimeoutMs;
-      if (timeout === void 0 || this.sweepTimer !== void 0) {
-        return;
-      }
-      const interval = Math.min(2 ** 31 - 1, Math.max(1e3, Math.floor(timeout / 4)));
-      const ref = new WeakRef(this);
-      const timer = setInterval(() => {
-        const cache = ref.deref();
-        if (cache) {
-          cache.sweepIdle();
-        } else {
-          clearInterval(timer);
-        }
-      }, interval);
-      this.sweepTimer = timer;
-      timer.unref?.();
-    }
-    stopSweep() {
-      if (this.sweepTimer !== void 0) {
-        clearInterval(this.sweepTimer);
-        this.sweepTimer = void 0;
-      }
-    }
-    start(cacheKey, key, fill) {
-      const run = fill ?? (this.fill && ((s) => this.fill(key, s)));
-      if (!run) {
-        throw new Error("SharedReadCache needs a fill, either on the cache or on the get() call");
-      }
-      const pending = {
-        signals: /* @__PURE__ */ new Map(),
-        pinned: false,
-        controller: new AbortController()
-      };
-      const entry = {
-        // Promise.resolve so an untyped fill returning a bare value still works
-        promise: Promise.resolve(run(pending.controller.signal)),
-        pending,
-        size: 0,
-        lastTouched: Date.now(),
-        seq: this.stamp()
-      };
-      this.entries.set(cacheKey, entry);
-      const isCurrent = () => this.entries.get(cacheKey) === entry;
-      const settle = () => {
-        for (const [signal, onAbort] of pending.signals) {
-          signal.removeEventListener("abort", onAbort);
-        }
-        entry.pending = void 0;
-      };
-      void entry.promise.then((value) => {
-        const size = isCurrent() ? this.weigh(value) : void 0;
-        const current = isCurrent();
-        settle();
-        if (current) {
-          if (size === void 0) {
-            this.entries.delete(cacheKey);
-          } else {
-            entry.lastTouched = Date.now();
-            entry.size = size;
-            this.settledCount++;
-            this.total += size;
-            this.shared?.budget.charge(this.shared.membership, size);
-            this.startSweep();
-          }
-        }
-        this.evict();
-        this.shared?.budget.evict();
-      }, () => {
-        if (isCurrent()) {
-          this.release(cacheKey);
-        }
-        settle();
-      });
-      return entry;
-    }
-    /**
-     * `sizeOf`, or `undefined` if it throws or returns anything but a finite
-     * non-negative number, which drops the entry. A `NaN` in `total` would make
-     * every later settle evict down to one entry.
-     */
-    weigh(value) {
-      try {
-        const size = this.sizeOf(value);
-        return Number.isFinite(size) && size >= 0 ? size : void 0;
-      } catch {
-        return void 0;
-      }
-    }
-    join(pending, signal) {
-      if (!isSubscribable(signal)) {
-        pending.pinned = true;
-      } else if (!signal.aborted && !pending.signals.has(signal)) {
-        const onAbort = () => {
-          pending.signals.delete(signal);
-          if (!pending.pinned && pending.signals.size === 0) {
-            pending.controller.abort(signal.reason);
-          }
-        };
-        pending.signals.set(signal, onAbort);
-        signal.addEventListener("abort", onAbort, { once: true });
-      }
-    }
-    /** @internal also how a budget evicts on this cache's behalf */
-    release(cacheKey) {
-      const entry = this.entries.get(cacheKey);
-      if (entry) {
-        this.entries.delete(cacheKey);
-        if (!entry.pending) {
-          this.settledCount--;
-        }
-        this.total -= entry.size;
-        this.shared?.budget.charge(this.shared.membership, -entry.size);
-      }
-    }
-    /**
-     * @internal The least-recently-used settled entry, or `undefined` if there
-     * is none, or only one and `offerLast` is not set.
-     */
-    lruSpare(offerLast = false) {
-      if (this.settledCount <= (offerLast ? 0 : 1)) {
-        return void 0;
-      }
-      for (const [cacheKey, entry] of this.entries) {
-        if (!entry.pending) {
-          return { cacheKey, seq: entry.seq, last: this.settledCount === 1 };
-        }
-      }
-      return void 0;
-    }
-    /**
-     * Evict least-recently-used settled entries down to `maxSize`, skipping
-     * reads in flight and keeping the last settled entry.
-     */
-    evict() {
-      if (this.total <= this.limit) {
-        return;
-      }
-      for (const [cacheKey, entry] of this.entries) {
-        if (this.total <= this.limit || this.settledCount <= 1) {
-          break;
-        }
-        if (!entry.pending) {
-          this.release(cacheKey);
-        }
-      }
-    }
-  };
-
-  // node_modules/.pnpm/generic-filehandle2@2.5.1/node_modules/generic-filehandle2/esm/util.js
-  async function toBytes(src) {
-    return src.bytes ? src.bytes() : new Uint8Array(await src.arrayBuffer());
-  }
-  async function readBody(src, encoding, onProgress) {
-    if (encoding === "utf8" || encoding === "utf-8") {
-      return src.text();
-    } else if (encoding) {
-      throw new Error(`unsupported encoding: ${encoding}`);
-    }
-    return onProgress && "body" in src ? toBytesWithProgress(src, onProgress) : toBytes(src);
-  }
-  function splitReadFileOptions(options) {
-    return typeof options === "string" ? { encoding: options, opts: {} } : { encoding: options?.encoding, opts: options ?? {} };
-  }
-  function parseContentRangeSize(contentRange) {
-    const size = /\/(\d+)$/.exec(contentRange ?? "")?.[1];
-    return size === void 0 ? void 0 : parseInt(size, 10);
-  }
-  function parseContentLength(res) {
-    const header = res.headers.get("content-length");
-    const parsed = header === null ? Number.NaN : Number(header);
-    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : void 0;
-  }
-  var PROGRESS_THROTTLE_MS = 50;
-  async function toBytesWithProgress(res, onProgress) {
-    const total = parseContentLength(res);
-    const body = res.body;
-    if (!body || total === void 0) {
-      const bytes = await toBytes(res);
-      onProgress(bytes.byteLength, total ?? bytes.byteLength);
-      return bytes;
-    }
-    const reader = body.getReader();
-    let out = new Uint8Array(total);
-    let received = 0;
-    let lastTick = Date.now();
-    onProgress(0, total);
-    for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-      if (received + chunk.value.byteLength > out.length) {
-        const grown = new Uint8Array(Math.max(received + chunk.value.byteLength, out.length * 2));
-        grown.set(out.subarray(0, received));
-        out = grown;
-      }
-      out.set(chunk.value, received);
-      received += chunk.value.byteLength;
-      const now = Date.now();
-      if (now - lastTick >= PROGRESS_THROTTLE_MS) {
-        lastTick = now;
-        onProgress(received, total);
-      }
-    }
-    onProgress(received, total);
-    return received === out.length ? out : out.slice(0, received);
-  }
-
-  // node_modules/.pnpm/generic-filehandle2@2.5.1/node_modules/generic-filehandle2/esm/remoteFile.js
-  function mergeHeaders(...sources) {
-    const merged = /* @__PURE__ */ new Map();
-    for (const source of sources) {
-      for (const [name, value] of Object.entries(source ?? {})) {
-        merged.set(name.toLowerCase(), [name, value]);
-      }
-    }
-    return Object.fromEntries(merged.values());
-  }
-  function discardBody(res) {
-    const body = res.body;
-    if (typeof body?.cancel === "function") {
-      body.cancel().catch(() => void 0);
-    }
-  }
-  function isByteOffset(n) {
-    return Number.isSafeInteger(n) && n >= 0;
-  }
-  function isNetworkFailure(e) {
-    return typeof e === "object" && e !== null && "name" in e && e.name === "TypeError";
-  }
-  function getMessage(e) {
-    const r = typeof e === "object" && e !== null && "message" in e && typeof e.message === "string" ? e.message : `${e}`;
-    return r.replace(/\.$/, "");
-  }
-  var RemoteFile = class {
-    constructor(source, opts = {}) {
-      __publicField(this, "url");
-      __publicField(this, "_stat");
-      __publicField(this, "statProbe");
-      __publicField(this, "fetchImplementation");
-      __publicField(this, "baseHeaders");
-      __publicField(this, "baseOverrides");
-      __publicField(this, "baseSignal");
-      this.url = source;
-      this.baseHeaders = opts.headers ?? {};
-      this.baseOverrides = opts.overrides ?? {};
-      this.baseSignal = opts.signal;
-      this.fetchImplementation = opts.fetch ?? globalThis.fetch.bind(globalThis);
-    }
-    /** the URL this handle fetches — see {@link GenericFilehandle.source} */
-    get source() {
-      return this.url;
-    }
-    buildRequest(opts, extraHeaders) {
-      const signal = opts.signal ?? this.baseSignal;
-      return {
-        // defaults first: `overrides` is documented as extra fetch params, so a
-        // caller passing e.g. mode/redirect/method has to be able to win
-        method: "GET",
-        redirect: "follow",
-        mode: "cors",
-        ...this.baseOverrides,
-        ...opts.overrides,
-        headers: mergeHeaders(this.baseHeaders, opts.headers, extraHeaders),
-        ...signal ? { signal } : {}
-      };
-    }
-    async fetch(input, init2) {
-      const wrapError = (e) => isNetworkFailure(e) && !init2?.signal?.aborted ? new Error(`${getMessage(e)} fetching ${input}`, { cause: e }) : e;
-      let response;
-      try {
-        response = await this.fetchImplementation(input, init2);
-      } catch (e) {
-        if (`${e}`.includes("Failed to fetch")) {
-          console.warn(`generic-filehandle: refetching ${input} to attempt to work around chrome CORS header caching bug`);
-          try {
-            response = await this.fetchImplementation(input, {
-              ...init2,
-              cache: "reload"
-            });
-          } catch (e2) {
-            throw wrapError(e2);
-          }
-        } else {
-          throw wrapError(e);
-        }
-      }
-      return response;
-    }
-    async read(length, position, opts = {}) {
-      if (!isByteOffset(length) || !isByteOffset(position)) {
-        throw new TypeError(`read() called with an invalid length or position (length=${length}, position=${position}). The index file may be corrupt.`);
-      }
-      return length === 0 ? new Uint8Array(0) : this.fetchBytes(length, position, opts);
-    }
-    /**
-     * The bytes for one byte range — the seam a subclass that can serve those
-     * bytes some other way overrides.
-     *
-     * The alternative is overriding {@link fetch}, and for a subclass holding a
-     * byte cache that is the wrong altitude: it has bytes, so it has to wrap them
-     * in a `Response` that `read` immediately unwraps again. Both halves copy.
-     * Measured against JBrowse's `RemoteFileWithRangeCache` on a fully warm cache
-     * with no network at all, that round trip was **69-77% of the entire read** —
-     * 6.15ms vs 1.90ms for 16MB, and the same ratio down to 256KB.
-     *
-     * So: override this to serve bytes, override {@link fetch} to change how
-     * requests are made. Overriding neither leaves the ranged GET below, and the
-     * default implementation still goes through `this.fetch`, so a subclass that
-     * only wraps `fetch` keeps working untouched.
-     */
-    async fetchBytes(length, position, opts) {
-      const res = await this.fetch(this.url, this.buildRequest(opts, {
-        range: `bytes=${position}-${position + length - 1}`
-      }));
-      if (res.status === 416) {
-        discardBody(res);
-        return new Uint8Array(0);
-      }
-      this.checkOk(res);
-      if (res.status === 200 && position === 0 || res.status === 206) {
-        const size = parseContentRangeSize(res.headers.get("content-range"));
-        if (size !== void 0) {
-          this._stat = { size };
-        }
-        const resData = opts.onProgress ? await toBytesWithProgress(res, opts.onProgress) : await toBytes(res);
-        if (!this._stat && res.status === 200) {
-          this._stat = { size: resData.byteLength };
-        }
-        return resData.byteLength <= length ? resData : resData.slice(0, length);
-      }
-      discardBody(res);
-      throw new Error(res.status === 200 ? `${this.url} fetch returned status 200, expected 206` : `HTTP ${res.status} fetching ${this.url}`);
-    }
-    checkOk(res) {
-      if (!res.ok) {
-        discardBody(res);
-        throw new Error(`HTTP ${res.status} fetching ${this.url}`);
-      }
-    }
-    async readFile(options) {
-      const { encoding, opts } = splitReadFileOptions(options);
-      const res = await this.fetch(this.url, this.buildRequest(opts));
-      this.checkOk(res);
-      const body = await this.readFileBody(res, encoding, opts.onProgress);
-      if (res.status === 200 && typeof body !== "string") {
-        this._stat = { size: body.byteLength };
-      }
-      return body;
-    }
-    /**
-     * Reads the body of a whole-file response. A subclass overrides it to learn
-     * when that body starts and ends, which `fetch` cannot tell it: `fetch`
-     * returns at the headers.
-     */
-    readFileBody(res, encoding, onProgress) {
-      return readBody(res, encoding, onProgress);
-    }
-    async stat() {
-      if (!this._stat) {
-        this.statProbe ?? (this.statProbe = this.read(10, 0).finally(() => {
-          this.statProbe = void 0;
-        }));
-        await this.statProbe;
-      }
-      return this._stat ?? { size: 0 };
-    }
-    close() {
-      return Promise.resolve();
-    }
-  };
-
-  // node_modules/.pnpm/generic-filehandle2@2.5.1/node_modules/generic-filehandle2/esm/browser.js
-  var LocalFile = class {
-    // takes the options argument too, for the same reason it takes `source`: a
-    // bundle resolving the `browser` condition must still typecheck a call
-    // written against the node class, options and all
-    constructor(source, _opts = {}) {
-      /** the path this stub was handed — see {@link GenericFilehandle.source} */
-      __publicField(this, "source");
-      this.source = source;
-    }
-    unimplemented() {
-      return Promise.reject(new Error(`LocalFile is unimplemented in the browser (${this.source})`));
-    }
-    readFile(_options) {
-      return this.unimplemented();
-    }
-    read(_length, _position, _opts) {
-      return this.unimplemented();
-    }
-    stat() {
-      return this.unimplemented();
-    }
-    close() {
-      return this.unimplemented();
-    }
-  };
-
-  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/chunk.js
-  var Chunk = class {
-    constructor(minv, maxv, bin, endPosition = maxv.blockPosition + (1 << 16)) {
-      __publicField(this, "minv");
-      __publicField(this, "maxv");
-      __publicField(this, "bin");
-      // Absolute byte offset where the fetch for this chunk ends. The compressed
-      // size of the final BGZF block (the one at maxv.blockPosition) is unknown
-      // from the index, so this defaults to a full max-size block past maxv. It can
-      // be tightened to the next known block boundary via clampChunkEnds.
-      __publicField(this, "endPosition");
-      this.minv = minv;
-      this.maxv = maxv;
-      this.bin = bin;
-      this.endPosition = endPosition;
-    }
-    toString() {
-      return `${this.minv.toString()}..${this.maxv.toString()} (bin ${this.bin}, fetchedSize ${this.fetchedSize()})`;
-    }
-    fetchedSize() {
-      return this.endPosition - this.minv.blockPosition;
-    }
-  };
-
-  // node_modules/.pnpm/@jbrowse+quick-lru@8.0.0/node_modules/@jbrowse/quick-lru/esm/index.js
-  function assertPositive(name, value) {
-    if (!(value > 0)) {
-      throw new TypeError(`\`${name}\` must be a number greater than 0`);
-    }
-  }
-  var _cache, _oldCache, _maxSize, _maxAge, _onEviction, _QuickLRU_instances, emitEvictions_fn, deleteIfExpired_fn, valueIfFresh_fn, moveToRecent_fn, replaceWith_fn, liveItemsAscending_fn;
-  var QuickLRU = class {
-    constructor(options) {
-      __privateAdd(this, _QuickLRU_instances);
-      __privateAdd(this, _cache, /* @__PURE__ */ new Map());
-      __privateAdd(this, _oldCache, /* @__PURE__ */ new Map());
-      __privateAdd(this, _maxSize);
-      __privateAdd(this, _maxAge);
-      __privateAdd(this, _onEviction);
-      const maxAge = options.maxAge ?? Number.POSITIVE_INFINITY;
-      assertPositive("maxSize", options.maxSize);
-      assertPositive("maxAge", maxAge);
-      __privateSet(this, _maxSize, options.maxSize);
-      __privateSet(this, _maxAge, maxAge);
-      __privateSet(this, _onEviction, options.onEviction);
-    }
-    /**
-     * Get an item, marking it as recently used.
-     *
-     * @returns The stored item or `undefined`.
-     */
-    get(key) {
-      const item = __privateGet(this, _cache).get(key);
-      if (item) {
-        return __privateMethod(this, _QuickLRU_instances, valueIfFresh_fn).call(this, key, item);
-      }
-      const oldItem = __privateGet(this, _oldCache).get(key);
-      if (oldItem && !__privateMethod(this, _QuickLRU_instances, deleteIfExpired_fn).call(this, key, oldItem)) {
-        __privateMethod(this, _QuickLRU_instances, moveToRecent_fn).call(this, key, oldItem);
-        return oldItem.value;
-      }
-      return void 0;
-    }
-    /**
-     * Set an item, marking it as recently used.
-     *
-     * The `maxAge` option overrides the cache-wide `maxAge` for this item.
-     *
-     * @returns The cache instance.
-     */
-    set(key, value, { maxAge = __privateGet(this, _maxAge) } = {}) {
-      const item = {
-        value,
-        expiry: maxAge === Number.POSITIVE_INFINITY ? void 0 : Date.now() + maxAge
-      };
-      if (__privateGet(this, _cache).has(key)) {
-        __privateGet(this, _cache).set(key, item);
-      } else {
-        __privateMethod(this, _QuickLRU_instances, moveToRecent_fn).call(this, key, item);
-      }
-      return this;
-    }
-    /** Check if an item exists, without marking it as recently used. */
-    has(key) {
-      const item = __privateGet(this, _cache).get(key) ?? __privateGet(this, _oldCache).get(key);
-      return item !== void 0 && !__privateMethod(this, _QuickLRU_instances, deleteIfExpired_fn).call(this, key, item);
-    }
-    /**
-     * Get an item without marking it as recently used.
-     *
-     * @returns The stored item or `undefined`.
-     */
-    peek(key) {
-      const item = __privateGet(this, _cache).get(key) ?? __privateGet(this, _oldCache).get(key);
-      return item ? __privateMethod(this, _QuickLRU_instances, valueIfFresh_fn).call(this, key, item) : void 0;
-    }
-    /**
-     * Get the remaining time to live of an item, in milliseconds. Neither marks the item as recently used nor removes it if expired, so the result may be negative.
-     *
-     * @returns The remaining milliseconds, `Infinity` if the item never expires, or `undefined` if it is not in the cache.
-     */
-    expiresIn(key) {
-      const item = __privateGet(this, _cache).get(key) ?? __privateGet(this, _oldCache).get(key);
-      if (item) {
-        return item.expiry === void 0 ? Number.POSITIVE_INFINITY : item.expiry - Date.now();
-      }
-      return void 0;
-    }
-    /**
-     * Delete an item.
-     *
-     * @returns `true` if the item was removed, `false` if it did not exist.
-     */
-    delete(key) {
-      return __privateGet(this, _cache).delete(key) || __privateGet(this, _oldCache).delete(key);
-    }
-    /** Delete all items. */
-    clear() {
-      __privateGet(this, _cache).clear();
-      __privateGet(this, _oldCache).clear();
-    }
-    /** Update `maxSize` in place, evicting the least recently used items if the cache no longer fits. */
-    resize(maxSize) {
-      assertPositive("maxSize", maxSize);
-      const items = [...__privateMethod(this, _QuickLRU_instances, liveItemsAscending_fn).call(this)];
-      const removeCount = items.length - maxSize;
-      if (removeCount < 0) {
-        __privateSet(this, _cache, new Map(items));
-        __privateSet(this, _oldCache, /* @__PURE__ */ new Map());
-      } else {
-        __privateMethod(this, _QuickLRU_instances, emitEvictions_fn).call(this, items.slice(0, removeCount));
-        __privateMethod(this, _QuickLRU_instances, replaceWith_fn).call(this, items.slice(removeCount));
-      }
-      __privateSet(this, _maxSize, maxSize);
-    }
-    /**
-     * Evict the least recently used items. Always keeps at least one item.
-     *
-     * @param count - The number of items to evict.
-     */
-    evict(count = 1) {
-      if (!(count > 0)) {
-        return;
-      }
-      const items = [...__privateMethod(this, _QuickLRU_instances, liveItemsAscending_fn).call(this)];
-      const evictCount = Math.trunc(Math.min(count, items.length - 1));
-      if (evictCount > 0) {
-        __privateMethod(this, _QuickLRU_instances, emitEvictions_fn).call(this, items.slice(0, evictCount));
-        __privateMethod(this, _QuickLRU_instances, replaceWith_fn).call(this, items.slice(evictCount));
-      }
-    }
-    /** The stored item count, capped at `maxSize`. */
-    get size() {
-      return Math.min(__privateGet(this, _cache).size + __privateGet(this, _oldCache).size, __privateGet(this, _maxSize));
-    }
-    get maxSize() {
-      return __privateGet(this, _maxSize);
-    }
-    get maxAge() {
-      return __privateGet(this, _maxAge);
-    }
-    /** Iterate over all entries, oldest first. */
-    *entriesAscending() {
-      for (const [key, item] of __privateMethod(this, _QuickLRU_instances, liveItemsAscending_fn).call(this)) {
-        yield [key, item.value];
-      }
-    }
-    /** Iterate over all entries, newest first. */
-    *entriesDescending() {
-      for (const cache of [__privateGet(this, _cache), __privateGet(this, _oldCache)]) {
-        for (const [key, item] of [...cache].reverse()) {
-          if (!__privateMethod(this, _QuickLRU_instances, deleteIfExpired_fn).call(this, key, item)) {
-            yield [key, item.value];
-          }
-        }
-      }
-    }
-    /** Iterate over all entries, oldest first. Alias for `entriesAscending()`. */
-    entries() {
-      return this.entriesAscending();
-    }
-    [Symbol.iterator]() {
-      return this.entriesAscending();
-    }
-    *keys() {
-      for (const [key] of this) {
-        yield key;
-      }
-    }
-    *values() {
-      for (const [, value] of this) {
-        yield value;
-      }
-    }
-    forEach(callbackFunction, thisArgument = this) {
-      for (const [key, value] of this) {
-        callbackFunction.call(thisArgument, value, key, this);
-      }
-    }
-    // eslint-disable-next-line @typescript-eslint/class-literal-property-style
-    get [Symbol.toStringTag]() {
-      return "QuickLRU";
-    }
-    toString() {
-      return `QuickLRU(${this.size}/${this.maxSize})`;
-    }
-    [/* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom")]() {
-      return this.toString();
-    }
-  };
-  _cache = new WeakMap();
-  _oldCache = new WeakMap();
-  _maxSize = new WeakMap();
-  _maxAge = new WeakMap();
-  _onEviction = new WeakMap();
-  _QuickLRU_instances = new WeakSet();
-  emitEvictions_fn = function(items) {
-    const onEviction = __privateGet(this, _onEviction);
-    if (onEviction) {
-      for (const [key, item] of items) {
-        onEviction(key, item.value);
-      }
-    }
-  };
-  deleteIfExpired_fn = function(key, item) {
-    var _a;
-    if (item.expiry !== void 0 && item.expiry <= Date.now()) {
-      (_a = __privateGet(this, _onEviction)) == null ? void 0 : _a.call(this, key, item.value);
-      this.delete(key);
-      return true;
-    }
-    return false;
-  };
-  valueIfFresh_fn = function(key, item) {
-    return __privateMethod(this, _QuickLRU_instances, deleteIfExpired_fn).call(this, key, item) ? void 0 : item.value;
-  };
-  moveToRecent_fn = function(key, item) {
-    __privateGet(this, _oldCache).delete(key);
-    __privateGet(this, _cache).set(key, item);
-    if (__privateGet(this, _cache).size >= __privateGet(this, _maxSize)) {
-      const evicted = __privateGet(this, _oldCache);
-      __privateSet(this, _oldCache, __privateGet(this, _cache));
-      __privateSet(this, _cache, /* @__PURE__ */ new Map());
-      __privateMethod(this, _QuickLRU_instances, emitEvictions_fn).call(this, evicted);
-    }
-  };
-  replaceWith_fn = function(items) {
-    __privateSet(this, _oldCache, new Map(items));
-    __privateSet(this, _cache, /* @__PURE__ */ new Map());
-  };
-  liveItemsAscending_fn = function* () {
-    for (const cache of [__privateGet(this, _oldCache), __privateGet(this, _cache)]) {
-      for (const entry of cache) {
-        if (!__privateMethod(this, _QuickLRU_instances, deleteIfExpired_fn).call(this, ...entry)) {
-          yield entry;
-        }
-      }
-    }
-  };
-
-  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/long.js
-  var TWO_PWR_32_DBL = 2 ** 32;
-  function longFromBytesToUnsigned(source, i = 0) {
-    const low = source[i] | source[i + 1] << 8 | source[i + 2] << 16 | source[i + 3] << 24;
-    const high = source[i + 4] | source[i + 5] << 8 | source[i + 6] << 16 | source[i + 7] << 24;
-    return (high >>> 0) * TWO_PWR_32_DBL + (low >>> 0);
-  }
-
-  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/virtualOffset.js
-  var VirtualOffset = class {
-    constructor(blockPosition, dataPosition) {
-      __publicField(this, "blockPosition");
-      __publicField(this, "dataPosition");
-      this.blockPosition = blockPosition;
-      this.dataPosition = dataPosition;
-    }
-    toString() {
-      return `${this.blockPosition}:${this.dataPosition}`;
-    }
-    compareTo(b) {
-      return this.blockPosition - b.blockPosition || this.dataPosition - b.dataPosition;
-    }
-  };
-  function fromBytes(bytes, offset = 0) {
-    return new VirtualOffset(bytes[offset + 7] * 1099511627776 + bytes[offset + 6] * 4294967296 + bytes[offset + 5] * 16777216 + bytes[offset + 4] * 65536 + bytes[offset + 3] * 256 + bytes[offset + 2], bytes[offset + 1] << 8 | bytes[offset]);
-  }
-
-  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/util.js
-  function optimizeChunks(chunks, lowest) {
-    const n = chunks.length;
-    if (n === 0) {
-      return chunks;
-    }
-    let filtered;
-    if (lowest) {
-      const lowestBlock = lowest.blockPosition;
-      const lowestData = lowest.dataPosition;
-      filtered = [];
-      for (let i = 0; i < n; i++) {
-        const chunk = chunks[i];
-        const cmp = chunk.maxv.blockPosition - lowestBlock || chunk.maxv.dataPosition - lowestData;
-        if (cmp > 0) {
-          filtered.push(chunk);
-        }
-      }
-      if (filtered.length === 0) {
-        return filtered;
-      }
-    } else {
-      filtered = chunks;
-    }
-    filtered.sort((c0, c1) => {
-      const dif = c0.minv.blockPosition - c1.minv.blockPosition;
-      return dif === 0 ? c0.minv.dataPosition - c1.minv.dataPosition : dif;
-    });
-    const mergedChunks = [filtered[0]];
-    let lastMinBlock = filtered[0].minv.blockPosition;
-    let lastMaxBlock = filtered[0].maxv.blockPosition;
-    for (let i = 1; i < filtered.length; i++) {
-      const chunk = filtered[i];
-      const chunkMinBlock = chunk.minv.blockPosition;
-      const chunkMaxBlock = chunk.maxv.blockPosition;
-      if (chunkMinBlock - lastMaxBlock < 65e3 && chunkMaxBlock - lastMinBlock < 5e6) {
-        const lastChunk = mergedChunks.at(-1);
-        const cmp = chunkMaxBlock - lastMaxBlock || chunk.maxv.dataPosition - lastChunk.maxv.dataPosition;
-        if (cmp > 0) {
-          mergedChunks[mergedChunks.length - 1] = new Chunk(lastChunk.minv, chunk.maxv, lastChunk.bin, chunk.endPosition);
-          lastMaxBlock = chunkMaxBlock;
-        }
-      } else {
-        mergedChunks.push(chunk);
-        lastMinBlock = chunkMinBlock;
-        lastMaxBlock = chunkMaxBlock;
-      }
-    }
-    return makeDisjoint(mergedChunks);
-  }
-  function makeDisjoint(chunks) {
-    const out = [chunks[0]];
-    for (let i = 1; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      const prevMax = out.at(-1).maxv;
-      const cmp = chunk.minv.blockPosition - prevMax.blockPosition || chunk.minv.dataPosition - prevMax.dataPosition;
-      if (cmp >= 0) {
-        out.push(chunk);
-        continue;
-      }
-      const stillHasData = chunk.maxv.blockPosition - prevMax.blockPosition || chunk.maxv.dataPosition - prevMax.dataPosition;
-      if (stillHasData > 0) {
-        out.push(new Chunk(prevMax, chunk.maxv, chunk.bin, chunk.endPosition));
-      }
-    }
-    return out;
-  }
-  function clampChunkEnds(chunks, extraBoundaries = []) {
-    const boundaries = [...extraBoundaries];
-    for (const c of chunks) {
-      boundaries.push(c.minv.blockPosition, c.maxv.blockPosition);
-    }
-    boundaries.sort((a, b) => a - b);
-    for (const c of chunks) {
-      const max = c.maxv.blockPosition;
-      let lo = 0;
-      let hi = boundaries.length;
-      while (lo < hi) {
-        const mid = lo + hi >>> 1;
-        if (boundaries[mid] > max) {
-          hi = mid;
-        } else {
-          lo = mid + 1;
-        }
-      }
-      if (lo < boundaries.length) {
-        c.endPosition = Math.min(c.endPosition, boundaries[lo]);
-      }
-    }
-  }
-  function minVirtualOffset(bytes, offset, count, current, stride = 8) {
-    let minBlock = current ? current.blockPosition : Infinity;
-    let minData = current ? current.dataPosition : 0;
-    let found = false;
-    for (let i = 0; i < count; i++) {
-      const p = offset + i * stride;
-      const block = bytes[p + 7] * 1099511627776 + bytes[p + 6] * 4294967296 + bytes[p + 5] * 16777216 + bytes[p + 4] * 65536 + bytes[p + 3] * 256 + bytes[p + 2];
-      const data = bytes[p + 1] << 8 | bytes[p];
-      if (block < minBlock || block === minBlock && data < minData) {
-        minBlock = block;
-        minData = data;
-        found = true;
-      }
-    }
-    return found ? new VirtualOffset(minBlock, minData) : current;
-  }
-  function parseNameBytes(namesBytes) {
-    const decoder = new TextDecoder("utf-8");
-    const refIdToName = [];
-    const refNameToId = {};
-    let currRefId = 0;
-    let pos = 0;
-    while (pos < namesBytes.length) {
-      const end = namesBytes.indexOf(0, pos);
-      if (end === -1) {
-        break;
-      }
-      if (end > pos) {
-        const refName = decoder.decode(namesBytes.subarray(pos, end));
-        refIdToName[currRefId] = refName;
-        refNameToId[refName] = currRefId;
-      }
-      pos = end + 1;
-      currRefId++;
-    }
-    return { refNameToId, refIdToName };
-  }
-  var tabixFormats = {
-    0: "generic",
-    1: "SAM",
-    2: "VCF",
-    3: "GAF"
-  };
-  function parseAuxData(bytes, offset) {
-    const dataView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    const formatFlags = dataView.getInt32(offset, true);
-    const coordinateType = formatFlags & 65536 ? "zero-based-half-open" : "1-based-closed";
-    const format = tabixFormats[formatFlags & 15];
-    if (!format) {
-      throw new Error(`invalid Tabix preset format flags ${formatFlags}`);
-    }
-    const columnNumbers = {
-      ref: dataView.getInt32(offset + 4, true),
-      start: dataView.getInt32(offset + 8, true),
-      end: dataView.getInt32(offset + 12, true)
-    };
-    const metaValue = dataView.getInt32(offset + 16, true);
-    const metaChar = metaValue ? String.fromCharCode(metaValue) : void 0;
-    const skipLines = dataView.getInt32(offset + 20, true);
-    const nameSectionLength = dataView.getInt32(offset + 24, true);
-    const { refIdToName, refNameToId } = parseNameBytes(bytes.subarray(offset + 28, offset + 28 + nameSectionLength));
-    return {
-      refIdToName,
-      refNameToId,
-      skipLines,
-      metaChar,
-      columnNumbers,
-      format,
-      coordinateType
-    };
-  }
-  function parsePseudoBin(bytes, offset) {
-    return { lineCount: longFromBytesToUnsigned(bytes, offset) };
-  }
-  function memoizeByRefId(getIndices, maxSize = 5) {
-    const lru = new QuickLRU({ maxSize });
-    return (refId) => {
-      const cached = lru.get(refId);
-      if (cached !== void 0) {
-        return cached;
-      }
-      const result = getIndices(refId);
-      if (result !== void 0) {
-        lru.set(refId, result);
-      }
-      return result;
-    };
-  }
-  function concatUint8Array2(args) {
-    let total = 0;
-    for (const entry of args) {
-      total += entry.length;
-    }
-    const merged = new Uint8Array(total);
-    let offset = 0;
-    for (const entry of args) {
-      merged.set(entry, offset);
-      offset += entry.length;
-    }
-    return merged;
-  }
-  var NEWLINE = 10;
-  function forEachLinePiece(segments, base, visit) {
-    let carry;
-    let carryAt = 0;
-    for (const segment of segments) {
-      let from = 0;
-      if (carry) {
-        const nl = segment.indexOf(NEWLINE);
-        if (nl === -1) {
-          carry = concatUint8Array2([carry, segment]);
-          base += segment.length;
-          continue;
-        }
-        if (visit(concatUint8Array2([carry, segment.subarray(0, nl + 1)]), carryAt)) {
-          return true;
-        }
-        from = nl + 1;
-        carry = void 0;
-      }
-      const last = segment.lastIndexOf(NEWLINE);
-      if (last >= from && visit(segment.subarray(from, last + 1), base + from)) {
-        return true;
-      }
-      const tail = Math.max(from, last + 1);
-      if (tail < segment.length) {
-        carry = segment.slice(tail);
-        carryAt = base + tail;
-      }
-      base += segment.length;
-    }
-    return false;
-  }
-  function sliceSegments(segments, from, to) {
-    const out = [];
-    let at = 0;
-    for (const segment of segments) {
-      const lo = Math.max(from - at, 0);
-      const hi = Math.min(to - at, segment.length);
-      if (lo < hi) {
-        out.push(segment.subarray(lo, hi));
-      }
-      at += segment.length;
-    }
-    return out;
-  }
-  function chunkBufferOffset(cpositions, dpositions, v) {
-    let lo = 0;
-    let hi = cpositions.length - 1;
-    while (lo < hi) {
-      const mid = lo + hi + 1 >>> 1;
-      if (cpositions[mid] <= v.blockPosition) {
-        lo = mid;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    const blockStart = lo === 0 ? 0 : dpositions[lo];
-    return blockStart - dpositions[0] + v.dataPosition;
-  }
-
-  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/indexFile.js
-  function maxOffset(binIndex, end, minShift, depth) {
-    if (end > 2 ** (minShift + depth * 3)) {
-      return void 0;
-    }
-    const binCount = (8 ** (depth + 1) - 1) / 7;
-    let bin = (8 ** depth - 1) / 7 + Math.floor((end - 1) / 2 ** minShift) + 1;
-    if (bin >= binCount) {
-      bin = 0;
-    }
-    for (; ; ) {
-      while (bin % 8 === 1) {
-        bin = (bin - 1) / 8;
-      }
-      if (bin === 0) {
-        return void 0;
-      }
-      const chunks = binIndex[bin];
-      if (chunks?.length) {
-        let lowest = chunks[0].minv;
-        for (let i = 1; i < chunks.length; i++) {
-          const minv = chunks[i].minv;
-          if (minv.compareTo(lowest) < 0) {
-            lowest = minv;
-          }
-        }
-        return lowest;
-      }
-      bin++;
-    }
-  }
-  function refIdFor(indexData, refName) {
-    return indexData.format === "GAF" ? 0 : indexData.refNameToId[refName];
-  }
-  var IndexFile = class {
-    constructor({ filehandle }) {
-      __publicField(this, "filehandle");
-      /**
-       * The parsed index, as a shared read — see {@link parse}. One entry, never
-       * evicted, which is what a memo is.
-       */
-      __publicField(this, "parseCache", new SharedReadCache({}));
-      this.filehandle = filehandle;
-    }
-    /**
-     * The whole index file, decompressed, with a DataView over it. Both .tbi and
-     * .csi are bgzf-compressed and read whole, so both parsers start here.
-     */
-    async readIndexBytes(opts) {
-      const buf = await this.filehandle.readFile({
-        signal: opts.signal,
-        onProgress: opts.onProgress
-      });
-      const bytes = await unzip(buf);
-      return {
-        bytes,
-        dataView: new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-      };
-    }
-    /** @internal */
-    async lineCount(refName, opts = {}) {
-      const indexData = await this.parse(opts);
-      const refId = refIdFor(indexData, refName);
-      if (refId === void 0) {
-        return -1;
-      }
-      return indexData.indices(refId)?.stats?.lineCount ?? -1;
-    }
-    /** @internal */
-    async getMetadata(opts = {}) {
-      const { indices: _indices, ...rest } = await this.parse(opts);
-      return rest;
-    }
-    /**
-     * The chunks of the data file that may hold records overlapping the region.
-     * The two index formats differ only in their binning scheme and in where
-     * they keep the pruning floor, which is what the two hooks above supply.
-     * The ceiling, `maxOffset`, needs only the bins, so it serves both.
-     *
-     * @internal
-     */
-    async blocksForRange(refName, min, max, opts = {}) {
-      const indexData = await this.parse(opts);
-      const refId = refIdFor(indexData, refName);
-      if (refId === void 0) {
-        return [];
-      }
-      const ba = indexData.indices(refId);
-      if (!ba) {
-        return [];
-      }
-      if (indexData.format === "GAF") {
-        min = Math.max(min - 1, 0);
-      }
-      const chunks = [];
-      for (const [start, end] of this.reg2bins(min, max, indexData)) {
-        for (let bin = start; bin <= end; bin++) {
-          const binChunks = ba.binIndex[bin];
-          if (binChunks) {
-            for (const c of binChunks) {
-              chunks.push(c);
-            }
-          }
-        }
-      }
-      const lowest = this.lowestOffset(ba, min, indexData);
-      const merged = optimizeChunks(chunks, lowest);
-      const past = maxOffset(ba.binIndex, max, indexData.minShift, indexData.depth);
-      if (past) {
-        let n = merged.length;
-        while (n > 0 && merged[n - 1].minv.compareTo(past) >= 0) {
-          n--;
-        }
-        merged.length = n;
-      }
-      const first = merged[0];
-      if (first && lowest) {
-        const span = 2 ** (indexData.minShift + 3);
-        const window = this.lowestOffset(ba, Math.floor(min / span) * span, indexData);
-        const floor = window && window.compareTo(lowest) < 0 ? window : lowest;
-        if (first.minv.compareTo(floor) < 0) {
-          merged[0] = new Chunk(floor, first.maxv, first.bin, first.endPosition);
-        }
-      }
-      return merged;
-    }
-    // SYNC: ~/src/gmod/bam-js/src/indexFile.ts parse — same shape and the same
-    // reasoning below.
-    /**
-     * Parse the index, or join the parse already running.
-     *
-     * The index is downloaded and parsed once for the life of this object, so it
-     * is the one read here that is shared between queries — and therefore the one
-     * place a cancellation can leak from the query that asked for it to a query
-     * that did not. `_parse` hands `opts` straight to `readIndexBytes`, so a bare
-     * memoized promise makes the first query to arrive the owner of a read every
-     * other query depends on: when it pans away, every concurrent query fails
-     * with its abort.
-     *
-     * The same cache `ChunkCache` uses, for the same reason and with the same
-     * rule: the parse runs under a signal of its own and is cancelled only once
-     * every caller waiting on it has given up, so one query's abort is reported
-     * to that query alone and a bystander gets the parse already in flight rather
-     * than having to re-read the index. A rejection is dropped rather than
-     * cached, so a transient failure does not poison the index for the life of
-     * the file.
-     *
-     * The fill is per call rather than on the cache so that the caller who starts
-     * the parse has its `onProgress` reach `readIndexBytes` — the index is a
-     * whole-file read, and a determinate "downloading index" bar is what that
-     * callback exists for.
-     *
-     * @internal
-     */
-    parse(opts = {}) {
-      return this.parseCache.get("index", opts.signal, (signal) => this._parse({ ...opts, signal }));
-    }
-    /** @internal */
-    async hasRefSeq(seqId, opts = {}) {
-      const idx = await this.parse(opts);
-      return !!idx.indices(seqId)?.binIndex;
-    }
-  };
-
-  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/csi.js
-  var CSI1_MAGIC = 21582659;
-  var CSI2_MAGIC = 38359875;
-  function lshift(num, bits) {
-    return num * 2 ** bits;
-  }
-  function rshift(num, bits) {
-    return Math.floor(num / 2 ** bits);
-  }
-  var CSI = class extends IndexFile {
-    /** @internal */
-    async _parse(opts = {}) {
-      const { bytes, dataView } = await this.readIndexBytes(opts);
-      const magic = dataView.getUint32(0, true);
-      let csiVersion;
-      if (magic === CSI1_MAGIC) {
-        csiVersion = 1;
-      } else if (magic === CSI2_MAGIC) {
-        csiVersion = 2;
-      } else {
-        throw new Error(`Not a CSI file (magic=${magic})`);
-      }
-      const minShift = dataView.getInt32(4, true);
-      const depth = dataView.getInt32(8, true);
-      const maxBinNumber = (8 ** (depth + 1) - 1) / 7;
-      const maxRefLength = 2 ** (minShift + depth * 3);
-      const auxLength = dataView.getInt32(12, true);
-      const isGaf = auxLength >= 28 && (dataView.getInt32(16, true) & 15) === 3;
-      if (auxLength < 30 && !isGaf) {
-        throw new Error("CSI index has no tabix header, so it names no references; it may be a BAM or BCF index");
-      }
-      const aux = parseAuxData(bytes, 16);
-      const refCount = dataView.getInt32(16 + auxLength, true);
-      let curr = 16 + auxLength + 4;
-      let firstDataLine;
-      const offsets = [];
-      for (let i = 0; i < refCount; i++) {
-        offsets.push(curr);
-        const binCount = dataView.getInt32(curr, true);
-        curr += 4;
-        for (let j = 0; j < binCount; j++) {
-          const bin = dataView.getUint32(curr, true);
-          curr += 4;
-          if (bin > maxBinNumber) {
-            curr += 28 + 16;
-          } else {
-            firstDataLine = minVirtualOffset(bytes, curr, 1, firstDataLine);
-            curr += 8;
-            const chunkCount = dataView.getInt32(curr, true);
-            curr += 4 + 16 * chunkCount;
-          }
-        }
-      }
-      function getIndices(refId) {
-        const start = offsets[refId];
-        if (start === void 0) {
-          return void 0;
-        }
-        let pos = start;
-        const binCount = dataView.getInt32(pos, true);
-        pos += 4;
-        const binIndex = {};
-        const loffsets = {};
-        let stats;
-        for (let j = 0; j < binCount; j++) {
-          const bin = dataView.getUint32(pos, true);
-          pos += 4;
-          if (bin > maxBinNumber) {
-            stats = parsePseudoBin(bytes, pos + 28);
-            pos += 28 + 16;
-          } else {
-            loffsets[bin] = fromBytes(bytes, pos);
-            pos += 8;
-            const chunkCount = dataView.getInt32(pos, true);
-            pos += 4;
-            const chunks = Array.from({ length: chunkCount });
-            for (let k = 0; k < chunkCount; k++) {
-              chunks[k] = new Chunk(fromBytes(bytes, pos), fromBytes(bytes, pos + 8), bin);
-              pos += 16;
-            }
-            binIndex[bin] = chunks;
-          }
-        }
-        clampChunkEnds(Object.values(binIndex).flat());
-        return { binIndex, loffsets, stats };
-      }
-      return {
-        ...aux,
-        csi: true,
-        refCount,
-        maxBlockSize: 1 << 16,
-        firstDataLine,
-        csiVersion,
-        indices: memoizeByRefId(getIndices),
-        minShift,
-        depth,
-        maxBinNumber,
-        maxRefLength
-      };
-    }
-    /**
-     * CSI's equivalent of the BAI/TBI linear index: the loffset of the deepest
-     * indexed bin covering `beg` is the earliest virtual offset any record
-     * overlapping `beg` can have, so chunks ending at or before it are dead.
-     * Walks leaf -> previous sibling -> parent until an indexed bin is found.
-     * SYNC: htslib hts_itr_query min_off computation
-     */
-    lowestOffset(ref, beg, { minShift, depth }) {
-      const { loffsets } = ref;
-      let found;
-      if (loffsets) {
-        let bin = (lshift(1, 3 * depth) - 1) / 7 + rshift(Math.max(beg, 0), minShift);
-        while (found === void 0 && bin > 0) {
-          found = loffsets[bin];
-          if (found === void 0) {
-            const parent = Math.floor((bin - 1) / 8);
-            const firstChild = parent * 8 + 1;
-            bin = bin > firstChild ? bin - 1 : parent;
-          }
-        }
-        found ?? (found = loffsets[0]);
-      }
-      return found;
-    }
-    reg2bins(beg, end, { minShift, depth, maxBinNumber }) {
-      beg = Math.max(beg, 0);
-      const maxPos = 2 ** (minShift + depth * 3);
-      if (end > maxPos) {
-        end = maxPos;
-      }
-      end -= 1;
-      let l = 0;
-      let t = 0;
-      let s = minShift + depth * 3;
-      const bins = [];
-      for (; l <= depth; s -= 3, t += lshift(1, l * 3), l += 1) {
-        const b = t + rshift(beg, s);
-        const e = t + rshift(end, s);
-        if (e - b + bins.length > maxBinNumber) {
-          throw new Error(`query ${beg}-${end} is too large for current binning scheme (shift ${minShift}, depth ${depth}), try a smaller query or a coarser index binning scheme`);
-        }
-        bins.push([b, e]);
-      }
-      return bins;
-    }
-  };
-
-  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/tbi.js
-  var TBI_MAGIC = 21578324;
-  var TBI_DEPTH = 5;
-  var TBI_MIN_SHIFT = 14;
-  var TBI_MAX_REF_LENGTH = 2 ** (TBI_MIN_SHIFT + TBI_DEPTH * 3);
-  function clampToRefLength(pos) {
-    return Math.min(Math.max(pos, 0), TBI_MAX_REF_LENGTH);
-  }
-  var TabixIndex = class extends IndexFile {
-    /**
-     * The bins that may overlap [beg, end) (zero-based half-open). TBI's scheme
-     * is CSI's with minShift/depth fixed, so this is CSI's reg2bins with the
-     * levels unrolled and its float shifts replaced by int32 ones.
-     */
-    reg2bins(beg, end) {
-      if (beg > TBI_MAX_REF_LENGTH) {
-        console.warn("querying outside of possible tabix range");
-      }
-      const b = clampToRefLength(beg);
-      const e = Math.min(end, TBI_MAX_REF_LENGTH) - 1;
-      const bins = [];
-      if (b <= e) {
-        bins.push([0, 0], [1 + (b >> 26), 1 + (e >> 26)], [9 + (b >> 23), 9 + (e >> 23)], [73 + (b >> 20), 73 + (e >> 20)], [585 + (b >> 17), 585 + (e >> 17)], [4681 + (b >> 14), 4681 + (e >> 14)]);
-      }
-      return bins;
-    }
-    /**
-     * The linear index is monotonically non-decreasing, so the minimum virtual
-     * offset for chunks that could overlap [beg, ...) is its entry for beg.
-     * SYNC: ~/src/gmod/bam-js/src/bai.ts getLowestChunk
-     */
-    lowestOffset(ref, beg) {
-      const linearIndex = ref.linearIndex;
-      return linearIndex?.[Math.min(clampToRefLength(beg) >> TBI_MIN_SHIFT, linearIndex.length - 1)];
-    }
-    /** @internal */
-    async _parse(opts = {}) {
-      const { bytes, dataView } = await this.readIndexBytes(opts);
-      if (dataView.getUint32(0, true) !== TBI_MAGIC) {
-        throw new Error("Not a TBI file");
-      }
-      const refCount = dataView.getUint32(4, true);
-      const maxBinNumber = ((1 << (TBI_DEPTH + 1) * 3) - 1) / 7;
-      const { refNameToId, refIdToName, coordinateType, format, columnNumbers, metaChar, skipLines } = parseAuxData(bytes, 8);
-      const nameSectionLength = dataView.getInt32(32, true);
-      let curr = 36 + nameSectionLength;
-      let firstDataLine;
-      const offsets = [];
-      for (let i = 0; i < refCount; i++) {
-        offsets.push(curr);
-        const binCount = dataView.getInt32(curr, true);
-        curr += 4;
-        for (let j = 0; j < binCount; j++) {
-          const bin = dataView.getUint32(curr, true);
-          curr += 4;
-          const chunkCount = dataView.getInt32(curr, true);
-          curr += 4;
-          if (bin > maxBinNumber + 1) {
-            throw new Error("tabix index contains too many bins, please use a CSI index");
-          }
-          if (bin <= maxBinNumber) {
-            firstDataLine = minVirtualOffset(bytes, curr, chunkCount, firstDataLine, 16);
-          }
-          curr += 16 * chunkCount;
-        }
-        const linearCount = dataView.getInt32(curr, true);
-        curr += 4 + 8 * linearCount;
-      }
-      function getIndices(refId) {
-        const start = offsets[refId];
-        if (start === void 0) {
-          return void 0;
-        }
-        let pos = start;
-        const binCount = dataView.getInt32(pos, true);
-        pos += 4;
-        const binIndex = {};
-        let stats;
-        for (let j = 0; j < binCount; j++) {
-          const bin = dataView.getUint32(pos, true);
-          pos += 4;
-          if (bin > maxBinNumber + 1) {
-            throw new Error("tabix index contains too many bins, please use a CSI index");
-          } else if (bin === maxBinNumber + 1) {
-            const chunkCount = dataView.getInt32(pos, true);
-            pos += 4;
-            if (chunkCount === 2) {
-              stats = parsePseudoBin(bytes, pos + 16);
-            }
-            pos += 16 * chunkCount;
-          } else {
-            const chunkCount = dataView.getInt32(pos, true);
-            pos += 4;
-            const chunks = Array.from({ length: chunkCount });
-            for (let k = 0; k < chunkCount; k++) {
-              chunks[k] = new Chunk(fromBytes(bytes, pos), fromBytes(bytes, pos + 8), bin);
-              pos += 16;
-            }
-            binIndex[bin] = chunks;
-          }
-        }
-        const linearCount = dataView.getInt32(pos, true);
-        pos += 4;
-        const linearIndex = Array.from({ length: linearCount });
-        for (let k = 0; k < linearCount; k++) {
-          linearIndex[k] = fromBytes(bytes, pos);
-          pos += 8;
-        }
-        clampChunkEnds(Object.values(binIndex).flat(), linearIndex.map((v) => v.blockPosition));
-        return { binIndex, linearIndex, stats };
-      }
-      return {
-        indices: memoizeByRefId(getIndices),
-        metaChar,
-        minShift: TBI_MIN_SHIFT,
-        depth: TBI_DEPTH,
-        maxBinNumber,
-        maxRefLength: TBI_MAX_REF_LENGTH,
-        skipLines,
-        firstDataLine,
-        columnNumbers,
-        coordinateType,
-        format,
-        refIdToName,
-        refNameToId,
-        maxBlockSize: 1 << 16
-      };
-    }
-  };
-
-  // node_modules/.pnpm/@gmod+tabix@3.13.1/node_modules/@gmod/tabix/esm/tabixIndexedFile.js
-  var TAB = 9;
-  var NEWLINE2 = 10;
-  var CARRIAGE_RETURN = 13;
-  var SEMICOLON = 59;
-  var LESS_THAN = 60;
-  var GREATER_THAN = 62;
-  var MAX_READ_AHEAD_CHUNKS = 6;
-  var DEFAULT_CHUNK_CACHE_BYTES = 1024 * 2 ** 20;
-  var DEFAULT_CHUNK_CACHE_IDLE_TIMEOUT_MS = 3 * 60 * 1e3;
-  function resolveFilehandle(filehandle, path, url) {
-    if (filehandle) {
-      return filehandle;
-    }
-    if (path) {
-      return new LocalFile(path);
-    }
-    if (url) {
-      return new RemoteFile(url);
-    }
-    throw new TypeError("must provide either filehandle, path, or url");
-  }
-  function resolveIndex({ tbiFilehandle, csiFilehandle, tbiPath, csiPath, tbiUrl, csiUrl, path, url }) {
-    if (tbiFilehandle) {
-      return new TabixIndex({ filehandle: tbiFilehandle });
-    }
-    if (csiFilehandle) {
-      return new CSI({ filehandle: csiFilehandle });
-    }
-    if (tbiPath) {
-      return new TabixIndex({ filehandle: new LocalFile(tbiPath) });
-    }
-    if (csiPath) {
-      return new CSI({ filehandle: new LocalFile(csiPath) });
-    }
-    if (csiUrl) {
-      return new CSI({ filehandle: new RemoteFile(csiUrl) });
-    }
-    if (tbiUrl) {
-      return new TabixIndex({ filehandle: new RemoteFile(tbiUrl) });
-    }
-    if (path) {
-      return new TabixIndex({ filehandle: new LocalFile(`${path}.tbi`) });
-    }
-    if (url) {
-      return new TabixIndex({ filehandle: new RemoteFile(`${url}.tbi`) });
-    }
-    throw new TypeError("must provide one of tbiFilehandle, tbiPath, csiFilehandle, csiPath, tbiUrl, csiUrl");
-  }
-  function calculateFileOffset(cpositions, dpositions, pos, blockStart, minvDataPosition) {
-    return cpositions[pos] * (1 << 8) + (blockStart - dpositions[pos]) + minvDataPosition + 1;
-  }
-  function getVcfEnd(buffer, startCoordinate, refStart, refEnd, infoStart, infoEnd, altEnd) {
-    const refLen = refEnd - refStart;
-    let endCoordinate = startCoordinate + refLen;
-    let svlen = 0;
-    if (buffer[infoStart] === 46) {
-      return endCoordinate;
-    }
-    let fieldStart = infoStart;
-    for (let i = infoStart; i <= infoEnd; i++) {
-      if (i === infoEnd || buffer[i] === SEMICOLON) {
-        const fieldLen = i - fieldStart;
-        if (fieldLen >= 10 && buffer[fieldStart] === 83 && // S
-        buffer[fieldStart + 1] === 86 && // V
-        buffer[fieldStart + 2] === 84 && // T
-        buffer[fieldStart + 3] === 89 && // Y
-        buffer[fieldStart + 4] === 80 && // P
-        buffer[fieldStart + 5] === 69 && // E
-        buffer[fieldStart + 6] === 61 && // =
-        buffer[fieldStart + 7] === 84 && // T
-        buffer[fieldStart + 8] === 82 && // R
-        buffer[fieldStart + 9] === 65) {
-          return startCoordinate + 1;
-        }
-        if (fieldLen >= 4 && buffer[fieldStart] === 69 && // E
-        buffer[fieldStart + 1] === 78 && // N
-        buffer[fieldStart + 2] === 68 && // D
-        buffer[fieldStart + 3] === 61) {
-          const end = parseIntFromBytes(buffer, fieldStart + 4, i);
-          if (end > startCoordinate) {
-            endCoordinate = end;
-          }
-        } else if (fieldLen >= 6 && buffer[fieldStart] === 83 && // S
-        buffer[fieldStart + 1] === 86 && // V
-        buffer[fieldStart + 2] === 76 && // L
-        buffer[fieldStart + 3] === 69 && // E
-        buffer[fieldStart + 4] === 78 && // N
-        buffer[fieldStart + 5] === 61) {
-          svlen = maxSvlenOnRef(buffer, fieldStart + 6, i, refEnd + 1, altEnd);
-        }
-        fieldStart = i + 1;
-      }
-    }
-    return Math.max(endCoordinate, startCoordinate + svlen);
-  }
-  var COMMA = 44;
-  function svlenSpansRef(buffer, start, end) {
-    if (end - start < 5 || buffer[start] !== 60 || buffer[end - 1] !== 62) {
-      return false;
-    }
-    const after = buffer[start + 4];
-    if (after !== 62 && after !== 58) {
-      return false;
-    }
-    const a = buffer[start + 1];
-    const b = buffer[start + 2];
-    const c = buffer[start + 3];
-    return a === 67 && b === 78 && c === 86 || // CNV
-    a === 68 && b === 69 && c === 76 || // DEL
-    a === 68 && b === 85 && c === 80 || // DUP
-    a === 73 && b === 78 && c === 86;
-  }
-  function maxSvlenOnRef(buffer, valuesStart, valuesEnd, altStart, altEnd) {
-    let max = 0;
-    let value = valuesStart;
-    let alt = altStart;
-    while (value < valuesEnd && alt < altEnd) {
-      let valueEnd = buffer.indexOf(COMMA, value);
-      if (valueEnd === -1 || valueEnd > valuesEnd) {
-        valueEnd = valuesEnd;
-      }
-      let alleleEnd = buffer.indexOf(COMMA, alt);
-      if (alleleEnd === -1 || alleleEnd > altEnd) {
-        alleleEnd = altEnd;
-      }
-      if (svlenSpansRef(buffer, alt, alleleEnd)) {
-        const len = parseIntFromBytes(buffer, buffer[value] === 45 ? value + 1 : value, valueEnd);
-        if (len > max) {
-          max = len;
-        }
-      }
-      value = valueEnd + 1;
-      alt = alleleEnd + 1;
-    }
-    return max;
-  }
-  var textDecoder = new TextDecoder();
-  function trimToMetaLines(bytes, metaChar) {
-    let lastNewline = -1;
-    const metaByte = metaChar.charCodeAt(0);
-    for (let i = 0, l = bytes.length; i < l; i++) {
-      const byte = bytes[i];
-      if (i === lastNewline + 1 && byte !== metaByte) {
-        break;
-      }
-      if (byte === NEWLINE2) {
-        lastNewline = i;
-      }
-    }
-    return bytes.subarray(0, lastNewline + 1);
-  }
-  function firstLines(bytes, count) {
-    let end = 0;
-    for (let i = 0; i < count; i++) {
-      const n = bytes.indexOf(NEWLINE2, end);
-      if (n === -1) {
-        end = bytes.length;
-        break;
-      }
-      end = n + 1;
-    }
-    return textDecoder.decode(bytes.subarray(0, end)).split(/\r?\n/).slice(0, count);
-  }
-  function parseIntFromBytes(buffer, start, end) {
-    let val = 0;
-    for (let i = start; i < end; i++) {
-      const c = buffer[i];
-      if (c >= 48 && c <= 57) {
-        val = val * 10 + (c - 48);
-      } else {
-        break;
-      }
-    }
-    return val;
-  }
-  function scanGafChunk(buffer, base, cpositions, dpositions, minvDataPosition, { start, end, pathCol, metaCharCode, decoder, callback }) {
-    let blockStart = 0;
-    let pos = 0;
-    while (blockStart < buffer.length) {
-      const n = buffer.indexOf(NEWLINE2, blockStart);
-      if (n === -1) {
-        break;
-      }
-      const lineStart = blockStart;
-      blockStart = n + 1;
-      const target = lineStart + base + minvDataPosition;
-      while (pos < dpositions.length && target >= dpositions[pos]) {
-        pos++;
-      }
-      if (buffer[lineStart] === metaCharCode) {
-        continue;
-      }
-      let pathStart = lineStart;
-      for (let i2 = 1; i2 < pathCol; i2++) {
-        const t = buffer.indexOf(TAB, pathStart);
-        if (t === -1 || t >= n) {
-          pathStart = n;
-          break;
-        }
-        pathStart = t + 1;
-      }
-      const first = buffer[pathStart];
-      if (first !== GREATER_THAN && first !== LESS_THAN) {
-        continue;
-      }
-      let pathEnd = buffer.indexOf(TAB, pathStart);
-      if (pathEnd === -1 || pathEnd > n) {
-        pathEnd = n;
-      }
-      let min = Infinity;
-      let max = -1;
-      let i = pathStart;
-      while (i < pathEnd) {
-        let id = 0;
-        let j = i + 1;
-        for (; j < pathEnd; j++) {
-          const digit = buffer[j] - 48;
-          if (digit < 0 || digit > 9) {
-            break;
-          }
-          id = id * 10 + digit;
-        }
-        if (id < min) {
-          min = id;
-        }
-        if (id > max) {
-          max = id;
-        }
-        i = j;
-      }
-      if (min >= end) {
-        return true;
-      }
-      if (max >= start) {
-        const lineEnd = buffer[n - 1] === CARRIAGE_RETURN ? n - 1 : n;
-        callback(decoder.decode(buffer.subarray(lineStart, lineEnd)), calculateFileOffset(cpositions, dpositions, pos, lineStart + base, minvDataPosition), min, max + 1);
-      }
-    }
-    return false;
-  }
-  var TabixIndexedFile = class {
-    constructor({ path, filehandle, url, tbiPath, tbiUrl, tbiFilehandle, csiPath, csiUrl, csiFilehandle, chunkCacheSize = DEFAULT_CHUNK_CACHE_BYTES, chunkCacheIdleTimeoutMs = DEFAULT_CHUNK_CACHE_IDLE_TIMEOUT_MS, chunkCacheBudget, bgzfWorkerPool }) {
-      __publicField(this, "filehandle");
-      __publicField(this, "index");
-      __publicField(this, "chunkCache");
-      // Every chunk handed to the cache, by key, so a later chunk lying inside one
-      // can read it instead of fetching its own span. withCachedContainers prunes
-      // the entries the cache has dropped.
-      __publicField(this, "requested", /* @__PURE__ */ new Map());
-      /**
-       * The parsed header, as a shared read — see {@link getParsedHeader}. One
-       * entry, never evicted, which is what a memo is.
-       */
-      __publicField(this, "headerCache", new SharedReadCache({}));
-      /** see the constructor option of the same name */
-      __publicField(this, "bgzfWorkerPool");
-      this.bgzfWorkerPool = bgzfWorkerPool;
-      this.filehandle = resolveFilehandle(filehandle, path, url);
-      this.index = resolveIndex({
-        tbiFilehandle,
-        csiFilehandle,
-        tbiPath,
-        csiPath,
-        tbiUrl,
-        csiUrl,
-        path,
-        url
-      });
-      this.chunkCache = new SharedReadCache({
-        maxSize: chunkCacheSize,
-        // decompressed bytes, not entry count: we fetch compressed and cache
-        // decompressed, and an entry is a whole chunk
-        sizeOf: (read) => {
-          let bytes = 0;
-          for (const segment of read.segments) {
-            bytes += segment.byteLength;
-          }
-          return bytes;
-        },
-        cacheKey: (chunk) => chunk.toString(),
-        idleTimeoutMs: chunkCacheIdleTimeoutMs,
-        budget: chunkCacheBudget,
-        fill: (chunk, signal) => this.readChunk(chunk, { signal })
-      });
-    }
-    /**
-     * Drops every decompressed chunk held by the cache, and stops the idle sweep
-     * until something is cached again.
-     *
-     * `chunkCacheIdleTimeoutMs` reclaims a view the user has wandered away from;
-     * this is for a consumer that knows it is finished — a closed track, a
-     * changed assembly — and should not have to wait it out.
-     */
-    clearChunkCache() {
-      this.chunkCache.clear();
-      this.requested.clear();
-    }
-    /**
-     * Swaps each chunk for the smallest cached or in-flight chunk that contains
-     * it, so a pan whose chunk starts later in an entry already read reuses it.
-     * The scan reads only the wanted chunk's span of the container, so a query
-     * returns the same lines whatever the cache holds. A container that would
-     * overlap a neighbouring chunk stays unused, since the overlap would yield
-     * its lines twice. See docs/optimizations.md.
-     *
-     * `has` builds a string key, so the loop calls it only on a chunk that
-     * already contains this one, and a sweep prunes dropped entries once they
-     * outnumber the cache.
-     */
-    withCachedContainers(chunks) {
-      if (this.requested.size > 2 * this.chunkCache.size) {
-        for (const [key, held] of this.requested) {
-          if (!this.chunkCache.has(held)) {
-            this.requested.delete(key);
-          }
-        }
-      }
-      const out = [];
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const prev = out[out.length - 1];
-        const next = chunks[i + 1];
-        let best;
-        if (!this.chunkCache.has(chunk)) {
-          for (const held of this.requested.values()) {
-            if (held.minv.compareTo(chunk.minv) <= 0 && held.maxv.compareTo(chunk.maxv) >= 0 && (!prev || held.minv.compareTo(prev.maxv) >= 0) && (!next || held.maxv.compareTo(next.minv) <= 0) && (!best || held.fetchedSize() < best.fetchedSize()) && this.chunkCache.has(held)) {
-              best = held;
-            }
-          }
-        }
-        out.push(best ?? chunk);
-      }
-      return out;
-    }
-    /**
-     * Estimates the compressed byte size of the index chunks covering the given
-     * regions. Useful for byte budgeting before issuing a `getLines` call to
-     * decide whether a region is too large to fetch.
-     */
-    async bytesForRegions(regions, opts = {}) {
-      const all = [];
-      for (const { refName, start, end } of regions) {
-        const chunks = await this.index.blocksForRange(refName, start, end, opts);
-        for (const chunk of chunks) {
-          all.push(chunk);
-        }
-      }
-      let bytes = 0;
-      for (const chunk of optimizeChunks(all)) {
-        bytes += chunk.fetchedSize();
-      }
-      return bytes;
-    }
-    /**
-     * @param refName name of the reference sequence
-     * @param s start of the region (0-based half-open)
-     * @param e end of the region (0-based half-open)
-     * @param opts callback invoked for each line, or an options object with `lineCallback` and optional `signal`
-     */
-    async getLines(refName, s, e, opts) {
-      let signal;
-      let options = {};
-      let callback;
-      let onProgress;
-      if (typeof opts === "function") {
-        callback = opts;
-      } else {
-        options = opts;
-        callback = opts.lineCallback;
-        signal = opts.signal;
-        onProgress = opts.onProgress;
-      }
-      const metadata = await this.index.getMetadata(options);
-      const start = s ?? 0;
-      const end = e ?? metadata.maxRefLength;
-      if (start > end) {
-        throw new TypeError("invalid start and end coordinates. start must be less than or equal to end");
-      }
-      if (start === end) {
-        return;
-      }
-      const wanted = await this.index.blocksForRange(refName, start, end, options);
-      const chunks = this.withCachedContainers(wanted);
-      const isVCF = metadata.format === "VCF";
-      const refCol = metadata.columnNumbers.ref || 0;
-      const startCol = metadata.columnNumbers.start || 0;
-      const endCol = isVCF ? 8 : metadata.columnNumbers.end || 0;
-      const maxColumn = Math.max(refCol, startCol, endCol);
-      const metaCharCode = metadata.metaChar?.charCodeAt(0);
-      const coordinateOffset = metadata.coordinateType === "1-based-closed" ? -1 : 0;
-      const encoder = new TextEncoder();
-      const decoder = new TextDecoder();
-      const regionRefNameBytes = encoder.encode(refName);
-      const tabs = new Int32Array(maxColumn + 1);
-      const gaf = metadata.format === "GAF" ? { start, end, pathCol: startCol, metaCharCode, decoder, callback } : void 0;
-      let totalBytes = 0;
-      for (const c of chunks) {
-        totalBytes += c.fetchedSize();
-      }
-      let downloadedBytes = 0;
-      onProgress?.(0, totalBytes);
-      let readAhead = 1;
-      const reads = [];
-      const ensureReadsStarted = (count) => {
-        while (reads.length < Math.min(count, chunks.length)) {
-          const c = chunks[reads.length];
-          this.requested.set(c.toString(), c);
-          const read = this.chunkCache.get(c, signal);
-          void read.catch(() => {
-          });
-          reads.push(read);
-        }
-      };
-      ensureReadsStarted(1);
-      for (let ci = 0, cl = chunks.length; ci < cl; ci++) {
-        const c = chunks[ci];
-        const read = await reads[ci];
-        const { cpositions, dpositions } = read;
-        downloadedBytes += c.fetchedSize();
-        onProgress?.(downloadedBytes, totalBytes);
-        const minvDataPosition = c.minv.dataPosition;
-        const want = wanted[ci];
-        let segments = read.segments;
-        let from = 0;
-        if (want !== c) {
-          from = chunkBufferOffset(cpositions, dpositions, want.minv);
-          const to = chunkBufferOffset(cpositions, dpositions, want.maxv) + 1;
-          segments = sliceSegments(segments, from, to);
-        }
-        if (gaf) {
-          if (forEachLinePiece(segments, from, (buffer, base) => scanGafChunk(buffer, base, cpositions, dpositions, minvDataPosition, gaf))) {
-            return;
-          }
-        } else if (forEachLinePiece(segments, from, (buffer, base) => {
-          let blockStart = 0;
-          let pos = 0;
-          while (blockStart < buffer.length) {
-            const n = buffer.indexOf(NEWLINE2, blockStart);
-            if (n === -1) {
-              break;
-            }
-            const target = blockStart + base + minvDataPosition;
-            while (pos < dpositions.length && target >= dpositions[pos]) {
-              pos++;
-            }
-            if (metaCharCode !== void 0 && buffer[blockStart] === metaCharCode) {
-              blockStart = n + 1;
-              continue;
-            }
-            tabs[0] = blockStart - 1;
-            for (let i = 0; i < maxColumn; i++) {
-              const prev = tabs[i];
-              const tabPos = prev < n ? buffer.indexOf(TAB, prev + 1) : -1;
-              tabs[i + 1] = tabPos === -1 || tabPos >= n ? n : tabPos;
-            }
-            const refStart = tabs[refCol - 1] + 1;
-            const refEnd = tabs[refCol];
-            const refLen = refEnd - refStart;
-            if (refLen !== regionRefNameBytes.length) {
-              blockStart = n + 1;
-              continue;
-            }
-            let isRefMatch = true;
-            for (let i = 0; i < refLen; i++) {
-              if (buffer[refStart + i] !== regionRefNameBytes[i]) {
-                isRefMatch = false;
-                break;
-              }
-            }
-            if (!isRefMatch) {
-              blockStart = n + 1;
-              continue;
-            }
-            const startCoordinate = parseIntFromBytes(buffer, tabs[startCol - 1] + 1, tabs[startCol]) + coordinateOffset;
-            if (startCoordinate >= end) {
-              return true;
-            }
-            let endCoordinate;
-            if (endCol === 0 || endCol === startCol) {
-              endCoordinate = startCoordinate + 1;
-            } else if (isVCF) {
-              endCoordinate = getVcfEnd(buffer, startCoordinate, tabs[3] + 1, tabs[4], tabs[endCol - 1] + 1, tabs[endCol], tabs[5]);
-            } else {
-              endCoordinate = parseIntFromBytes(buffer, tabs[endCol - 1] + 1, tabs[endCol]);
-            }
-            if (endCoordinate > start) {
-              const lineEnd = buffer[n - 1] === CARRIAGE_RETURN ? n - 1 : n;
-              const line = decoder.decode(buffer.subarray(blockStart, lineEnd));
-              callback(line, calculateFileOffset(cpositions, dpositions, pos, blockStart + base, minvDataPosition), startCoordinate, endCoordinate);
-            }
-            blockStart = n + 1;
-          }
-          return false;
-        })) {
-          return;
-        }
-        readAhead = Math.min(readAhead * 2, MAX_READ_AHEAD_CHUNKS);
-        ensureReadsStarted(ci + 1 + readAhead);
-      }
-    }
-    async getMetadata(opts = {}) {
-      return this.index.getMetadata(opts);
-    }
-    /**
-     * The file's leading blocks, decompressed: everything from the start through
-     * the end of the block holding the first data line.
-     */
-    async readHeaderBytes(opts) {
-      const { firstDataLine, maxBlockSize } = await this.getMetadata(opts);
-      if (firstDataLine?.blockPosition === 0 && firstDataLine.dataPosition === 0) {
-        return new Uint8Array(0);
-      }
-      const maxFetch = (firstDataLine?.blockPosition ?? 0) + maxBlockSize;
-      const buf = await this.filehandle.read(maxFetch, 0, opts);
-      return unzip(buf);
-    }
-    /**
-     * Both header forms, from one read of the same bytes: the commented block
-     * `tabix -H` prints, and the rows `tabix -S N` counted.
-     *
-     * Memoized, because asking for one and then the other is the normal way to
-     * find a header whichever way the file keeps it (see `getHeaderLines`), and
-     * that used to fetch and decompress the file's leading blocks twice. Only
-     * the parsed results are retained — the decompressed bytes are dropped,
-     * which matters for a VCF header that can run to megabytes.
-     */
-    async parseHeader(opts) {
-      const { metaChar, skipLines = 0 } = await this.getMetadata(opts);
-      const bytes = await this.readHeaderBytes(opts);
-      return {
-        header: textDecoder.decode(metaChar ? trimToMetaLines(bytes, metaChar) : bytes),
-        skippedLines: skipLines > 0 ? firstLines(bytes, skipLines) : []
-      };
-    }
-    /**
-     * Parse the header, or join the parse already running.
-     *
-     * `parseHeader` threads `opts` into both `getMetadata` and the header read,
-     * so memoizing it on the first caller's opts put that caller's signal in
-     * charge of a read every later caller joins: when it aborted, they failed
-     * with its cancellation, their own signals untouched.
-     *
-     * The same cache the chunk reads use, and the same rule: the parse runs under
-     * a signal of its own and is cancelled only once every caller waiting on it
-     * has given up, so one caller's abort is reported to that caller alone and a
-     * bystander gets the parse already in flight. There is no retry here because
-     * there is nothing to retry — the parse a bystander joined is not cancelled by
-     * someone else's abort. A rejection is dropped rather than cached, so a
-     * transient failure does not poison the header for the life of the file.
-     *
-     * The fill is per call rather than on the cache, so the caller that starts the
-     * parse has its `onProgress` reach the index download inside `getMetadata`.
-     *
-     * SYNC: ~/src/gmod/bam-js/src/bamFile.ts getHeader — same shape for the same
-     * reason, on the header rather than the index.
-     */
-    getParsedHeader(opts = {}) {
-      return this.headerCache.get("header", opts.signal, (signal) => this.parseHeader({ ...opts, signal }));
-    }
-    /**
-     * The bytes of the commented header. Deliberately not memoized, unlike the
-     * string form: this hands back the buffer, and holding one for the lifetime
-     * of the file is the caller's decision to make.
-     */
-    async getHeaderBuffer(opts = {}) {
-      const { metaChar } = await this.getMetadata(opts);
-      const bytes = await this.readHeaderBytes(opts);
-      return metaChar ? trimToMetaLines(bytes, metaChar) : bytes;
-    }
-    /**
-     * The leading lines the index says to skip — `tabix -S N` — which is where a
-     * file whose header row is not commented keeps it. Empty when the index
-     * records no skipped lines.
-     *
-     * Deliberately not part of `getHeader`. htslib draws the same distinction:
-     * its indexer treats a line as non-data when `lineno <= line_skip` OR it
-     * begins with the meta character (tbx.c), while `tabix -H` prints only the
-     * leading meta-character lines and never consults line_skip (tabix.c).
-     * `getHeader` mirrors `-H`, so a bare header row is absent from it, and
-     * callers that need one were left re-reading the file themselves — guessing
-     * at a read size, and unable to tell a headerless file from an uncommented
-     * one. PLINK `.ld`, bedGraph and BED deflines are all routinely written this
-     * way.
-     */
-    async getSkippedLines(opts = {}) {
-      const { skipLines = 0 } = await this.getMetadata(opts);
-      if (skipLines <= 0) {
-        return [];
-      }
-      return (await this.getParsedHeader(opts)).skippedLines;
-    }
-    async getHeader(opts = {}) {
-      return (await this.getParsedHeader(opts)).header;
-    }
-    /**
-     * The file's header lines, however that file keeps them: the meta-character
-     * block when there is one, and otherwise the rows the index counted. Empty
-     * lines are dropped.
-     *
-     * The two halves answer different questions (see `getSkippedLines`), but
-     * "what are this file's header lines" is nearly always the question a caller
-     * actually has, and answering it from `getHeader` alone is wrong in a way
-     * that doesn't announce itself: a bare header row comes back as the empty
-     * string, indistinguishable from a file that has no header, so callers fall
-     * back to an assumed column layout and quietly mis-name columns. Deciding it
-     * here also means one read of the leading blocks instead of two.
-     */
-    async getHeaderLines(opts = {}) {
-      const { header, skippedLines } = await this.getParsedHeader(opts);
-      return (header ? header.split(/\r?\n/) : skippedLines).filter(Boolean);
-    }
-    async getReferenceSequenceNames(opts = {}) {
-      const metadata = await this.getMetadata(opts);
-      return metadata.refIdToName;
-    }
-    /** @param refName reference sequence name */
-    async lineCount(refName, opts = {}) {
-      return this.index.lineCount(refName, opts);
-    }
-    /** @internal */
-    async readChunk(c, opts = {}) {
-      const ret = await this.filehandle.read(c.fetchedSize(), c.minv.blockPosition, opts);
-      throwIfAborted(opts.signal);
-      const pool = await this.bgzfWorkerPool;
-      return unzipChunkSegments(ret, c, pool);
-    }
-  };
-
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.6.0/node_modules/@jbrowse/graph-walks/esm/util.js
-  var RegionTooLargeError = class extends Error {
-    constructor(message, limit, windowBp, fitsBp, overBytes) {
-      super(message);
-      this.regionTooLarge = true;
-      this.name = "NodeLimitError";
-      this.limit = limit;
-      this.windowBp = windowBp;
-      this.fitsBp = fitsBp;
-      this.zoomHelps = overBytes === void 0 || overBytes.zoomHelps === true;
-      if (overBytes) {
-        this.bytes = overBytes.bytes;
-      }
-    }
-  };
-  var SEP = "#";
-  function panSNSample(refName) {
-    return refName.split(SEP)[0];
-  }
-  function panSNContig(refName) {
-    const parts = refName.split(SEP);
-    return parts.length >= 3 ? parts.slice(2).join(SEP) : parts.length === 2 ? parts[1] : refName;
-  }
-  function panSNHaplotype(refName) {
-    const parts = refName.split(SEP);
-    return parts.length >= 3 ? `${parts[0]}${SEP}${parts[1]}` : void 0;
-  }
-  function panSNMatchesPrefix(refName, prefix) {
-    return prefix !== void 0 && (refName === prefix || refName.startsWith(prefix + SEP));
-  }
-  var precise = (n) => Number.parseFloat(n.toPrecision(3));
-  function bpString(bp) {
-    const mb = precise(bp / 1e6);
-    return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
-  }
-
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.6.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
-  var NONE = -1;
-  var idOf = (handle) => (handle - (handle & 1)) / 2;
-  var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
-  function tokens(field, previous, out) {
-    if (field === ".") {
-      return out;
-    }
-    let v = 0;
-    let neg = false;
-    for (let p = 0; p <= field.length; p++) {
-      const ch = p < field.length ? field.charCodeAt(p) : 44;
-      if (ch === 44) {
-        const d = neg ? -v : v;
-        const r = d & 1;
-        previous.id += (d - r) / 2;
-        out.push(previous.id * 2 + r);
-        v = 0;
-        neg = false;
-      } else if (ch === 45) {
-        neg = true;
-      } else {
-        v = v * 10 + (ch - 48);
-      }
-    }
-    return out;
-  }
-  function numbers(field) {
-    return field === "." ? [] : field.split(",").map(Number);
-  }
-  function canonicalLink(a, b) {
-    return a > otherStrand(b) ? [otherStrand(b), otherStrand(a)] : [a, b];
-  }
-  function chunkTag(tag, anchor) {
-    const at = tag.lastIndexOf(":");
-    return {
-      refName: tag[3] === "Z" ? tag.slice(5, at) : anchor,
-      start: +tag.slice(at + 1)
-    };
-  }
-  function tags(cols, from, anchor) {
-    const out = {};
-    for (let k = from; k < cols.length; k++) {
-      const tag = cols[k];
-      const key = tag.slice(0, 2);
-      if (key === "pv") {
-        out.prev = chunkTag(tag, anchor);
-      } else if (key === "nx") {
-        out.next = chunkTag(tag, anchor);
-      } else if (key === "pg" || key === "ng") {
-        const side = key === "pg" ? "prevRecord" : "nextRecord";
-        out[side] = { ...out[side], bp: +tag.slice(5) };
-      } else if (key === "pr" || key === "nr") {
-        const side = key === "pr" ? "prevRecord" : "nextRecord";
-        out[side] = { bp: 0, ...out[side], chunk: chunkTag(tag, anchor) };
-      }
-    }
-    return out;
-  }
-  var RefPath = class {
-    constructor() {
-      this.handles = [];
-      this.before = [0];
-      this.starts = [];
-      this.occurrences = /* @__PURE__ */ new Map();
-    }
-    add(handles, lengths, start) {
-      for (let k = 0; k < handles.length; k++) {
-        const h = handles[k];
-        const i = this.handles.length;
-        this.handles.push(h);
-        this.before.push(this.before[i] + lengths[k]);
-        this.starts.push(start);
-        start += lengths[k];
-        const id = idOf(h);
-        const list = this.occurrences.get(id);
-        if (list) {
-          list.push(i);
-        } else {
-          this.occurrences.set(id, [i]);
-        }
-      }
-    }
-    // bp of R's steps before position i
-    bp(i) {
-      return this.before[i];
-    }
-    first(handle) {
-      var _a;
-      return (_a = this.occurrences.get(idOf(handle))) === null || _a === void 0 ? void 0 : _a[0];
-    }
-    nearest(handle, i) {
-      const at = this.occurrences.get(idOf(handle));
-      if (!at) {
-        return void 0;
-      }
-      let lo = 0;
-      let hi = at.length;
-      while (lo < hi) {
-        const mid = lo + hi >> 1;
-        if (at[mid] <= i) {
-          lo = mid + 1;
-        } else {
-          hi = mid;
-        }
-      }
-      const before = at[lo - 1];
-      const after = at[lo];
-      if (before === void 0 || after === void 0) {
-        return before !== null && before !== void 0 ? before : after;
-      }
-      return after - i <= i - before ? after : before;
-    }
-    // The position a stretch along R from position i, reading R the way `h`
-    // does there, first holds `target`, i itself included
-    reach(i, h, target) {
-      var _a;
-      const forward2 = this.handles[i] === h;
-      let found;
-      for (const j of (_a = this.occurrences.get(idOf(target))) !== null && _a !== void 0 ? _a : []) {
-        if (forward2 && j >= i && this.handles[j] === target) {
-          if (found === void 0 || j < found) {
-            found = j;
-          }
-        } else if (!forward2 && j <= i && otherStrand(this.handles[j]) === target) {
-          if (found === void 0 || j > found) {
-            found = j;
-          }
-        }
-      }
-      return found;
-    }
-    handleAt(i, forward2) {
-      return forward2 ? this.handles[i] : otherStrand(this.handles[i]);
-    }
-  };
-  var WalkRowError = class extends Error {
-  };
-  var orientedEntry = (route, flip2) => flip2 ? route.exit === NONE ? NONE : otherStrand(route.exit) : route.entry;
-  var orientedExit = (route, flip2) => flip2 ? route.entry === NONE ? NONE : otherStrand(route.entry) : route.exit;
-  var interiorAt = (route, flip2, k) => flip2 ? otherStrand(route.interior[route.interior.length - 1 - k]) : route.interior[k];
-  function parseChoices(field) {
-    const choices = [];
-    if (field !== ".") {
-      let previous = 0;
-      let v = 0;
-      let neg = false;
-      let tok = 0;
-      let colonSeen = false;
-      for (let p = 0; p <= field.length; p++) {
-        const ch = p < field.length ? field.charCodeAt(p) : 44;
-        if (ch === 44) {
-          const value = neg ? -v : v;
-          const d = colonSeen ? tok : value;
-          const r = d & 1;
-          previous += (d - r) / 2;
-          choices.push(previous, r, colonSeen ? value : 0);
-          v = 0;
-          neg = false;
-          colonSeen = false;
-        } else if (ch === 58) {
-          tok = neg ? -v : v;
-          v = 0;
-          neg = false;
-          colonSeen = true;
-        } else if (ch === 45) {
-          neg = true;
-        } else {
-          v = v * 10 + (ch - 48);
-        }
-      }
-    }
-    return choices;
-  }
-  function traverse(path, routes, start, endField, choices, visit) {
-    const colon = endField.indexOf(":");
-    const end = start + +(colon < 0 ? endField : endField.slice(0, colon));
-    const counted2 = colon >= 0;
-    const tail = counted2 ? +endField.slice(colon + 1) : 0;
-    const routeOf = (index) => {
-      const route = routes[index];
-      if (!route) {
-        throw new WalkRowError(`route ${index} is not in the chunk`);
-      }
-      return route;
-    };
-    let k = 0;
-    if (choices.length > 0 && orientedEntry(routeOf(choices[0]), choices[1] === 1) === NONE) {
-      if (!visit.route(choices[0], choices[1] === 1)) {
-        return;
-      }
-      k = 3;
-    }
-    let h = start;
-    let i = path.first(h);
-    if (i === void 0) {
-      throw new WalkRowError("a walk row starts off its chunk");
-    }
-    visit.step(h, i);
-    const follow = (target, count) => {
-      const forward2 = path.handles[i] === h;
-      const j = counted2 ? i + (forward2 ? count : -count) : path.reach(i, h, target);
-      if (j === void 0 || j < 0 || j >= path.handles.length) {
-        throw new WalkRowError("a walk row runs off its chunk");
-      }
-      if (j !== i) {
-        visit.stretch(i, j, forward2);
-      }
-      i = j;
-      h = path.handleAt(j, forward2);
-    };
-    for (; k < choices.length; k += 3) {
-      const index = choices[k];
-      const flip2 = choices[k + 1] === 1;
-      const route = routeOf(index);
-      const entry = orientedEntry(route, flip2);
-      if (entry === NONE) {
-        throw new WalkRowError("an open route after the first choice");
-      }
-      follow(entry, choices[k + 2]);
-      if (!visit.route(index, flip2)) {
-        return;
-      }
-      const exit = orientedExit(route, flip2);
-      if (exit === NONE) {
-        return;
-      }
-      h = exit;
-      i = path.nearest(h, i);
-      if (i === void 0) {
-        throw new WalkRowError("a route lands off its chunk");
-      }
-      visit.step(h, i);
-    }
-    follow(end, tail);
-    if (h !== end) {
-      throw new WalkRowError("a walk row misses its last handle");
-    }
-  }
-  function decodeWalk(path, routes, cols, choices, n) {
-    const ids = new Int32Array(n);
-    const rev = new Uint8Array(n);
-    const refStarts = new Float64Array(n).fill(Number.NaN);
-    let at = 0;
-    const push = (h, i) => {
-      if (at >= n) {
-        throw new WalkRowError("a walk row decodes to more steps than it states");
-      }
-      if (i !== void 0) {
-        refStarts[at] = path.starts[i];
-      }
-      ids[at] = idOf(h);
-      rev[at++] = h & 1;
-    };
-    traverse(path, routes, +cols[9], cols[10], choices, {
-      step: push,
-      stretch(from, to, forward2) {
-        if (forward2) {
-          for (let j = from + 1; j <= to; j++) {
-            push(path.handles[j], j);
-          }
-        } else {
-          for (let j = from - 1; j >= to; j--) {
-            push(otherStrand(path.handles[j]), j);
-          }
-        }
-      },
-      route(index, flip2) {
-        const route = routes[index];
-        for (let k = 0; k < route.interior.length; k++) {
-          push(interiorAt(route, flip2, k));
-        }
-        return true;
-      }
-    });
-    if (at !== n) {
-      throw new WalkRowError(`a walk row decodes to ${at} steps, not ${n}`);
-    }
-    return { ids, rev, refStarts };
-  }
-  function skipsOver(jumps, fragments, region, crossed = []) {
-    const walked = new Set(fragments.map((f) => f.name));
-    const own = new Set(crossed);
-    const seen = /* @__PURE__ */ new Set();
-    const over = [];
-    for (const jump of [...crossed, ...jumps]) {
-      const key = `${jump.name}	${jump.fragStart}	${jump.piece}`;
-      if ((own.has(jump) || !walked.has(jump.name)) && !seen.has(key) && jump.refStart < region.end && jump.refEnd > region.start) {
-        seen.add(key);
-        over.push(jump);
-      }
-    }
-    return over.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.fragStart - b.fragStart || a.piece - b.piece);
-  }
-  function sliceBases(cols, from, ids, lengths, out) {
-    const tag = cols.slice(from).find((c) => c.startsWith("SQ:Z:"));
-    if (tag === void 0) {
-      return;
-    }
-    let at = 5;
-    for (let k = 0; k < ids.length; k++) {
-      const length = lengths[k];
-      out.set(ids[k], tag.slice(at, at + length));
-      at += length;
-    }
-  }
-  var DETAIL_SPACING = 16384;
-  function abridgedRow(cols) {
-    const anchor = cols[0];
-    const handles = [+cols[10], +cols[11]];
-    const pieces = numbers(cols[7]);
-    for (let k = 1; k < pieces.length; k++) {
-      pieces[k] += pieces[k - 1];
-    }
-    return {
-      chunkStart: +cols[1],
-      name: cols[4],
-      fragStart: +cols[5],
-      hapOffset: +cols[6],
-      piece: pieces[0],
-      n: handles.length,
-      steps: {
-        ids: Int32Array.from(handles, idOf),
-        rev: Uint8Array.from(handles, (h) => h & 1)
-      },
-      ...tags(cols, 13, anchor),
-      abridged: {
-        pieces,
-        steps: +cols[8],
-        bp: +cols[9],
-        detail: {
-          refName: `${anchor}~${cols[1]}`,
-          start: +cols[12] * DETAIL_SPACING
-        }
-      }
-    };
-  }
-  var refRows = (rows) => rows.filter((c) => c[3] === "ref").sort((a, b) => +a[6] - +b[6]);
-  function chunkRef(rows) {
-    const path = new RefPath();
-    const lengths = /* @__PURE__ */ new Map();
-    for (const cols of refRows(rows)) {
-      const handles = tokens(cols[9], { id: 0 }, []);
-      const nodeLengths = numbers(cols[10]);
-      path.add(handles, nodeLengths, +cols[6]);
-      for (let k = 0; k < handles.length; k++) {
-        lengths.set(idOf(handles[k]), nodeLengths[k]);
-      }
-    }
-    return { path, lengths };
-  }
-  function decodeChunk(rows, keep, withSequences = false, ref) {
-    var _a, _b, _c, _d;
-    const path = (_a = ref === null || ref === void 0 ? void 0 : ref.path) !== null && _a !== void 0 ? _a : new RefPath();
-    const lengths = /* @__PURE__ */ new Map();
-    const routes = [];
-    const out = {
-      sequences: /* @__PURE__ */ new Map(),
-      rows: [],
-      nodes: /* @__PURE__ */ new Map(),
-      revisits: [],
-      ends: [],
-      chunk: { path, routes, walks: [], lengths, refLengths: ref === null || ref === void 0 ? void 0 : ref.lengths },
-      skips: []
-    };
-    const placed = (id) => out.nodes.has(id) || (ref === null || ref === void 0 ? void 0 : ref.lengths.has(id)) === true;
-    const previous = { id: 0 };
-    for (const cols of ref ? [] : refRows(rows)) {
-      const anchor = cols[0];
-      const handles = tokens(cols[9], { id: 0 }, []);
-      const nodeLengths = numbers(cols[10]);
-      const hapOffset = +cols[6];
-      const first = path.starts.length;
-      path.add(handles, nodeLengths, hapOffset);
-      if (withSequences) {
-        sliceBases(cols, 11, handles.map(idOf), nodeLengths, out.sequences);
-      }
-      let start = hapOffset;
-      for (let k = 0; k < handles.length; k++) {
-        const id = idOf(handles[k]);
-        const length = nodeLengths[k];
-        lengths.set(id, length);
-        const node = { refName: cols[4], start, end: start + length, rank: 0 };
-        if (out.nodes.has(id)) {
-          out.revisits.push({ id, ...node });
-        } else {
-          out.nodes.set(id, node);
-        }
-        start += length;
-      }
-      out.ends.push({
-        name: cols[4],
-        fragStart: +cols[5],
-        piece: +cols[7],
-        first: handles[0],
-        last: handles.at(-1)
-      });
-      if (keep === void 0 || keep(cols[4])) {
-        out.rows.push({
-          chunkStart: +cols[1],
-          name: cols[4],
-          fragStart: +cols[5],
-          hapOffset,
-          piece: +cols[7],
-          n: handles.length,
-          steps: {
-            ids: Int32Array.from(handles, idOf),
-            rev: Uint8Array.from(handles, (h) => h & 1),
-            refStarts: Float64Array.from(path.starts.slice(first))
-          },
-          ...tags(cols, 11, anchor)
-        });
-      }
-    }
-    for (const cols of rows) {
-      if (cols[3] === "nodes") {
-        const ids = numbers(cols[4]);
-        const nodeLengths = numbers(cols[5]);
-        let id = 0;
-        for (let k = 0; k < ids.length; k++) {
-          id += ids[k];
-          ids[k] = id;
-          lengths.set(id, nodeLengths[k]);
-        }
-        if (withSequences) {
-          sliceBases(cols, 6, ids, nodeLengths, out.sequences);
-        }
-      } else if (cols[3] === "route") {
-        const entry = tokens(cols[4], previous, []);
-        const interior = tokens(cols[5], previous, []);
-        const exit = tokens(cols[6], previous, []);
-        routes.push({ entry: (_b = entry[0]) !== null && _b !== void 0 ? _b : NONE, interior, exit: (_c = exit[0]) !== null && _c !== void 0 ? _c : NONE });
-      }
-    }
-    const routeOf = (index) => {
-      const route = routes[index];
-      if (!route) {
-        throw new WalkRowError(`route ${index} is not in the chunk`);
-      }
-      return route;
-    };
-    for (const cols of rows) {
-      if (cols[3] === "skip") {
-        if (keep === void 0 || keep(cols[4])) {
-          out.skips.push({
-            name: cols[4],
-            fragStart: +cols[5],
-            piece: +cols[6],
-            refStart: +cols[9],
-            refEnd: +cols[10]
-          });
-        }
-        continue;
-      }
-      if (cols[3] === "abridged") {
-        const name2 = cols[4];
-        if (keep === void 0 || keep(name2)) {
-          out.rows.push(abridgedRow(cols));
-        }
-        continue;
-      }
-      if (cols[3] !== "walk") {
-        continue;
-      }
-      const choices = parseChoices(cols[11]);
-      out.chunk.walks.push({ cols, choices });
-      const name = cols[4];
-      const start = +cols[9];
-      const endField = cols[10];
-      const colon = endField.indexOf(":");
-      let first = start;
-      let last = start + +(colon < 0 ? endField : endField.slice(0, colon));
-      if (choices.length > 0) {
-        const lead = routeOf(choices[0]);
-        const leadFlip = choices[1] === 1;
-        if (orientedEntry(lead, leadFlip) === NONE) {
-          first = interiorAt(lead, leadFlip, 0);
-        }
-        const at = choices.length - 3;
-        const tail = routeOf(choices[at]);
-        const tailFlip = choices[at + 1] === 1;
-        if (orientedExit(tail, tailFlip) === NONE) {
-          last = interiorAt(tail, tailFlip, tail.interior.length - 1);
-        }
-      }
-      out.ends.push({
-        name,
-        fragStart: +cols[5],
-        piece: +cols[7],
-        first,
-        last
-      });
-      if (keep === void 0 || keep(name)) {
-        const n = +cols[8];
-        let interior = 0;
-        for (let k = 0; k < choices.length; k += 3) {
-          interior += routeOf(choices[k]).interior.length;
-          for (const h of routeOf(choices[k]).interior) {
-            const id = idOf(h);
-            if (!placed(id)) {
-              const length = (_d = lengths.get(id)) !== null && _d !== void 0 ? _d : 0;
-              out.nodes.set(id, { refName: name, start: 0, end: length, rank: 1 });
-            }
-          }
-        }
-        out.rows.push({
-          chunkStart: +cols[1],
-          name,
-          fragStart: +cols[5],
-          hapOffset: +cols[6],
-          piece: +cols[7],
-          n,
-          interior,
-          steps: decodeWalk(path, routes, cols, choices, n),
-          ...tags(cols, 12, cols[0])
-        });
-      }
-    }
-    return out;
-  }
-  function placeAndLink(chunks, kept, place2, link) {
-    const offR = /* @__PURE__ */ new Set();
-    for (const id of kept) {
-      if (!chunks.some(({ path }) => path.occurrences.has(id))) {
-        offR.add(id);
-      }
-    }
-    const linkCanonical = (a, b) => {
-      const [from, to] = canonicalLink(a, b);
-      link(from, to);
-    };
-    const best = /* @__PURE__ */ new Map();
-    for (const { path, routes, walks, lengths, refLengths } of chunks) {
-      const handles = path.handles;
-      for (let k = 1; k < handles.length; k++) {
-        if (kept.has(idOf(handles[k - 1])) && kept.has(idOf(handles[k]))) {
-          linkCanonical(handles[k - 1], handles[k]);
-        }
-      }
-      const wanted = new Uint8Array(routes.length);
-      for (let index = 0; index < routes.length; index++) {
-        const { entry, interior, exit } = routes[index];
-        let any = false;
-        let from = entry;
-        for (const h of interior) {
-          const inCut = kept.has(idOf(h));
-          any || (any = offR.has(idOf(h)));
-          if (inCut && from !== NONE && kept.has(idOf(from))) {
-            linkCanonical(from, h);
-          }
-          from = h;
-        }
-        if (from !== NONE && exit !== NONE && kept.has(idOf(from)) && kept.has(idOf(exit))) {
-          linkCanonical(from, exit);
-        }
-        wanted[index] = any ? 1 : 0;
-      }
-      const lengthOf = (h) => {
-        var _a, _b;
-        return (_b = (_a = lengths.get(idOf(h))) !== null && _a !== void 0 ? _a : refLengths === null || refLengths === void 0 ? void 0 : refLengths.get(idOf(h))) !== null && _b !== void 0 ? _b : 0;
-      };
-      const bp = new Float64Array(routes.length).fill(-1);
-      const routeBp = (index) => {
-        if (bp[index] < 0) {
-          bp[index] = routes[index].interior.reduce((s, h) => s + lengthOf(h), 0);
-        }
-        return bp[index];
-      };
-      const taken = new Uint8Array(routes.length);
-      for (const { cols, choices } of walks) {
-        let remaining = 0;
-        for (let k = 0; k < choices.length; k += 3) {
-          const index = choices[k];
-          if (wanted[index] && !taken[index]) {
-            remaining++;
-          }
-        }
-        if (remaining === 0) {
-          continue;
-        }
-        const name = cols[4];
-        let offset = +cols[6];
-        traverse(path, routes, +cols[9], cols[10], choices, {
-          step(h) {
-            offset += lengthOf(h);
-          },
-          stretch(from, to, forward2) {
-            offset += forward2 ? path.bp(to + 1) - path.bp(from + 1) : path.bp(from) - path.bp(to);
-          },
-          route(index, flip2) {
-            if (!wanted[index] || taken[index]) {
-              offset += routeBp(index);
-              return true;
-            }
-            taken[index] = 1;
-            const route = routes[index];
-            for (let k = 0; k < route.interior.length; k++) {
-              const h = interiorAt(route, flip2, k);
-              const id = idOf(h);
-              const length = lengthOf(h);
-              if (offR.has(id)) {
-                const held = best.get(id);
-                if (!held || name < held.refName || name === held.refName && offset < held.start) {
-                  best.set(id, {
-                    refName: name,
-                    start: offset,
-                    end: offset + length,
-                    rank: 1
-                  });
-                }
-              }
-              offset += length;
-            }
-            remaining--;
-            return remaining > 0;
-          }
-        });
-      }
-    }
-    for (const [id, node] of best) {
-      place2(id, node);
-    }
-  }
-  function pieceLinks(ends) {
-    const byPath = /* @__PURE__ */ new Map();
-    for (const e of ends) {
-      const key = `${e.name}	${e.fragStart}`;
-      let pieces = byPath.get(key);
-      if (!pieces) {
-        pieces = /* @__PURE__ */ new Map();
-        byPath.set(key, pieces);
-      }
-      pieces.set(e.piece, e);
-    }
-    const links = [];
-    for (const pieces of byPath.values()) {
-      for (const [piece, e] of pieces) {
-        const next = pieces.get(piece + 1);
-        if (next) {
-          links.push(canonicalLink(e.last, next.first));
-        }
-      }
-    }
-    return links;
-  }
-
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.6.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
-  var WALK_STOP_KINDS = ["elsewhere", "break", "end"];
-  function integerTag(line, tag) {
-    const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
-    return match ? +match[1] : void 0;
-  }
-  function walkHeader(lines) {
-    var _a, _b, _c;
-    const header = { references: [], haplotypes: [], long: [] };
-    for (const line of lines) {
-      const [key, value = "", start = "", end = ""] = line.split("	");
-      if (key === "#reference") {
-        header.references.push(value);
-      } else if (key === "#haplotype") {
-        header.haplotypes.push(value);
-      } else if (key === "#long") {
-        header.long.push({ refName: value, start: +start, end: +end });
-      } else {
-        (_a = header.format) !== null && _a !== void 0 ? _a : header.format = integerTag(line, "format");
-        (_b = header.chunk) !== null && _b !== void 0 ? _b : header.chunk = integerTag(line, "chunk");
-        (_c = header.maxNode) !== null && _c !== void 0 ? _c : header.maxNode = integerTag(line, "maxnode");
-      }
-    }
-    return header;
-  }
-  function lookbackChunks(maxNode, chunk) {
-    return maxNode === void 0 ? 1 : Math.max(1, Math.ceil(maxNode / chunk));
-  }
-  function chunkQueryStart(start, chunk, lookback = 1) {
-    return Math.max(0, (Math.floor(start / chunk) - lookback) * chunk);
-  }
-  function walkQueryStart(header, refName, start, end) {
-    const { chunk, long } = header;
-    if (long.length === 0) {
-      return chunkQueryStart(start, chunk, lookbackChunks(header.maxNode, chunk));
-    }
-    let from = chunkQueryStart(start, chunk);
-    for (const pass of long) {
-      if (pass.refName === refName && pass.start < end && pass.end > start) {
-        from = Math.min(from, chunkQueryStart(pass.start, chunk));
-      }
-    }
-    return from;
-  }
-  function walkNameFilter(wanted, referenceHaplotype) {
-    return wanted === void 0 || wanted.length === 0 ? void 0 : (name) => panSNMatchesPrefix(name, referenceHaplotype) || wanted.some((prefix) => panSNMatchesPrefix(name, prefix));
-  }
-  function walksKept(wanted, refName) {
-    var _a;
-    return walkNameFilter(wanted, (_a = panSNHaplotype(refName)) !== null && _a !== void 0 ? _a : refName);
-  }
-  function joinPieces(rows) {
-    const byPath = /* @__PURE__ */ new Map();
-    const runs = [];
-    for (const row of rows) {
-      if (row.abridged) {
-        runs.push(decodeRun([row]));
-        continue;
-      }
-      const key = `${row.name}	${row.fragStart}`;
-      const list = byPath.get(key);
-      if (list) {
-        list.push(row);
-      } else {
-        byPath.set(key, [row]);
-      }
-    }
-    for (const pieces of byPath.values()) {
-      pieces.sort((a, b) => a.piece - b.piece);
-      let from = 0;
-      for (let i = 1; i <= pieces.length; i++) {
-        if (i === pieces.length || pieces[i].piece !== pieces[i - 1].piece + 1) {
-          runs.push(decodeRun(pieces.slice(from, i)));
-          from = i;
-        }
-      }
-    }
-    return runs;
-  }
-  function decodeRun(pieces) {
-    const n = pieces.reduce((sum, p) => sum + p.n, 0);
-    const ids = new Int32Array(n);
-    const rev = new Uint8Array(n);
-    const refStarts = new Float64Array(n).fill(Number.NaN);
-    const pieceStarts = [];
-    const pieceChunks = [];
-    let at = 0;
-    for (const p of pieces) {
-      if (at > 0) {
-        pieceStarts.push(at);
-      }
-      pieceChunks.push(p.chunkStart);
-      ids.set(p.steps.ids, at);
-      rev.set(p.steps.rev, at);
-      if (p.steps.refStarts) {
-        refStarts.set(p.steps.refStarts, at);
-      }
-      at += p.n;
-    }
-    const first = pieces[0];
-    const last = pieces.at(-1);
-    return {
-      name: first.name,
-      fragStart: first.fragStart,
-      hapOffset: first.hapOffset,
-      firstPiece: first.piece,
-      pieceStarts,
-      pieceChunks,
-      ids,
-      rev,
-      refStarts,
-      prev: first.prev,
-      next: last.next,
-      prevRecord: first.prevRecord,
-      nextRecord: last.nextRecord,
-      ...first.abridged ? { abridged: first.abridged } : {}
-    };
-  }
-  function walkCut(runs, nodes, refName, { contained = false, context = 0, crossingBp = CROSSING_BP } = {}) {
-    const reference = (id) => {
-      const node = nodes.get(id);
-      return (node === null || node === void 0 ? void 0 : node.rank) === 0 ? node : void 0;
-    };
-    let windowStart = Infinity;
-    let windowEnd = -Infinity;
-    for (const node of nodes.values()) {
-      if (node.onWindow) {
-        windowStart = Math.min(windowStart, node.start);
-        windowEnd = Math.max(windowEnd, node.end);
-      }
-    }
-    const passStart = (run, i, node) => {
-      var _a;
-      return passAt(node, (_a = run.refStarts) === null || _a === void 0 ? void 0 : _a[i]);
-    };
-    const stepOnWindow = (run, i) => {
-      var _a;
-      return passOnWindow(nodes.get(run.ids[i]), (_a = run.refStarts) === null || _a === void 0 ? void 0 : _a[i], windowStart, windowEnd);
-    };
-    const open = /* @__PURE__ */ new Map();
-    const goesOn = (chunk) => {
-      if (chunk) {
-        open.set(`${chunk.refName}:${chunk.start}`, chunk);
-      }
-    };
-    const rejoin = (run, at, dir) => {
-      const { ids } = run;
-      let i = at + dir;
-      while (i >= 0 && i < ids.length && reference(ids[i]) === void 0) {
-        i += dir;
-      }
-      if (i < 0 || i >= ids.length) {
-        goesOn(dir < 0 ? run.prev : run.next);
-        return i - dir;
-      }
-      const from = reference(ids[at]);
-      const to = reference(ids[i]);
-      if (to.refName !== refName) {
-        return i - dir;
-      }
-      const fromStart = passStart(run, at, from);
-      const toStart = passStart(run, i, to);
-      const adjacent = i === at + dir && (toStart === fromStart + from.end - from.start || toStart + to.end - to.start === fromStart);
-      return adjacent ? at : i;
-    };
-    let reachStart = Infinity;
-    let reachEnd = -Infinity;
-    const spans = [];
-    const length = (id) => {
-      const node = nodes.get(id);
-      return node === void 0 ? 0 : node.end - node.start;
-    };
-    const containedSpans = (run) => {
-      const { ids } = run;
-      let from = 0;
-      let first = -1;
-      let last = -1;
-      for (let i = 0; i <= ids.length; i++) {
-        const node = i < ids.length ? nodes.get(ids[i]) : void 0;
-        const on = i < ids.length && stepOnWindow(run, i);
-        if (i === ids.length || (node === null || node === void 0 ? void 0 : node.rank) === 0 && !on) {
-          if (first >= 0) {
-            for (let bp = 0; first > from && bp < context; ) {
-              bp += length(ids[--first]);
-            }
-            for (let bp = 0; last < i - 1 && bp < context; ) {
-              bp += length(ids[++last]);
-            }
-            if (first === 0) {
-              goesOn(run.prev);
-            }
-            if (last === ids.length - 1) {
-              goesOn(run.next);
-            }
-            spans.push({ run, first, last });
-          }
-          from = i + 1;
-          first = -1;
-        } else if (on) {
-          if (first < 0) {
-            first = i;
-          }
-          last = i;
-        }
-      }
-    };
-    const detourSpan = (run) => {
-      const { ids } = run;
-      let first = -1;
-      let last = -1;
-      for (let i = 0; i < ids.length; i++) {
-        if (stepOnWindow(run, i)) {
-          if (first < 0) {
-            first = i;
-          }
-          last = i;
-        }
-      }
-      if (first >= 0) {
-        if (run.name !== refName) {
-          first = rejoin(run, first, -1);
-          last = rejoin(run, last, 1);
-          for (const i of [first, last]) {
-            const node = reference(ids[i]);
-            if (node) {
-              const start = passStart(run, i, node);
-              reachStart = Math.min(reachStart, start);
-              reachEnd = Math.max(reachEnd, start + node.end - node.start);
-            }
-          }
-        }
-        spans.push({ run, first, last });
-      }
-    };
-    const across = /* @__PURE__ */ new Map();
-    const goesAcross = (chunk) => {
-      across.set(`${chunk.refName}:${chunk.start}`, chunk);
-    };
-    const byRecord = /* @__PURE__ */ new Map();
-    for (const run of runs) {
-      const key = `${run.name}	${run.fragStart}`;
-      const list = byRecord.get(key);
-      if (list) {
-        list.push(run);
-      } else {
-        byRecord.set(key, [run]);
-      }
-    }
-    const neighbours = /* @__PURE__ */ new Map();
-    for (const list of byRecord.values()) {
-      list.sort((a, b) => a.firstPiece - b.firstPiece);
-      list.forEach((run, i) => {
-        neighbours.set(run, [list[i - 1], list[i + 1]]);
-      });
-    }
-    const skips = [];
-    const side = (run, i) => {
-      const node = reference(run.ids[i]);
-      if ((node === null || node === void 0 ? void 0 : node.refName) !== refName) {
-        return 0;
-      }
-      const start = passStart(run, i, node);
-      return start + node.end - node.start <= windowStart ? -1 : start >= windowEnd ? 1 : 0;
-    };
-    const chunkSide = (chunk) => (chunk === null || chunk === void 0 ? void 0 : chunk.refName) !== refName ? 0 : chunk.start >= windowEnd ? 1 : chunk.start < windowStart ? -1 : 0;
-    const pieceOf = (run, i) => {
-      var _a;
-      return run.abridged ? i === 0 ? run.firstPiece : run.abridged.pieces.at(-1) : run.firstPiece + ((_a = run.pieceStarts) !== null && _a !== void 0 ? _a : []).filter((s) => s <= i).length;
-    };
-    const jump = (a, b) => {
-      const [x, y] = [a, b].map(([run2, i2]) => {
-        const node = reference(run2.ids[i2]);
-        const start = passStart(run2, i2, node);
-        return [start, start + node.end - node.start];
-      });
-      const [run, i] = a;
-      return {
-        name: run.name,
-        fragStart: run.fragStart,
-        piece: pieceOf(run, i),
-        refStart: Math.min(x[1], y[1]),
-        refEnd: Math.max(x[0], y[0])
-      };
-    };
-    const abridgedAt = (other, piece, i) => (other === null || other === void 0 ? void 0 : other.abridged) && pieceOf(other, i) === piece ? [other, i] : void 0;
-    const bpBetween = (run, from, to) => {
-      let bp = 0;
-      for (let i = from; i < to; i++) {
-        bp += length(run.ids[i]);
-      }
-      return bp;
-    };
-    const chunksOf = (run, from, to) => {
-      var _a;
-      const starts = /* @__PURE__ */ new Set();
-      for (let p = pieceOf(run, from); p <= pieceOf(run, to); p++) {
-        const start = (_a = run.pieceChunks) === null || _a === void 0 ? void 0 : _a[p - run.firstPiece];
-        if (start !== void 0) {
-          starts.add(start);
-        }
-      }
-      return [...starts].map((start) => ({ refName, start }));
-    };
-    const crossings = (run) => {
-      var _a;
-      const { ids } = run;
-      const last = ids.length - 1;
-      const [before, after] = (_a = neighbours.get(run)) !== null && _a !== void 0 ? _a : [];
-      let at = -1;
-      for (let i = 0; i <= last; i++) {
-        if (reference(ids[i]) === void 0) {
-          continue;
-        }
-        if (at >= 0) {
-          if (side(run, at) * side(run, i) < 0) {
-            const offBp = bpBetween(run, at + 1, i);
-            if (i > at + 1 && offBp <= crossingBp) {
-              const { refStart, refEnd } = jump([run, at], [run, i]);
-              spans.push({
-                run,
-                first: at + 1,
-                last: i - 1,
-                crossing: { refStart, refEnd, reverse: side(run, at) > 0 }
-              });
-            } else if (i > at + 1) {
-              skips.push({
-                ...jump([run, at], [run, i]),
-                offBp,
-                offSteps: i - at - 1,
-                chunks: chunksOf(run, at + 1, i - 1)
-              });
-            } else {
-              skips.push(jump([run, at], [run, i]));
-            }
-          }
-        } else {
-          if (side(run, i) * chunkSide(run.prev) < 0) {
-            goesAcross(run.prev);
-          }
-          const far2 = i === 0 ? abridgedAt(before, run.firstPiece - 1, 1) : void 0;
-          if (far2 && side(far2[0], far2[1]) * side(run, 0) < 0) {
-            skips.push(jump(far2, [run, 0]));
-          }
-        }
-        at = i;
-      }
-      if (at < 0) {
-        return;
-      }
-      if (side(run, at) * chunkSide(run.next) < 0) {
-        goesAcross(run.next);
-      }
-      const far = at === last ? abridgedAt(after, pieceOf(run, last) + 1, 0) : void 0;
-      if (far && side(run, last) * side(far[0], far[1]) < 0) {
-        skips.push(jump([run, last], far));
-      }
-    };
-    const stepsOnWindow = (run) => run.ids.some((_, i) => stepOnWindow(run, i));
-    const abridgedSpan = (run) => {
-      const a = reference(run.ids[0]);
-      const b = reference(run.ids.at(-1));
-      if ((a === null || a === void 0 ? void 0 : a.refName) !== refName || (b === null || b === void 0 ? void 0 : b.refName) !== refName) {
-        return;
-      }
-      if (Math.max(a.end, b.end) > windowStart && Math.min(a.start, b.start) < windowEnd) {
-        spans.push({ run, first: 0, last: run.ids.length - 1 });
-      }
-    };
-    for (const run of runs) {
-      if (run.abridged) {
-        abridgedSpan(run);
-      } else if (run.name !== refName && !stepsOnWindow(run)) {
-        crossings(run);
-      } else if (contained) {
-        containedSpans(run);
-      } else {
-        detourSpan(run);
-      }
-    }
-    const inReach = (run, i) => {
-      if (stepOnWindow(run, i)) {
-        return true;
-      }
-      const node = reference(run.ids[i]);
-      if ((node === null || node === void 0 ? void 0 : node.refName) !== refName) {
-        return false;
-      }
-      const start = passStart(run, i, node);
-      return start + node.end - node.start > reachStart && start < reachEnd;
-    };
-    const kept = /* @__PURE__ */ new Set();
-    for (const [id, node] of nodes) {
-      if (node.onWindow) {
-        kept.add(id);
-      }
-    }
-    for (const span of spans) {
-      const { run } = span;
-      const { ids } = run;
-      if (run.name === refName) {
-        while (span.first > 0 && inReach(run, span.first - 1)) {
-          span.first--;
-        }
-        while (span.last < ids.length - 1 && inReach(run, span.last + 1)) {
-          span.last++;
-        }
-      }
-      for (let i = span.first; i <= span.last; i++) {
-        kept.add(ids[i]);
-      }
-    }
-    const abridgedRuns = new Set(spans.filter((span) => span.run.abridged).map((span) => span.run));
-    const bpOf = (ids, from, to) => {
-      let bp = 0;
-      for (let i = from; i < to; i++) {
-        bp += length(ids[i]);
-      }
-      return bp;
-    };
-    const ends = /* @__PURE__ */ new Map();
-    const runEnd = (run) => {
-      var _a, _b;
-      let end = ends.get(run);
-      if (end === void 0) {
-        end = run.hapOffset + ((_b = (_a = run.abridged) === null || _a === void 0 ? void 0 : _a.bp) !== null && _b !== void 0 ? _b : bpOf(run.ids, 0, run.ids.length));
-        ends.set(run, end);
-      }
-      return end;
-    };
-    const stop = (run, after, trimmed) => {
-      var _a;
-      const cut = trimmed > 0 ? { trimmed } : {};
-      const chunk = after ? run.next : run.prev;
-      if (chunk) {
-        const other = (_a = neighbours.get(run)) === null || _a === void 0 ? void 0 : _a[after ? 1 : 0];
-        return other ? {
-          kind: "elsewhere",
-          chunk,
-          bp: after ? other.hapOffset - runEnd(run) : run.hapOffset - runEnd(other),
-          ...cut
-        } : { kind: "elsewhere", chunk, ...cut };
-      }
-      const gap = after ? run.nextRecord : run.prevRecord;
-      return gap ? { kind: "break", ...gap, ...cut } : { kind: "end", ...cut };
-    };
-    const fragments = [];
-    for (const { run, first: f, last: l, crossing } of spans) {
-      const { ids, rev } = run;
-      if (abridgedRuns.has(run)) {
-        fragments.push({
-          name: run.name,
-          fragStart: run.fragStart,
-          hapStart: run.hapOffset,
-          hapEnd: runEnd(run),
-          ids,
-          rev,
-          before: stop(run, false, 0),
-          after: stop(run, true, 0),
-          abridged: run.abridged
-        });
-        continue;
-      }
-      let first = f;
-      let last = l;
-      while (first > 0 && kept.has(ids[first - 1])) {
-        first--;
-      }
-      while (last < ids.length - 1 && kept.has(ids[last + 1])) {
-        last++;
-      }
-      const hapStart = run.hapOffset + bpOf(ids, 0, first);
-      const hapEnd = hapStart + bpOf(ids, first, last + 1);
-      fragments.push({
-        name: run.name,
-        fragStart: run.fragStart,
-        hapStart,
-        hapEnd,
-        ids: ids.subarray(first, last + 1),
-        rev: rev.subarray(first, last + 1),
-        before: stop(run, false, hapStart - run.hapOffset),
-        after: stop(run, true, runEnd(run) - hapEnd),
-        ...crossing ? { crossing } : {}
-      });
-    }
-    return {
-      kept,
-      fragments,
-      open: [...open.values()],
-      across: [...across.values()],
-      skips
-    };
-  }
-  var CROSSING_BP = 65536;
-  var passAt = (node, at = Number.NaN) => Number.isNaN(at) ? node.start : at;
-  function passOnWindow(node, at, start, end) {
-    if (!(node === null || node === void 0 ? void 0 : node.onWindow)) {
-      return false;
-    }
-    const from = passAt(node, at);
-    return from < end && from + node.end - node.start > start;
-  }
-  function surelyKept(chunk, nodes, { contained, start, end }, into) {
-    var _a;
-    for (const id of chunk.nodes.keys()) {
-      if ((_a = nodes.get(id)) === null || _a === void 0 ? void 0 : _a.onWindow) {
-        into.add(id);
-      }
-    }
-    for (const { steps } of chunk.rows) {
-      const { ids, refStarts } = steps;
-      let last = -1;
-      for (let i = 0; i < ids.length; i++) {
-        const node = nodes.get(ids[i]);
-        if (passOnWindow(node, refStarts === null || refStarts === void 0 ? void 0 : refStarts[i], start, end)) {
-          for (let j = last + 1; last >= 0 && j < i; j++) {
-            into.add(ids[j]);
-          }
-          last = i;
-        } else if (contained && (node === null || node === void 0 ? void 0 : node.rank) === 0) {
-          last = -1;
-        }
-      }
-    }
-  }
-  function stopTable(stops) {
-    const chunkRefNames = [];
-    const refIndex = /* @__PURE__ */ new Map();
-    const table = {
-      kinds: new Uint8Array(stops.length),
-      kindNames: [...WALK_STOP_KINDS],
-      bp: new Float64Array(stops.length).fill(Number.NaN),
-      trimmed: new Float64Array(stops.length),
-      chunkRefs: new Int32Array(stops.length).fill(-1),
-      chunkStarts: new Float64Array(stops.length).fill(Number.NaN),
-      chunkRefNames
-    };
-    stops.forEach((stop, i) => {
-      var _a;
-      table.kinds[i] = WALK_STOP_KINDS.indexOf(stop.kind);
-      table.trimmed[i] = (_a = stop.trimmed) !== null && _a !== void 0 ? _a : 0;
-      if ("bp" in stop && stop.bp !== void 0) {
-        table.bp[i] = stop.bp;
-      }
-      if ("chunk" in stop && stop.chunk) {
-        const { refName, start } = stop.chunk;
-        let ref = refIndex.get(refName);
-        if (ref === void 0) {
-          ref = chunkRefNames.length;
-          refIndex.set(refName, ref);
-          chunkRefNames.push(refName);
-        }
-        table.chunkRefs[i] = ref;
-        table.chunkStarts[i] = start;
-      }
-    });
-    return table;
-  }
-  var outranks = (node, held) => node.onWindow !== held.onWindow ? node.onWindow : node.rank === 0 && (held.rank !== 0 || node.refName < held.refName || node.refName === held.refName && node.start < held.start);
-  var WalkGraph = class {
-    constructor(window) {
-      this.nodes = /* @__PURE__ */ new Map();
-      this.sequences = /* @__PURE__ */ new Map();
-      this.links = [];
-      this.chunks = [];
-      this.window = window;
-    }
-    // A node with its position, unless the cut already holds it at one that
-    // outranks it
-    placeNode(id, node) {
-      const { window } = this;
-      const placed = {
-        ...node,
-        onWindow: node.rank === 0 && node.refName === window.refName && node.end > window.start - window.context && node.start < window.end + window.context
-      };
-      const held = this.nodes.get(id);
-      if (!held || outranks(placed, held)) {
-        this.nodes.set(id, placed);
-      }
-    }
-    // A link between two endpoints, each id * 2 + 1 when reversed
-    addLinkEnds(source, target) {
-      this.links.push(source, target);
-    }
-    addChunk(chunk) {
-      this.chunks.push(chunk);
-    }
-    // Bases of nodes a chunk's rows give, for a window that asks for them
-    addSequences(sequences) {
-      if (this.window.sequences) {
-        for (const [id, bases] of sequences) {
-          this.sequences.set(id, bases);
-        }
-      }
-    }
-    /**
-     * The cut as typed arrays, which the worker transfers rather than copies:
-     * nodes by reference position, each link once in the order its L line
-     * sorts, then a walk per fragment, the reference's first and the rest by
-     * name. graphTablesGFA writes them as the GFA they stand for, the same bytes
-     * for the same rows.
-     */
-    tables(kept, fragments, skips = []) {
-      if (this.chunks.length > 0) {
-        placeAndLink(this.chunks, kept, (id, node) => {
-          const held2 = this.nodes.get(id);
-          if (held2) {
-            this.nodes.set(id, { ...held2, ...node });
-          }
-        }, (a, b) => {
-          this.links.push(a, b);
-        });
-      }
-      const held = [];
-      for (const id of kept) {
-        const node = this.nodes.get(id);
-        if (node) {
-          held.push({ ...node, id });
-        }
-      }
-      held.sort((x, y) => x.refName < y.refName ? -1 : x.refName > y.refName ? 1 : x.start - y.start || x.id - y.id);
-      const index = /* @__PURE__ */ new Map();
-      const names = [];
-      const refNames = [];
-      const refIndex = /* @__PURE__ */ new Map();
-      const lengths = new Int32Array(held.length);
-      const refs = new Int32Array(held.length);
-      const starts = new Float64Array(held.length);
-      const ranks = new Int32Array(held.length);
-      held.forEach(({ id, refName, start, end, rank }, i) => {
-        index.set(id, i);
-        names.push(String(id));
-        let ref = refIndex.get(refName);
-        if (ref === void 0) {
-          ref = refNames.length;
-          refIndex.set(refName, ref);
-          refNames.push(refName);
-        }
-        lengths[i] = end - start;
-        refs[i] = ref;
-        starts[i] = start;
-        ranks[i] = rank;
-      });
-      const nodeIndex = (id) => {
-        let i = index.get(id);
-        if (i === void 0) {
-          i = names.length;
-          index.set(id, i);
-          names.push(String(id));
-        }
-        return i;
-      };
-      const byLine = /* @__PURE__ */ new Map();
-      for (let i = 0; i < this.links.length; i += 2) {
-        const a = this.links[i];
-        const b = this.links[i + 1];
-        const source = Math.floor(a / 2);
-        const target = Math.floor(b / 2);
-        if (kept.has(source) && kept.has(target)) {
-          byLine.set(`${source}	${a % 2 ? "-" : "+"}	${target}	${b % 2 ? "-" : "+"}`, i);
-        }
-      }
-      const lines = [...byLine.keys()].sort();
-      const from = new Int32Array(lines.length);
-      const to = new Int32Array(lines.length);
-      const strands = new Uint8Array(lines.length);
-      lines.forEach((line, k) => {
-        const i = byLine.get(line);
-        const a = this.links[i];
-        const b = this.links[i + 1];
-        from[k] = nodeIndex(Math.floor(a / 2));
-        to[k] = nodeIndex(Math.floor(b / 2));
-        strands[k] = a % 2 | b % 2 << 1;
-      });
-      const walks = this.referenceFirst(fragments);
-      const offsets = new Int32Array(walks.length + 1);
-      walks.forEach(({ ids }, p) => {
-        offsets[p + 1] = offsets[p] + ids.length;
-      });
-      const steps = new Int32Array(offsets[walks.length]);
-      const reversed = new Uint8Array(steps.length);
-      walks.forEach(({ ids, rev }, p) => {
-        const at = offsets[p];
-        for (let j = 0; j < ids.length; j++) {
-          steps[at + j] = nodeIndex(ids[j]);
-        }
-        reversed.set(rev, at);
-      });
-      return {
-        nodes: { names, lengths, refs, starts, ranks, refNames },
-        links: { from, to, strands },
-        walks: {
-          names: walks.map((f) => f.name),
-          starts: Float64Array.from(walks, (f) => f.hapStart),
-          ends: Float64Array.from(walks, (f) => f.hapEnd),
-          offsets,
-          steps,
-          reversed,
-          before: stopTable(walks.map((f) => f.before)),
-          after: stopTable(walks.map((f) => f.after)),
-          abridgedSteps: Float64Array.from(walks, (f) => {
-            var _a, _b;
-            return (_b = (_a = f.abridged) === null || _a === void 0 ? void 0 : _a.steps) !== null && _b !== void 0 ? _b : NaN;
-          }),
-          abridgedBp: Float64Array.from(walks, (f) => {
-            var _a, _b;
-            return (_b = (_a = f.abridged) === null || _a === void 0 ? void 0 : _a.bp) !== null && _b !== void 0 ? _b : NaN;
-          })
-        },
-        skips: {
-          names: skips.map((s) => s.name),
-          starts: Float64Array.from(skips, (s) => s.refStart),
-          ends: Float64Array.from(skips, (s) => s.refEnd),
-          offBp: Float64Array.from(skips, (s) => {
-            var _a;
-            return (_a = s.offBp) !== null && _a !== void 0 ? _a : NaN;
-          }),
-          offSteps: Float64Array.from(skips, (s) => {
-            var _a;
-            return (_a = s.offSteps) !== null && _a !== void 0 ? _a : NaN;
-          })
-        }
-      };
-    }
-    // The view anchors on the first walk when no walk names the assembly, as
-    // gbz-base's cut has it; in file order that was whichever haplotype the
-    // chunk listed first, CHM13 on a GRCh38 window
-    referenceFirst(fragments) {
-      const { refName } = this.window;
-      return [...fragments].sort((a, b) => Number(b.name === refName) - Number(a.name === refName) || (a.name < b.name ? -1 : a.name > b.name ? 1 : a.hapStart - b.hapStart));
-    }
-  };
-  var BUDGET_NAMES = {
-    steps: "the step budget",
-    bytes: "a byte budget of"
-  };
-  var ALONG_R_PER_STEP = 4;
-  var readSteps = (row) => {
-    var _a;
-    const interior = (_a = row.interior) !== null && _a !== void 0 ? _a : 0;
-    return interior + (row.n - interior) / ALONG_R_PER_STEP;
-  };
-  function stepBudgetError(rows, stepBudget, readPerKept, window, chunk, filtered, names = BUDGET_NAMES) {
-    var _a;
-    let total = 0;
-    const perChunk = /* @__PURE__ */ new Map();
-    const walks = /* @__PURE__ */ new Set();
-    for (const row of rows) {
-      const steps = readSteps(row);
-      total += steps;
-      perChunk.set(row.chunkStart, ((_a = perChunk.get(row.chunkStart)) !== null && _a !== void 0 ? _a : 0) + steps);
-      walks.add(row.name);
-    }
-    const budget = stepBudget * readPerKept;
-    if (total <= budget) {
-      return void 0;
-    }
-    const windowBp = window.end - window.start;
-    let read = 0;
-    let fitsBp = 0;
-    for (const cs of [...perChunk.keys()].sort((a, b) => a - b)) {
-      read += perChunk.get(cs);
-      if (read > budget) {
-        break;
-      }
-      fitsBp = Math.max(fitsBp, cs + chunk - window.start);
-    }
-    const fewerFit = !filtered && walks.size > 2 && 2 * total / walks.size <= budget;
-    return new RegionTooLargeError(fitsBp > 0 ? `Zoom in to about ${bpString(fitsBp)}${fewerFit ? ", or choose fewer haplotypes," : ""} to see the graph` : `Too many haplotype steps here to draw ${filtered ? "these haplotypes" : "every haplotype"} (${Math.round(read).toLocaleString()} steps read, a step along the reference counting a quarter, over ${readPerKept} \xD7 ${names.steps} of ${stepBudget.toLocaleString()}); choose fewer haplotypes`, budget, windowBp, Math.max(fitsBp, 1));
-  }
-  function keptStepsError(fragments, budget, window, filtered) {
-    const total = fragments.reduce((sum, f) => sum + f.ids.length, 0);
-    return keptOverError(total, budget, window, filtered);
-  }
-  function keptNodesError(nodes, limit, window, filtered, readTo = window.end) {
-    return keptOverError(nodes, limit, window, filtered, readTo);
-  }
-  function keptOverError(kept, limit, window, filtered, readTo = window.end) {
-    if (kept <= limit) {
-      return void 0;
-    }
-    const windowBp = window.end - window.start;
-    const readBp = Math.min(readTo, window.end) - window.start;
-    const fitsBp = Math.max(1, Math.floor(readBp * limit / kept));
-    return new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)}${filtered ? "" : ", or choose fewer haplotypes,"} to see the graph`, limit, windowBp, fitsBp);
-  }
-  async function byteBudgetError(bytesTo, budget, window, chunk, names = BUDGET_NAMES) {
-    const bytes = await bytesTo(window.end);
-    if (bytes <= budget) {
-      return void 0;
-    }
-    let fitsBp = 0;
-    let least;
-    for (let cs = Math.floor(window.start / chunk) * chunk; cs < window.end; cs += chunk) {
-      const read = await bytesTo(cs + 1);
-      least !== null && least !== void 0 ? least : least = read;
-      if (read > budget) {
-        break;
-      }
-      fitsBp = cs + chunk - window.start;
-    }
-    const windowBp = window.end - window.start;
-    return fitsBp > 0 ? new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)} to see the graph`, budget, windowBp, fitsBp, { bytes, zoomHelps: true }) : new RegionTooLargeError(`Too much graph here to fetch, even zoomed in (${megabytes(least !== null && least !== void 0 ? least : bytes)} against ${names.bytes} ${megabytes(budget)}). A satellite or rDNA array usually causes this: the graph folds the repeat into a few nodes that each haplotype loops through many times`, budget, windowBp, 1, { bytes });
-  }
-  var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
-
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.6.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
-  function qualifiedKey(assemblyName, refName) {
-    return `${assemblyName}	${refName}`;
-  }
-  function refNameLookup(names) {
-    const lookup = /* @__PURE__ */ new Map();
-    for (const name of names) {
-      lookup.set(name, name);
-      const sample = panSNSample(name);
-      if (sample !== name) {
-        const contig = panSNContig(name);
-        lookup.set(qualifiedKey(sample, contig), name);
-        const haplotype = panSNHaplotype(name);
-        if (haplotype !== void 0) {
-          lookup.set(qualifiedKey(haplotype, contig), name);
-        }
-      }
-    }
-    return lookup;
-  }
-  function resolveRefName(lookup, assemblyName, refName) {
-    var _a;
-    return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
-  }
-
-  // node_modules/.pnpm/@jbrowse+graph-walks@4.6.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
-  var READ_STEPS_PER_KEPT = 8;
-  var FOLLOW_ROUNDS = 3;
-  var FOLLOW_CHUNKS = 4;
-  var WALK_CONTEXT = 1e3;
-  var DETAIL_READS = 16;
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/walkFile.js
+  var WALK_FORMAT = 7;
   var WalkFormatError = class extends Error {
     constructor() {
       super(...arguments);
       this.name = "WalkFormatError";
     }
   };
-  function checkRange(refName, start, end) {
-    if (!Number.isFinite(start) || !Number.isFinite(end)) {
-      throw new Error(`${refName}:${start}-${end} is not a finite range to query the graph's index for`);
+  var decoder = new TextDecoder();
+  var ROW_KINDS = /* @__PURE__ */ new Map([
+    ["tile", ["ref", "nodes", "route", "walk", "abridged"]],
+    ["departures", ["departure"]],
+    ["detail", ["nodes", "route", "walk"]]
+  ]);
+  async function unitLines(bytes, unit) {
+    const text = await unzip(bytes).then((unzipped) => decoder.decode(unzipped), (error) => {
+      throw new WalkFormatError(`${unit} is not whole gzip members`, {
+        cause: error
+      });
+    });
+    if (!text.endsWith("\n")) {
+      throw new WalkFormatError(`${unit} ends partway through a line: ${JSON.stringify(text.slice(-40))}`);
+    }
+    return text.split("\n").filter((line) => line !== "");
+  }
+  function unitName(unit) {
+    return `The unit at byte ${unit.offset} of the walk file, ${unit.refName}'s ${unit.kind} ${unit.name} over [${unit.start}, ${unit.end}) as its table lists it,`;
+  }
+  function isTableHead(head, refName) {
+    const [tag, seq, start, , kind, name] = head.split("	", 6);
+    return [tag, seq, start, kind, name].join("	") === ["#unit", refName, "0", "table", "."].join("	");
+  }
+  function checkUnit(unit, head, rows) {
+    var _a;
+    const stated = [
+      "#unit",
+      unit.refName,
+      unit.start,
+      unit.end,
+      unit.kind,
+      unit.name
+    ].join("	");
+    const kinds = ROW_KINDS.get(unit.kind);
+    const stray = rows.find((row) => {
+      const [seq, , , kind = ""] = row.split("	", 4);
+      return kinds !== void 0 && (seq !== unit.refName || !kinds.includes(kind));
+    });
+    if ((head === null || head === void 0 ? void 0 : head.split("	", 6).join("	")) !== stated) {
+      throw new WalkFormatError(`${unitName(unit)} starts ${JSON.stringify((_a = head === null || head === void 0 ? void 0 : head.slice(0, 80)) !== null && _a !== void 0 ? _a : "")}`);
+    } else if (stray !== void 0) {
+      throw new WalkFormatError(`${unitName(unit)} holds a row that is not one of ${unit.refName}'s ${kinds === null || kinds === void 0 ? void 0 : kinds.join(", ")} rows: ${JSON.stringify(stray.slice(0, 80))}`);
     }
   }
-  function withoutDetails(names) {
-    return names.filter((name) => !name.includes("~"));
+  function integerTag2(fields, tag) {
+    const field = fields.find((f) => f.startsWith(`${tag}:i:`));
+    return field === void 0 ? void 0 : +field.slice(tag.length + 3);
   }
+  function formatError(format) {
+    return new WalkFormatError(format > WALK_FORMAT ? `This walk file is format ${format}; this version of @jbrowse/graph-walks reads format ${WALK_FORMAT}, so update the viewer, or @jbrowse/graph-walks, to one that reads format ${format}` : `This walk file is format ${format}; @jbrowse/graph-walks reads format ${WALK_FORMAT}, so rebuild it with gfa-to-tabix 4.0 or later`);
+  }
+  function parseDirectory(text) {
+    var _a;
+    const [first = "", ...rest] = text.split("\n").filter((line) => line !== "");
+    const fields = first.split("	");
+    if (fields[0] !== "#walks") {
+      throw new WalkFormatError(`This is not a walk file's directory: its first line starts ${JSON.stringify(first.slice(0, 40))}, not #walks`);
+    }
+    const format = (_a = integerTag2(fields, "format")) !== null && _a !== void 0 ? _a : 1;
+    if (format !== WALK_FORMAT) {
+      throw formatError(format);
+    }
+    let header;
+    const tables = /* @__PURE__ */ new Map();
+    for (const line of rest) {
+      const [name = "", offset, length] = line.split("	");
+      const range = { offset: Number(offset), length: Number(length) };
+      if (!Number.isSafeInteger(range.offset) || !Number.isSafeInteger(range.length)) {
+        throw new WalkFormatError(`A walk file directory line holds no byte range: ${line}`);
+      }
+      if (name === "#header") {
+        header = range;
+      } else {
+        tables.set(name, range);
+      }
+    }
+    if (!header) {
+      throw new WalkFormatError("The walk file directory has no #header line");
+    }
+    return {
+      walks: fields.filter((f) => !f.startsWith("bytes:i:")),
+      bytes: integerTag2(fields, "bytes"),
+      header,
+      tables
+    };
+  }
+  function once(read) {
+    let held;
+    return () => {
+      if (!held) {
+        const started = read();
+        started.catch(() => {
+          if (held === started) {
+            held = void 0;
+          }
+        });
+        held = started;
+      }
+      return held;
+    };
+  }
+  function raceAbort(promise, signal) {
+    return signal ? new Promise((resolve, reject) => {
+      signal.throwIfAborted();
+      const onAbort = () => {
+        reject(signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason)));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      promise.then(resolve, reject).finally(() => {
+        signal.removeEventListener("abort", onAbort);
+      });
+    }) : promise;
+  }
+  var FORMAT_6_NAME = /\.walks\.bed\.gz(?=$|[?#])/;
+  var WalkFile = class {
+    constructor(data, directory) {
+      this.tableReads = /* @__PURE__ */ new Map();
+      this.readDirectory = once(async () => {
+        var _a;
+        try {
+          return parseDirectory(await this.directory.readFile("utf8"));
+        } catch (error) {
+          throw !(error instanceof WalkFormatError) && FORMAT_6_NAME.test((_a = this.data.source) !== null && _a !== void 0 ? _a : "") ? new WalkFormatError(`${this.data.source} names a walk file of format 6 or earlier, which has no .idx directory; @jbrowse/graph-walks reads format ${WALK_FORMAT}, so rebuild it with gfa-to-tabix 4.0 or later`, { cause: error }) : error;
+        }
+      });
+      this.header = once(async () => {
+        var _a, _b;
+        const directory2 = await this.readDirectory();
+        const { offset, length } = directory2.header;
+        const header = await unitLines(await this.data.read(length, offset), "The header unit");
+        const { size } = await this.data.stat();
+        if (header[0] !== directory2.walks.join("	")) {
+          throw new WalkFormatError(`The walk file's directory does not match its data: the directory states ${directory2.walks.join(" ")}, the data ${(_a = header[0]) !== null && _a !== void 0 ? _a : "no #walks line"}`);
+        } else if (size > 0 && directory2.bytes !== size) {
+          throw new WalkFormatError(`The walk file's directory does not match its data: the directory states ${(_b = directory2.bytes) !== null && _b !== void 0 ? _b : "no"} bytes, the data holds ${size}`);
+        }
+        return header;
+      });
+      this.data = data;
+      this.directory = directory;
+    }
+    // The reference sequences, in the directory's order, once the directory
+    // and the data agree
+    async sequences() {
+      await this.header();
+      return [...(await this.readDirectory()).tables.keys()];
+    }
+    // A sequence's units in file order, once the directory and the data
+    // agree; none for a sequence the file lacks
+    async units(refName) {
+      let read = this.tableReads.get(refName);
+      if (!read) {
+        read = once(async () => {
+          const range = (await this.readDirectory()).tables.get(refName);
+          const [checked, table] = await Promise.allSettled([
+            this.header(),
+            range ? this.table(refName, range) : []
+          ]);
+          if (checked.status === "rejected") {
+            throw checked.reason;
+          } else if (table.status === "rejected") {
+            throw table.reason;
+          }
+          return table.value;
+        });
+        this.tableReads.set(refName, read);
+      }
+      return read();
+    }
+    async table(refName, { offset, length }) {
+      const [head = "", ...entries] = await unitLines(await this.data.read(length, offset), `${refName}'s table`);
+      if (!isTableHead(head, refName)) {
+        throw new WalkFormatError(`${refName}'s table, at byte ${offset} of the walk file, starts ${JSON.stringify(head.slice(0, 80))}`);
+      }
+      return entries.map((line) => {
+        const [tag, seq = "", start, end, kind = "", name = "", at, size] = line.split("	");
+        const unit = {
+          refName: seq,
+          start: Number(start),
+          end: Number(end),
+          kind,
+          name,
+          offset: Number(at),
+          length: Number(size)
+        };
+        if (tag !== "#entry" || seq !== refName || ![unit.start, unit.end, unit.offset, unit.length].every(Number.isSafeInteger)) {
+          throw new WalkFormatError(`${refName}'s unit table holds ${line}`);
+        }
+        return unit;
+      });
+    }
+    /**
+     * The lines of each unit, without its `#unit` line, in the order given.
+     * Units whose byte ranges touch are fetched by one read, and each is
+     * gunzipped on its own.
+     */
+    async read(units, signal) {
+      const byOffset = [...new Map(units.map((u) => [u.offset, u])).values()].filter((u) => u.length > 0).sort((a, b) => a.offset - b.offset);
+      const runs = [];
+      for (const unit of byOffset) {
+        const run = runs.at(-1);
+        const last = run === null || run === void 0 ? void 0 : run.at(-1);
+        if (run && last && last.offset + last.length === unit.offset) {
+          run.push(unit);
+        } else {
+          runs.push([unit]);
+        }
+      }
+      const held = /* @__PURE__ */ new Map();
+      await Promise.all(runs.map(async (run) => {
+        const first = run[0];
+        const last = run.at(-1);
+        const length = last.offset + last.length - first.offset;
+        const bytes = await this.data.read(length, first.offset, { signal });
+        for (const unit of run) {
+          const at = unit.offset - first.offset;
+          const [head, ...rest] = await unitLines(bytes.subarray(at, at + unit.length), unitName(unit));
+          checkUnit(unit, head, rest);
+          held.set(unit.offset, rest);
+        }
+      }));
+      return units.map((unit) => {
+        var _a;
+        return (_a = held.get(unit.offset)) !== null && _a !== void 0 ? _a : [];
+      });
+    }
+  };
+
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  var READ_STEPS_PER_KEPT = 8;
+  var WALK_CONTEXT = 1e3;
+  var DETAIL_READS = 16;
+  var ATTACH_FETCHES = 8;
+  var WALK_BUDGETS = {
+    stepBudget: 4e6,
+    byteBudget: 8e6,
+    departureByteBudget: 2e6,
+    attachBp: ATTACH_BP
+  };
+  var DepartureReadError = class extends Error {
+    constructor(bytes, limit) {
+      super(`Too many departures from the reference over this window to read (${megabytes(bytes)} against a budget of ${megabytes(limit)}). A collapsed repeat usually causes this: haplotypes hop between its copies, and each hop is a departure`);
+      this.name = "DepartureReadError";
+      this.bytes = bytes;
+      this.limit = limit;
+    }
+  };
   async function readInOrder(items, limit, signal, read, use) {
     const reads = [];
     const next = () => {
@@ -6775,50 +4951,66 @@
       use(items[i], await reads[i]);
     }
   }
-  function raceAbort(promise, signal) {
-    if (!signal) {
-      return promise;
-    }
-    signal.throwIfAborted();
-    return new Promise((resolve, reject) => {
-      const onAbort = () => {
-        reject(signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason)));
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
-      promise.then(resolve, reject).finally(() => {
-        signal.removeEventListener("abort", onAbort);
-      });
-    });
+  var overlaps = (unit, span) => unit.length > 0 && unit.start < span.end && unit.end > span.start;
+  var bytesOf = (units) => units.reduce((sum, unit) => sum + unit.length, 0);
+  var drawnSpan = (region, context) => ({
+    start: Math.max(0, region.start - context),
+    end: region.end + context
+  });
+  function attachTiles(units, ownTiles) {
+    return units.filter((u) => u.kind === "tile" && u.length > 0 && ownTiles.includes(Number(u.name)));
   }
-  var WalkReader = class {
-    constructor(walks) {
-      this.walks = walks;
+  var directoryOf = (url) => url.replace(/(?=$|[?#])/, ".idx");
+  function departureRecords(lines, span, keep) {
+    const records = [];
+    const ownTiles = /* @__PURE__ */ new Map();
+    for (const line of new Set(lines)) {
+      const cols = line.split("	");
+      if (cols[3] === "departure" && +cols[1] < span.end && +cols[2] > span.start) {
+        const record = parseDepartureRow(cols);
+        if (keep === void 0 || keep(record.name)) {
+          records.push(record);
+          ownTiles.set(record, departureOwnTiles(cols));
+        }
+      }
+    }
+    return { records, ownTiles };
+  }
+  var WalkReader = class _WalkReader {
+    constructor(file) {
+      this.readHeader = once(async () => {
+        const header = walkHeader(await this.file.header());
+        const { tile } = header;
+        if (tile === void 0) {
+          throw new WalkFormatError("The walk file's #walks line states no tile:i:");
+        }
+        return { ...header, tile };
+      });
+      this.readLookup = once(async () => refNameLookup(await this.file.sequences()));
+      this.file = file;
+    }
+    /**
+     * The walk file at `url` and its directory at `url` plus `.idx`, before any
+     * query string, each opened by `open`, a RemoteFile by default
+     */
+    static open(url, open = (location) => new RemoteFile(location)) {
+      return _WalkReader.fromFilehandles({
+        data: open(url),
+        directory: open(directoryOf(url))
+      });
+    }
+    // The walk file `data` with its directory, the `.idx` file
+    static fromFilehandles({ data, directory }) {
+      return new _WalkReader(new WalkFile(data, directory));
     }
     // The header, read once for every caller: one caller giving up stops only
     // its own wait, and a read that fails is tried again by the next caller
     header(opts = {}) {
-      if (!this.headerRead) {
-        const read = this.walks.getHeaderLines().then((lines) => {
-          var _a, _b;
-          const header = walkHeader(lines);
-          if (header.format !== 5) {
-            throw new WalkFormatError(`This walk file is format ${(_a = header.format) !== null && _a !== void 0 ? _a : 1}; @jbrowse/graph-walks reads format 5, so rebuild it with gfa-to-tabix 1.4 or later`);
-          }
-          return { ...header, chunk: (_b = header.chunk) !== null && _b !== void 0 ? _b : 65536 };
-        });
-        read.catch(() => {
-          if (this.headerRead === read) {
-            this.headerRead = void 0;
-          }
-        });
-        this.headerRead = read;
-      }
-      return raceAbort(this.headerRead, opts.signal);
+      return raceAbort(this.readHeader(), opts.signal);
     }
-    // The reference sequences the walk file holds windows on, without the
-    // `seq~cs` sequences of detail records
-    async referenceSequences(opts = {}) {
-      return withoutDetails(await this.walks.getReferenceSequenceNames(opts));
+    // The reference sequences the walk file holds windows on
+    referenceSequences(opts = {}) {
+      return raceAbort(this.file.sequences(), opts.signal);
     }
     /**
      * The walk file's sequence for `refName` on `sample`, or for `refName` as
@@ -6826,39 +5018,57 @@
      * the file holds neither.
      */
     async sequenceFor(sample, refName, opts = {}) {
-      if (!this.lookupRead) {
-        const read = this.walks.getReferenceSequenceNames().then((names) => refNameLookup(withoutDetails(names)));
-        read.catch(() => {
-          if (this.lookupRead === read) {
-            this.lookupRead = void 0;
-          }
-        });
-        this.lookupRead = read;
-      }
-      const lookup = await raceAbort(this.lookupRead, opts.signal);
+      const lookup = await raceAbort(this.readLookup(), opts.signal);
       return resolveRefName(lookup, sample, refName);
     }
-    // The first base a cut over `start`, and `end` on `refName` when given,
-    // queries
-    async queryStart(start, opts = {}) {
-      const { refName = "", end = start + 1 } = opts;
-      return walkQueryStart(await this.header(opts), refName, start, end);
+    // The units the file holds for a reference sequence, in file order
+    units(refName, opts = {}) {
+      return raceAbort(this.file.units(refName), opts.signal);
+    }
+    // Where the reference's last node on `refName` ends, from the extents of
+    // its tiles; 0 for a sequence the file lacks
+    async sequenceLength(refName, opts = {}) {
+      const units = await this.units(refName, opts);
+      return units.reduce((end, u) => u.kind === "tile" ? Math.max(end, u.end) : end, 0);
+    }
+    // The compressed bytes a cut of `region` reads before any attach fetch or
+    // expansion: its tiles and departure blocks
+    async bytesFor(refName, region, opts = {}) {
+      var _a;
+      checkRange(refName, region.start, region.end);
+      const drawn = drawnSpan(region, (_a = opts.context) !== null && _a !== void 0 ? _a : WALK_CONTEXT);
+      const units = await this.units(refName, opts);
+      return bytesOf(units.filter((u) => (u.kind === "tile" || u.kind === "departures") && overlaps(u, drawn)));
+    }
+    // Every pass of the reference over `region`, by start, from the ref rows of
+    // the tiles there: a node the reference passes twice there comes twice
+    async referenceNodes(refName, region, opts = {}) {
+      checkRange(refName, region.start, region.end);
+      const tiles = (await this.units(refName, opts)).filter((u) => u.kind === "tile" && overlaps(u, region));
+      const read = await this.file.read(tiles, opts.signal);
+      return referenceNodes(read.flat().map((line) => line.split("	"))).filter((node) => node.refName === refName && node.end > region.start && node.start < region.end).sort((a, b) => a.start - b.start || a.end - b.end);
     }
     async cut(refName, region, opts = {}) {
-      var _a, _b;
-      const { signal, keep, context = WALK_CONTEXT, stepBudget = Infinity, byteBudget = Infinity, crossingBp = CROSSING_BP, links = true, contained = false, nodeLimit = Infinity, expand } = opts;
-      const header = await this.header({ signal });
-      const { chunk } = header;
-      const from = walkQueryStart(header, refName, region.start, region.end);
-      const bytesForRegions = (_a = this.walks.bytesForRegions) === null || _a === void 0 ? void 0 : _a.bind(this.walks);
-      const budgeted = Number.isFinite(byteBudget) && bytesForRegions !== void 0;
-      const bytesFor = async (spans) => budgeted ? bytesForRegions(spans.map((span) => ({ refName, ...span })), { signal }) : 0;
-      const tooLarge = budgeted ? await byteBudgetError(async (end) => {
-        checkRange(refName, from, end);
-        return bytesFor([{ start: from, end }]);
-      }, byteBudget, region, chunk, opts.budgetNames) : void 0;
-      if (tooLarge) {
-        throw tooLarge;
+      var _a, _b, _c;
+      const { signal, keep, context = WALK_CONTEXT, stepBudget = WALK_BUDGETS.stepBudget, byteBudget = WALK_BUDGETS.byteBudget, departureByteBudget = WALK_BUDGETS.departureByteBudget, attachBp = ATTACH_BP, attachFetches = ATTACH_FETCHES, links = true, contained = false, nodeLimit = Infinity, expand } = opts;
+      checkRange(refName, region.start, region.end);
+      const [header, units] = await Promise.all([
+        this.header({ signal }),
+        this.units(refName, { signal })
+      ]);
+      const { tile } = header;
+      const drawn = drawnSpan(region, context);
+      const tiles = units.filter((u) => u.kind === "tile" && overlaps(u, drawn));
+      const blocks = units.filter((u) => u.kind === "departures" && overlaps(u, drawn));
+      if (Number.isFinite(byteBudget)) {
+        const tooLarge = byteBudgetError((end) => bytesOf(tiles.filter((u) => u.start < end)), byteBudget, region, tile, opts.budgetNames);
+        if (tooLarge) {
+          throw tooLarge;
+        }
+      }
+      const departureBytes = bytesOf(blocks);
+      if (departureBytes > departureByteBudget) {
+        throw new DepartureReadError(departureBytes, departureByteBudget);
       }
       const reads = new AbortController();
       const stop = () => {
@@ -6867,7 +5077,7 @@
       signal === null || signal === void 0 ? void 0 : signal.throwIfAborted();
       signal === null || signal === void 0 ? void 0 : signal.addEventListener("abort", stop, { once: true });
       const rows = [];
-      let cut;
+      const attachRows = [];
       const graph = new WalkGraph({
         refName,
         start: region.start,
@@ -6875,9 +5085,12 @@
         context,
         sequences: opts.sequences
       });
-      const decoded = /* @__PURE__ */ new Set();
+      const decodedBy = /* @__PURE__ */ new Map();
+      const decodedFor = (unit, name) => {
+        var _a2;
+        return ((_a2 = decodedBy.get(unit.offset)) === null || _a2 === void 0 ? void 0 : _a2.some((took) => took(name))) === true;
+      };
       const ends = [];
-      const jumps = [];
       const surely = /* @__PURE__ */ new Set();
       const bounds = {
         contained,
@@ -6885,97 +5098,74 @@
         end: region.end + context
       };
       const filtered = keep !== void 0;
+      const detailUnits = new Map(units.filter((u) => u.kind === "detail").map((u) => [u.name, u]));
       let details = [];
-      const decode = (cs, chunkRows) => {
-        if (decoded.has(cs)) {
-          return;
-        }
-        decoded.add(cs);
-        const chunkCut = decodeChunk(chunkRows, keep, opts.sequences);
-        for (const jump of chunkCut.skips) {
-          jumps.push(jump);
-        }
-        let ref;
-        for (const row of chunkCut.rows) {
-          if (row.abridged && (expand === null || expand === void 0 ? void 0 : expand(row.name))) {
-            ref !== null && ref !== void 0 ? ref : ref = chunkRef(chunkRows);
-            details.push({ ref, row });
-          } else {
-            rows.push(row);
-          }
-        }
-        place2(chunkCut, cs);
-      };
-      const readDetail = async ({ row }) => {
-        const { refName: sequence, start } = row.abridged.detail;
-        checkRange(sequence, start, start + 1);
-        const held = [];
-        await this.walks.getLines(sequence, start, start + 1, {
-          signal: reads.signal,
-          lineCallback: (line) => {
-            const cols = line.split("	");
-            cols[0] = refName;
-            cols[1] = String(row.chunkStart);
-            held.push(cols);
-          }
-        });
-        return held;
-      };
-      const decodeDetail = ({ ref, row }, held) => {
-        const chunkCut = decodeChunk(held, (name) => name === row.name, opts.sequences, ref);
-        for (const decodedRow of chunkCut.rows) {
-          if (decodedRow.name === row.name) {
-            rows.push(decodedRow);
-          }
-        }
-        place2(chunkCut, row.chunkStart);
-      };
-      const place2 = (chunkCut, cs) => {
-        for (const [id, node] of chunkCut.nodes) {
+      const detailsRead = /* @__PURE__ */ new Set();
+      const place2 = (tileCut, readTo) => {
+        for (const [id, node] of tileCut.nodes) {
           graph.placeNode(id, node);
         }
-        for (const { id, ...node } of chunkCut.revisits) {
+        for (const { id, ...node } of tileCut.revisits) {
           graph.placeNode(id, node);
         }
-        graph.addSequences(chunkCut.sequences);
-        graph.addChunk(chunkCut.chunk);
-        for (const end of chunkCut.ends) {
+        graph.addSequences(tileCut.sequences);
+        graph.addChunk(tileCut.chunk);
+        for (const end of tileCut.ends) {
           ends.push(end);
         }
         if (Number.isFinite(nodeLimit)) {
-          surelyKept(chunkCut, graph.nodes, bounds, surely);
+          surelyKept(tileCut, graph.nodes, bounds, surely);
           if (surely.size > nodeLimit) {
             surely.clear();
             surelyKept({ nodes: graph.nodes, rows }, graph.nodes, bounds, surely);
           }
-          const over = keptNodesError(surely.size, nodeLimit, region, filtered, cs + chunk);
+          const over = keptNodesError(surely.size, nodeLimit, region, filtered, readTo);
           if (over) {
             throw over;
           }
         }
       };
-      const readChunks = async (start, end) => {
-        checkRange(refName, start, end);
-        let at;
-        let held = [];
-        await this.walks.getLines(refName, start, end, {
-          signal: reads.signal,
-          lineCallback: (line) => {
-            const cols = line.split("	");
-            const cs = +cols[1];
-            if (cs !== at) {
-              if (at !== void 0) {
-                decode(at, held);
-              }
-              at = cs;
-              held = [];
+      const decode = (unit, lines, into, only) => {
+        var _a2, _b2;
+        const wanted = (_a2 = only !== null && only !== void 0 ? only : keep) !== null && _a2 !== void 0 ? _a2 : (() => true);
+        const earlier = (_b2 = decodedBy.get(unit.offset)) !== null && _b2 !== void 0 ? _b2 : [];
+        decodedBy.set(unit.offset, [...earlier, wanted]);
+        const tileRows = lines.map((line) => line.split("	"));
+        const tileCut = decodeChunk(tileRows, Number(unit.name), (name) => wanted(name) && !earlier.some((took) => took(name)), opts.sequences);
+        let ref;
+        for (const row of tileCut.rows) {
+          if (row.abridged && (expand === null || expand === void 0 ? void 0 : expand(row.name))) {
+            const { name } = row.abridged.detail;
+            if (!detailsRead.has(name)) {
+              detailsRead.add(name);
+              ref !== null && ref !== void 0 ? ref : ref = chunkRef(tileRows);
+              details.push({ ref, row, into });
             }
-            held.push(cols);
+          } else {
+            into.push(row);
           }
-        });
-        if (at !== void 0) {
-          decode(at, held);
         }
+        place2(tileCut, unit.end);
+      };
+      const readDetail = async ({ row }) => {
+        const { name } = row.abridged.detail;
+        const unit = detailUnits.get(name);
+        if (!unit) {
+          throw new WalkFormatError(`${refName}'s unit table lists no detail unit ${name}, which an abridged row of ${row.name} names`);
+        }
+        const [lines = []] = await this.file.read([unit], reads.signal);
+        return lines.map((line) => line.split("	"));
+      };
+      const decodeDetail = ({ ref, row, into }, held) => {
+        const tileCut = decodeChunk(held, row.chunkStart, (name) => name === row.name, opts.sequences, ref);
+        for (const decodedRow of tileCut.rows) {
+          if (decodedRow.name === row.name) {
+            into.push(decodedRow);
+          }
+        }
+        place2(tileCut, row.chunkStart + tile);
+      };
+      const finish = async () => {
         const pending = details;
         details = [];
         await readInOrder(pending, DETAIL_READS, reads.signal, readDetail, decodeDetail);
@@ -6985,52 +5175,43 @@
           }
         }
       };
+      let cut;
       try {
-        await readChunks(from, region.end);
-        const tooManyRead = stepBudgetError(rows, stepBudget, READ_STEPS_PER_KEPT, region, chunk, filtered, opts.budgetNames);
+        const read = await this.file.read([...tiles, ...blocks], reads.signal);
+        tiles.forEach((unit, k) => {
+          decode(unit, read[k], rows);
+        });
+        const { records, ownTiles } = departureRecords(read.slice(tiles.length).flat(), drawn, keep);
+        await finish();
+        const tooManyRead = stepBudgetError(rows, stepBudget, READ_STEPS_PER_KEPT, region, tile, filtered, opts.budgetNames);
         if (tooManyRead) {
           throw tooManyRead;
         }
-        let first = from;
-        let last = Math.floor((region.end - 1) / chunk) * chunk;
-        const reach = FOLLOW_CHUNKS * chunk;
-        const [farLo, farHi] = [first - reach, last + reach];
-        const [lo, hi] = contained ? [
-          Math.floor((region.start - context) / chunk) * chunk,
-          Math.floor((region.end + context - 1) / chunk) * chunk
-        ] : [farLo, farHi];
-        const within = (c, from2, to) => c.refName === refName && c.start >= from2 && c.start <= to;
-        const cutRows = () => walkCut(joinPieces(rows), graph.nodes, refName, {
+        const cutRows = () => walkCut(joinPieces(rows), graph.nodes, refName, records, {
           contained,
           context,
-          crossingBp
+          attachBp,
+          squeeze: squeezer(header.holes, refName),
+          drawn: bounds,
+          attach: joinPieces(attachRows)
         });
         cut = cutRows();
-        let spent = await bytesFor([{ start: from, end: region.end }]);
-        for (let round = 0; round < FOLLOW_ROUNDS; round++) {
-          let reachFirst = first;
-          let reachLast = last;
-          for (const c of [
-            ...cut.open.filter((c2) => within(c2, lo, hi)),
-            ...cut.across.filter((c2) => within(c2, farLo, farHi))
-          ]) {
-            reachFirst = Math.min(reachFirst, c.start);
-            reachLast = Math.max(reachLast, c.start);
+        const fetches = /* @__PURE__ */ new Map();
+        for (const { departure } of cut.unattached) {
+          const { name } = departure;
+          for (const unit of attachTiles(units, (_a = ownTiles.get(departure)) !== null && _a !== void 0 ? _a : [])) {
+            if (!decodedFor(unit, name)) {
+              fetches.set(unit, ((_b = fetches.get(unit)) !== null && _b !== void 0 ? _b : /* @__PURE__ */ new Set()).add(name));
+            }
           }
-          const spans = [
-            { start: reachFirst, end: first },
-            { start: last + chunk, end: reachLast + 1 }
-          ].filter((span) => span.end > span.start);
-          if (spans.length === 0) {
-            break;
-          }
-          spent += await bytesFor(spans);
-          if (spent > byteBudget) {
-            break;
-          }
-          first = reachFirst;
-          last = reachLast;
-          await Promise.all(spans.map(({ start, end }) => readChunks(start, end)));
+        }
+        const wanted = [...fetches].slice(0, attachFetches);
+        if (wanted.length > 0) {
+          const fetched = await this.file.read(wanted.map(([unit]) => unit), reads.signal);
+          wanted.forEach(([unit, names], k) => {
+            decode(unit, fetched[k], attachRows, (name) => names.has(name));
+          });
+          await finish();
           cut = cutRows();
         }
       } catch (error) {
@@ -7039,15 +5220,12 @@
       } finally {
         signal === null || signal === void 0 ? void 0 : signal.removeEventListener("abort", stop);
       }
-      const tooMany = (_b = keptStepsError(cut.fragments, stepBudget, region, filtered)) !== null && _b !== void 0 ? _b : keptNodesError(cut.kept.size, nodeLimit, region, filtered);
+      const tooMany = (_c = keptStepsError(cut.fragments, cut.departures, stepBudget, region, filtered)) !== null && _c !== void 0 ? _c : keptNodesError(cut.kept.size, nodeLimit, region, filtered);
       if (tooMany) {
         throw tooMany;
       }
-      return {
-        graph,
-        ...cut,
-        skips: skipsOver(jumps, cut.fragments, region, cut.skips)
-      };
+      const { kept, fragments, departures } = cut;
+      return { graph, kept, fragments, departures };
     }
     /**
      * The graph under a region as tables: the reference sample's sequence over
@@ -7066,16 +5244,19 @@
         const names = await this.referenceSequences({ signal });
         throw new Error(`The walk file has no sequence ${region.refName} on ${sample}; it holds ${names.slice(0, 5).join(", ")}${names.length > 5 ? ", \u2026" : ""}`);
       }
-      const { graph, kept, fragments, skips } = await this.cut(refName, region, {
-        ...rest,
-        keep: walksKept(haplotypes, refName)
-      });
-      return { tables: graph.tables(kept, fragments, skips), refName, sample };
+      const { graph, kept, fragments, departures } = await this.cut(refName, region, { ...rest, keep: walksKept(haplotypes, refName) });
+      return {
+        tables: graph.tables(kept, fragments, departures),
+        refName,
+        sample
+      };
     }
   };
 
   // tools/walks.js
-  var fetchRange = "ggtubemap:::fetch_range";
+  function openFile(location) {
+    return rangeFile("ggtubemap:::fetch_range", "ggtubemap:::fetch_size", location);
+  }
   function tracksOf({ nodes, walks }, reference) {
     const tracks = [];
     for (let p = 0; p < walks.names.length; p++) {
@@ -7094,20 +5275,13 @@
   }
   globalThis.cutWalks = async function({
     file,
-    index,
     refName,
     start,
     end,
     haplotypes,
     context
   }) {
-    const reader = new WalkReader(
-      new TabixIndexedFile({
-        filehandle: rangeFile(fetchRange, file),
-        [/\.csi([?#]|$)/.test(index) ? "csiFilehandle" : "tbiFilehandle"]: rangeFile(fetchRange, index),
-        chunkCacheIdleTimeoutMs: 0
-      })
-    );
+    const reader = WalkReader.open(file, openFile);
     const { references: references2 } = await reader.header();
     const sample = references2[0] ?? "";
     const anchor = await reader.sequenceFor(sample, refName);
@@ -7125,10 +5299,15 @@
         keep: walksKept(haplotypes, anchor),
         expand: () => true,
         sequences: true,
-        links: false
+        links: false,
+        stepBudget: Infinity,
+        byteBudget: Infinity,
+        departureByteBudget: Infinity,
+        attachBp: 0,
+        attachFetches: 0
       }
     );
-    const tables = graph.tables(kept, fragments);
+    const tables = graph.tables(kept, fragments, []);
     const seq = tables.nodes.names.map((name) => graph.sequences.get(Number(name)) ?? null);
     return JSON.stringify({
       nodes: {
@@ -8747,12 +6926,12 @@
     }
     return signs;
   }
-  function formatShare({ count, total }) {
-    const share = count / total;
+  function formatShare({ count: count2, total }) {
+    const share = count2 / total;
     if (share < 0.01) {
       return "<1%";
     }
-    if (share > 0.99 && count < total) {
+    if (share > 0.99 && count2 < total) {
       return ">99%";
     }
     return `${Math.round(share * 100)}%`;
@@ -8848,11 +7027,11 @@
     return { first: new Int32Array(nodeCount), count: new Uint8Array(nodeCount) };
   }
   function addNeighbor(neighbors, index, neighbor) {
-    const count = neighbors.count[index];
-    if (count === 0) {
+    const count2 = neighbors.count[index];
+    if (count2 === 0) {
       neighbors.first[index] = neighbor;
       neighbors.count[index] = 1;
-    } else if (count === 1 && neighbors.first[index] !== neighbor) {
+    } else if (count2 === 1 && neighbors.first[index] !== neighbor) {
       neighbors.count[index] = 2;
     }
   }
@@ -9236,8 +7415,8 @@
     [r.xEnd + 1, r.yEnd + 1],
     [r.xStart, r.yEnd + 1]
   ];
-  function counted(count, noun) {
-    return `${count.toLocaleString("en-US")} ${noun}${count === 1 ? "" : "s"}`;
+  function counted(count2, noun) {
+    return `${count2.toLocaleString("en-US")} ${noun}${count2 === 1 ? "" : "s"}`;
   }
   var READ_FACET_NOUNS = { read_group: "read group", sample_name: "sample" };
   function facetLabel(facet, panel) {

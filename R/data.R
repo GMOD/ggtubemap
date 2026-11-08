@@ -31,12 +31,14 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #' or `name:start-end`), or else 0.
 #'
 #' With `region`, `path` is a [gfa-to-tabix](https://github.com/GMOD/gfa-to-tabix)
-#' `--walks` file with its `.tbi`, local or a URL, such as the HPRC release
-#' 2.1 walk file the JBrowse HPRC demo hosts. Range requests fetch only the
-#' blocks the region needs, and the reference sample's walk comes first.
+#' `--walks` file, a `.walks.gz` with its `.walks.gz.idx` directory beside it,
+#' local or a URL, such as the HPRC release 2.1 walk file the JBrowse HPRC demo
+#' hosts. gfa-to-tabix 4.0 and later write these, in walk format 7. Range
+#' requests fetch only the blocks the region needs, and the reference sample's
+#' walk comes first.
 #'
 #' @param path A GFA file, optionally gzipped, local or a URL; or a
-#'   `.walks.bed.gz` file with `region`.
+#'   gfa-to-tabix 4.0 `.walks.gz` file with `region`.
 #' @param reference The name of the path to draw as the reference, which the
 #'   layout puts first. By default the first path in the file.
 #' @param region On a walk file, the locus to cut, such as
@@ -50,7 +52,7 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #' @export
 #' @examples
 #' \dontrun{
-#' walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f5.GRCh38.walks.bed.gz"
+#' walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38.GRCh38.walks.gz"
 #' g <- read_gfa(walks, region = "chr6:160,653,940-160,654,130",
 #'               haplotypes = c("HG00097#1", "HG00133#2"))
 #' }

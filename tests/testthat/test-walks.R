@@ -1,4 +1,4 @@
-walk_file <- test_path("testdata", "ecoli_pggb.K12.walks.bed.gz")
+walk_file <- test_path("testdata", "ecoli_pggb.K12.walks.gz")
 
 test_that("read_gfa cuts a region out of a walk file, reference first", {
   g <- read_gfa(walk_file, region = "chr:1004500-1004961")
@@ -16,7 +16,7 @@ test_that("haplotypes keeps the reference and the walks asked for", {
 })
 
 test_that("a walk the file abridged cuts in full, as from a file that did not", {
-  abridged <- test_path("testdata", "ecoli_pggb_abridged.K12.walks.bed.gz")
+  abridged <- test_path("testdata", "ecoli_pggb_abridged.K12.walks.gz")
   expect_match(readLines(gzfile(abridged)), "\tabridged\t", all = FALSE)
   tracks <- function(file) {
     g <- read_gfa(file, region = "chr:1004501-1004961")
@@ -43,9 +43,16 @@ test_that("a region is a 1-based locus, one base or a span, and a 0-based or rev
 })
 
 test_that("a walk file with no index beside it names the index it needs", {
-  copy <- file.path(tempdir(), "lone.walks.bed.gz")
+  copy <- file.path(tempdir(), "lone.walks.gz")
   file.copy(walk_file, copy, overwrite = TRUE)
-  expect_error(read_gfa(copy, region = "chr:1004500-1004961"), "lone.walks.bed.gz.tbi does not exist")
+  expect_error(read_gfa(copy, region = "chr:1004500-1004961"), "lone.walks.gz.idx does not exist")
+})
+
+test_that("an older .walks.bed.gz is refused with the rebuild it needs", {
+  expect_error(
+    read_gfa("old.GRCh38.walks.bed.gz", region = "chr6:1-10"),
+    "rebuild it with gfa-to-tabix 4.0 or later"
+  )
 })
 
 test_that("a graph with no bases draws at normal node widths", {
