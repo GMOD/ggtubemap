@@ -17,7 +17,9 @@ layout puts first. By default the first path in the file.}
 \code{"chr6:160,653,940-160,654,130"}.}
 
 \item{haplotypes}{On a walk file, the \code{sample#haplotype} walks to keep,
-every one when \code{NULL}.}
+every one when \code{NULL}. One with no step on the reference over \code{region},
+as where it runs only on its own sequence there, is left out with a
+warning.}
 
 \item{context}{On a walk file, bp of reference kept past each end of
 \code{region}.}

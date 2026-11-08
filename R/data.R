@@ -44,7 +44,9 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #' @param region On a walk file, the locus to cut, such as
 #'   `"chr6:160,653,940-160,654,130"`.
 #' @param haplotypes On a walk file, the `sample#haplotype` walks to keep,
-#'   every one when `NULL`.
+#'   every one when `NULL`. One with no step on the reference over `region`,
+#'   as where it runs only on its own sequence there, is left out with a
+#'   warning.
 #' @param context On a walk file, bp of reference kept past each end of
 #'   `region`.
 #' @return A list of `nodes` (a data frame of `name` and `seq`, or
@@ -60,6 +62,10 @@ read_gfa <- function(path, reference = NULL, region = NULL, haplotypes = NULL,
                      context = 0) {
   if (!is.null(region)) {
     return(order_tracks(cut_walks(path, region, haplotypes, context), reference))
+  }
+  if (is_walk_file(path)) {
+    stop("A walk file holds a whole genome's graph; give the `region` to cut.",
+         call. = FALSE)
   }
   lines <- read_lines(path)
   fields <- strsplit(lines, "\t", fixed = TRUE)

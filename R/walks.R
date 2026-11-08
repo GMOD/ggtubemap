@@ -2,7 +2,7 @@
 # file's directory by its name with .idx after it
 cut_walks <- function(path, region, haplotypes, context) {
   check_walk_file(path)
-  json <- js_context()$call(
+  json <- js_call(
     "cutWalks",
     c(
       list(file = path, context = context),
@@ -12,6 +12,7 @@ cut_walks <- function(path, region, haplotypes, context) {
     await = TRUE
   )
   out <- jsonlite::fromJSON(json, simplifyVector = FALSE)
+  warn_absent(haplotypes, vapply(out$tracks, `[[`, "", "name"), region)
   nodes <- out$nodes
   list(
     nodes = data.frame(
@@ -27,7 +28,32 @@ cut_walks <- function(path, region, haplotypes, context) {
   )
 }
 
+# A haplotype the cut found no walk of steps nowhere on the reference over the
+# region, as where it runs only on its own sequence there, or is not in the file
+warn_absent <- function(haplotypes, names, region) {
+  found <- vapply(haplotypes, function(h) {
+    any(names == h | startsWith(names, paste0(h, "#")))
+  }, logical(1))
+  if (!all(found)) {
+    warning(
+      sprintf(
+        "Left out, with no step on the reference over %s: %s. A haplotype the file lacks, or one that runs only on its own sequence there, has none.",
+        region, paste(haplotypes[!found], collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+}
+
+is_walk_file <- function(path) grepl("\\.walks(\\.bed)?\\.gz$", bare_name(path))
+
 check_walk_file <- function(path) {
+  if (!is_walk_file(path)) {
+    stop(
+      sprintf("`region` cuts a gfa-to-tabix walk file, a .walks.gz; %s is not one", path),
+      call. = FALSE
+    )
+  }
   if (grepl("\\.walks\\.bed\\.gz$", bare_name(path))) {
     stop(
       sprintf(

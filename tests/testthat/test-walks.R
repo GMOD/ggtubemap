@@ -55,6 +55,22 @@ test_that("an older .walks.bed.gz is refused with the rebuild it needs", {
   )
 })
 
+test_that("a haplotype the cut cannot find is named in a warning", {
+  expect_warning(
+    g <- read_gfa(walk_file, region = "chr:1004500-1004961",
+                  haplotypes = c("IAI39#1", "NOPE#1")),
+    "chr:1004500-1004961: NOPE#1\\."
+  )
+  expect_equal(vapply(g$tracks, `[[`, "", "name"), c("K12#1#chr", "IAI39#1#chr"))
+})
+
+test_that("a walk file needs a region, and a region needs a walk file", {
+  expect_error(read_gfa(walk_file), "give the `region` to cut")
+  gfa <- tempfile(fileext = ".gfa")
+  writeLines(c("S\t1\tACGT", "P\tp\t1+\t*"), gfa)
+  expect_error(read_gfa(gfa, region = "p:1-4"), "is not one")
+})
+
 test_that("a graph with no bases draws at normal node widths", {
   g <- read_gfa(walk_file, region = "chr:1004500-1004961")
   expect_true(all(is.na(g$nodes$seq)))

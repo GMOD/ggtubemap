@@ -20,6 +20,14 @@ js_context <- function() {
   the$ctx
 }
 
+# A JavaScript error reaches R as "Error: <message>"; R adds its own prefix
+js_call <- function(fun, ...) {
+  tryCatch(
+    js_context()$call(fun, ...),
+    error = function(e) stop(sub("^Error: ", "", conditionMessage(e)), call. = FALSE)
+  )
+}
+
 # camelCase is what the layout reads; snake_case is what R users write
 rename_fields <- function(x, from, to) {
   hit <- match(names(x), from)
@@ -153,7 +161,7 @@ tubemap_layout <- function(graph, reads = graph$reads,
   )
   json <- jsonlite::toJSON(request, auto_unbox = TRUE, null = "null",
                            na = "null", digits = NA)
-  out <- jsonlite::fromJSON(js_context()$call("tubemapLayout", as.character(json)))
+  out <- jsonlite::fromJSON(js_call("tubemapLayout", as.character(json)))
   if (is.null(out)) {
     stop("No visible track is left to lay out.", call. = FALSE)
   }
