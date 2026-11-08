@@ -5,6 +5,8 @@ import './v8-host.mjs'
 import './walks.js'
 
 import {
+  FACET_GAP,
+  FACET_LABEL_HEIGHT,
   curvePaths,
   flattenPath,
   isForwardIndex,
@@ -73,7 +75,12 @@ function trackShapes(layout, steps, emit) {
     // corners never sit under another's stems
     const turns = new Map()
     const addTurn = (id, points) => {
-      turns.set(id, [...(turns.get(id) ?? []), points])
+      const pieces = turns.get(id)
+      if (pieces) {
+        pieces.push(points)
+      } else {
+        turns.set(id, [points])
+      }
     }
     for (const r of verticalRectangles) {
       if (r.type === type) {
@@ -168,7 +175,7 @@ globalThis.tubemapLayout = function (requestJson) {
     'seq',
     'soft_clip',
   ])
-  const panels = columns(['panel', 'label', 'top', 'bottom', 'offset_y'])
+  const panels = columns(['panel', 'label', 'top', 'bottom', 'offset_y', 'rule_y'])
   const ruler = columns(['track', 'node', 'start', 'length', 'reverse', 'left', 'right'])
   rulerVisits(faceted.panels[0].layout, row => pushRow(ruler, row))
 
@@ -209,6 +216,7 @@ globalThis.tubemapLayout = function (requestJson) {
       if (n.x === undefined) {
         return
       }
+      const [left, right] = nodePixelCoordinatesInX(n)
       pushRow(nodeTable, {
         panel,
         name: n.name,
@@ -216,8 +224,8 @@ globalThis.tubemapLayout = function (requestJson) {
         y: dy(n.y),
         pixel_width: n.pixelWidth,
         content_height: n.contentHeight,
-        left: n.x - 4,
-        right: n.x + n.pixelWidth + 4,
+        left,
+        right,
         seq: n.seq,
         sequence_length: n.sequenceLength,
         order: n.order,
@@ -240,12 +248,14 @@ globalThis.tubemapLayout = function (requestJson) {
         soft_clip: m.softClip,
       })
     }
+    const top = dy(layout.bounds.minY)
     pushRow(panels, {
       panel,
       label: p.facet === undefined ? null : facetLabel(p.facet, p),
-      top: dy(layout.bounds.minY),
+      top,
       bottom: dy(layout.bounds.maxY),
       offset_y: offsetY,
+      rule_y: top - FACET_LABEL_HEIGHT - FACET_GAP / 2,
     })
   })
 

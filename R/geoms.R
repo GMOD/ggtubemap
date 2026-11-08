@@ -204,9 +204,6 @@ geom_tubemap_panel_labels <- function(tubemap, size = 8) {
   }
   b <- tubemap$bounds
   panels$x <- b$minX
-  # placeFacets leaves 30 px for a label above each panel and 40 between
-  # panels; the rule splits the gap and the label hangs just under it
-  panels$rule_y <- panels$top - 30 - 40 / 2
   panels$label_y <- panels$rule_y + 4
   rules <- panels[-1, , drop = FALSE]
   list(

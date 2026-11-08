@@ -7444,7 +7444,12 @@
       }
       const turns = /* @__PURE__ */ new Map();
       const addTurn = (id, points) => {
-        turns.set(id, [...turns.get(id) ?? [], points]);
+        const pieces = turns.get(id);
+        if (pieces) {
+          pieces.push(points);
+        } else {
+          turns.set(id, [points]);
+        }
       };
       for (const r of verticalRectangles) {
         if (r.type === type) {
@@ -7533,7 +7538,7 @@
       "seq",
       "soft_clip"
     ]);
-    const panels = columns(["panel", "label", "top", "bottom", "offset_y"]);
+    const panels = columns(["panel", "label", "top", "bottom", "offset_y", "rule_y"]);
     const ruler = columns(["track", "node", "start", "length", "reverse", "left", "right"]);
     rulerVisits(faceted.panels[0].layout, (row) => pushRow(ruler, row));
     let group = 0;
@@ -7573,6 +7578,7 @@
         if (n.x === void 0) {
           return;
         }
+        const [left, right] = nodePixelCoordinatesInX(n);
         pushRow(nodeTable, {
           panel,
           name: n.name,
@@ -7580,8 +7586,8 @@
           y: dy(n.y),
           pixel_width: n.pixelWidth,
           content_height: n.contentHeight,
-          left: n.x - 4,
-          right: n.x + n.pixelWidth + 4,
+          left,
+          right,
           seq: n.seq,
           sequence_length: n.sequenceLength,
           order: n.order
@@ -7604,12 +7610,14 @@
           soft_clip: m.softClip
         });
       }
+      const top = dy(layout.bounds.minY);
       pushRow(panels, {
         panel,
         label: p.facet === void 0 ? null : facetLabel(p.facet, p),
-        top: dy(layout.bounds.minY),
+        top,
         bottom: dy(layout.bounds.maxY),
-        offset_y: offsetY
+        offset_y: offsetY,
+        rule_y: top - FACET_LABEL_HEIGHT - FACET_GAP / 2
       });
     });
     return JSON.stringify({
