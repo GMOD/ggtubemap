@@ -190,6 +190,14 @@ as_frame <- function(columns) {
   as.data.frame(columns, stringsAsFactors = FALSE)
 }
 
+# The layout sends each polygon's fields once with its vertex count `n`, and
+# the vertices in `x` and `y`; one row per vertex is what the layers draw
+as_polygons <- function(table) {
+  n <- as.integer(unlist(table$n))
+  fields <- setdiff(names(table), c("n", "x", "y"))
+  as_frame(c(lapply(table[fields], rep, times = n), table[c("x", "y")]))
+}
+
 new_tubemap <- function(out, node_width) {
   tracks <- as_frame(out$tracks)
   tracks$strand <- ifelse(is.na(tracks$is_reverse), NA,
@@ -205,7 +213,7 @@ new_tubemap <- function(out, node_width) {
     levels = levels
   )
 
-  shapes <- as_frame(out$shapes)
+  shapes <- as_polygons(out$shapes)
   shapes <- cbind(shapes, track_info[match(shapes$track_id, track_info$id), -1])
   rownames(shapes) <- NULL
 
@@ -223,7 +231,7 @@ new_tubemap <- function(out, node_width) {
       shapes = shapes,
       tracks = tracks,
       nodes = nodes,
-      outlines = as_frame(out$outlines),
+      outlines = as_polygons(out$outlines),
       bases = node_bases(nodes),
       mismatches = mismatches,
       panels = as_frame(out$panels),

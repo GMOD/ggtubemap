@@ -7452,6 +7452,12 @@
     const name = facet.key === null ? `No ${noun}` : `${noun.charAt(0).toUpperCase()}${noun.slice(1)} ${facet.key}`;
     return `${name} \xB7 ${counted(panel.readCount, "read")}`;
   }
+  function pushVertices(table, points, dy) {
+    for (const [x, y] of points) {
+      table.x.push(x);
+      table.y.push(dy(y));
+    }
+  }
   function trackShapes(layout, steps, emit) {
     const { rectangles, curves, corners, verticalRectangles } = layout.shapes;
     for (const type of ["haplotype", "read"]) {
@@ -7519,7 +7525,8 @@
       return JSON.stringify(null);
     }
     const faceted = placeFacets(arranged, placement);
-    const shapes = columns(["panel", "group", "track_id", "type", "shape", "x", "y"]);
+    const shapes = columns(["panel", "group", "track_id", "type", "shape", "n"]);
+    const shapeXY = { x: [], y: [] };
     const trackTable = columns([
       "id",
       "name",
@@ -7547,7 +7554,8 @@
       "sequence_length",
       "order"
     ]);
-    const outlines = columns(["panel", "group", "name", "x", "y"]);
+    const outlines = columns(["panel", "group", "name", "n"]);
+    const outlineXY = { x: [], y: [] };
     const mismatches = columns([
       "panel",
       "read_id",
@@ -7570,9 +7578,8 @@
       const dy = (y) => y + offsetY;
       trackShapes(layout, steps, (id, type, shape, points) => {
         group += 1;
-        for (const [x, y] of points) {
-          pushRow(shapes, { panel, group, track_id: id, type, shape, x, y: dy(y) });
-        }
+        pushRow(shapes, { panel, group, track_id: id, type, shape, n: points.length });
+        pushVertices(shapeXY, points, dy);
       });
       for (const t of layout.tracks) {
         if (seenTracks.has(t.id)) {
@@ -7614,9 +7621,9 @@
           order: n.order
         });
         group += 1;
-        for (const [x, y] of flattenPath(nodeOutlinePath(n), steps)) {
-          pushRow(outlines, { panel, group, name: n.name, x, y: dy(y) });
-        }
+        const points = flattenPath(nodeOutlinePath(n), steps);
+        pushRow(outlines, { panel, group, name: n.name, n: points.length });
+        pushVertices(outlineXY, points, dy);
       });
       for (const m of readMismatches(layout)) {
         pushRow(mismatches, {
@@ -7643,10 +7650,10 @@
     });
     return JSON.stringify({
       bounds: faceted.bounds,
-      shapes,
+      shapes: { ...shapes, ...shapeXY },
       tracks: trackTable,
       nodes: nodeTable,
-      outlines,
+      outlines: { ...outlines, ...outlineXY },
       mismatches,
       panels,
       ruler
