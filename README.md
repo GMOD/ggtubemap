@@ -102,8 +102,8 @@ autoplot(tubemap_layout(str), xlim = c(700, 2000))
 
 ![GRCh38, CHM13 and four HPRC haplotypes through the TA repeat of a 190 bp tandem repeat near LPA, each node's bases printed](man/figures/hprc-str.png)
 
-- Range requests fetch only the blocks the region needs: this cut takes about
-  half a second
+- Range requests fetch only the blocks the region needs: this cut takes under
+  a second
 - The reference sample's walk comes first; `haplotypes` picks the others by
   `sample#haplotype`, every one by default
 - `chr6` names the reference sample's sequence on it, `GRCh38#0#chr6`
