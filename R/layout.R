@@ -238,9 +238,11 @@ new_tubemap <- function(out, node_width) {
 }
 
 # One row per base, centred on its share of the node's pixel extent, at the
-# baseline sequenceTubeMap draws node sequence on
+# baseline sequenceTubeMap draws node sequence on. A node merged from runs
+# with and without sequence has fewer bases than its length, and prints none.
 node_bases <- function(nodes) {
-  has_seq <- !is.na(nodes$seq) & nchar(nodes$seq) > 0
+  has_seq <- !is.na(nodes$seq) & nchar(nodes$seq) > 0 &
+    nchar(nodes$seq) == nodes$sequence_length
   nodes <- nodes[has_seq, ]
   n <- nchar(nodes$seq)
   i <- sequence(n) - 1

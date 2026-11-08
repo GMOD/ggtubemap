@@ -119,6 +119,16 @@ test_that("bases sit one per base across each node", {
   expect_true(min(bases$x) > node$left && max(bases$x) < node$right)
 })
 
+test_that("a node merged from runs with and without sequence prints no bases", {
+  graph <- list(
+    nodes = data.frame(name = c("a", "b"), seq = c("AC", NA), sequence_length = c(NA, 3)),
+    tracks = list(list(name = "ref", sequence = c("a", "b")))
+  )
+  tm <- tubemap_layout(graph)
+  expect_equal(tm$nodes$sequence_length, 5)
+  expect_equal(nrow(tm$bases), 0)
+})
+
 test_that("read mismatches carry their read", {
   tm <- tubemap_layout(tubemap_example("brca1"))
   mm <- tm$mismatches
