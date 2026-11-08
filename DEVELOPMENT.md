@@ -41,6 +41,11 @@ newest their ranges allow, and lists what changed.
   the `minimumReleaseAge` in `pnpm-workspace.yaml`
 - The `Check` workflow runs R CMD check on every other push, and fails if
   `pnpm bundle` would change the tracked bundle
+- The `Hosted files` workflow cuts the README's tandem repeat weekly from
+  every jbrowse.org walk file the README, `R/data.R` and
+  `tools/readme-figures.R` name, since R CMD check never touches the
+  network. Run it locally with
+  `GGTUBEMAP_HOSTED=true Rscript -e 'testthat::test_local(filter = "hosted")'`
 
 To try unreleased core changes, bundle from a checkout's source instead:
 
