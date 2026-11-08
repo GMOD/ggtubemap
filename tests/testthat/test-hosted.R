@@ -29,3 +29,16 @@ test_that("every hosted walk file the docs name cuts the README's tandem repeat"
     expect_s3_class(tubemap_layout(g, node_width = "compressed"), "tubemap")
   }
 })
+
+test_that("haplotypes that skip the amylase window are described, and drawn with the context given", {
+  skip_unless_hosted()
+  url <- hosted_walk_files()[1]
+  region <- "chr1:103,640,000-103,660,000"
+  haplotypes <- c("HG00097#1", "HG00128#1")
+  expect_warning(
+    read_gfa(url, region = region, haplotypes = haplotypes),
+    "HG00128#1: leaves the reference at 103,620,893 and rejoins it at 103,715,097, with no sequence of its own"
+  )
+  g <- expect_no_warning(read_gfa(url, region = region, haplotypes = haplotypes, context = 29000))
+  expect_length(g$tracks, 3)
+})

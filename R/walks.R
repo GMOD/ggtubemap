@@ -12,7 +12,8 @@ cut_walks <- function(path, region, haplotypes, context) {
     await = TRUE
   )
   out <- jsonlite::fromJSON(json, simplifyVector = FALSE)
-  warn_absent(haplotypes, vapply(out$tracks, `[[`, "", "name"), region)
+  warn_absent(haplotypes, vapply(out$tracks, `[[`, "", "name"),
+              as_frame(out$absent), region)
   nodes <- out$nodes
   list(
     nodes = data.frame(
@@ -28,18 +29,55 @@ cut_walks <- function(path, region, haplotypes, context) {
   )
 }
 
-# A haplotype the cut found no walk of steps nowhere on the reference over the
-# region, as where it runs only on its own sequence there, or is not in the file
-warn_absent <- function(haplotypes, names, region) {
-  found <- vapply(haplotypes, function(h) {
-    any(names == h | startsWith(names, paste0(h, "#")))
-  }, logical(1))
-  if (!all(found)) {
+of_haplotype <- function(names, haplotype) {
+  names <- as.character(names)
+  names == haplotype | startsWith(names, paste0(haplotype, "#"))
+}
+
+bp <- function(x) format(x, big.mark = ",", scientific = FALSE, trim = TRUE)
+
+# What a walk does where it leaves the reference and rejoins it, from the
+# cut's departures for it
+departure_text <- function(d) {
+  d <- unique(d[c("from", "to", "own_bp", "missing_bp", "switch")])
+  if (nrow(d) == 0) {
+    return("no walk near the region in the file")
+  }
+  paste(sprintf(
+    "leaves the reference at %s and rejoins it at %s%s, with %s",
+    bp(d$from), bp(d$to), ifelse(d$switch, " on the other strand", ""),
+    ifelse(
+      d$own_bp == 0, "no sequence of its own between",
+      paste0(bp(d$own_bp), " bp of its own between",
+             ifelse(d$missing_bp > 0, paste0(", ", bp(d$missing_bp), " bp of it not in the graph"), ""))
+    )
+  ), collapse = "; ")
+}
+
+# A haplotype asked for whose walks take no step on the reference over the
+# region gets no track; the warning says what each does there instead, and
+# the context that would reach where it leaves or rejoins
+warn_absent <- function(haplotypes, names, absent, region) {
+  missing <- haplotypes[!vapply(haplotypes, function(h) any(of_haplotype(names, h)), logical(1))]
+  if (length(missing)) {
+    rows <- lapply(missing, function(h) absent[of_haplotype(absent$name, h), , drop = FALSE])
+    text <- vapply(rows, departure_text, "")
+    lines <- vapply(unique(text), function(t) {
+      sprintf("- %s: %s", paste(missing[text == t], collapse = ", "), t)
+    }, "")
+    locus <- parse_region(region)
+    reach <- unlist(lapply(rows, function(d) {
+      if (nrow(d)) min(locus$start - d$from, d$to - locus$end)
+    }))
+    hint <- if (length(reach)) {
+      sprintf("\n`context = %.0f` reaches where each leaves or rejoins the reference, to draw them.",
+              ceiling(max(reach) / 1000) * 1000)
+    } else {
+      ""
+    }
     warning(
-      sprintf(
-        "Left out, with no step on the reference over %s: %s. A haplotype the file lacks, or one that runs only on its own sequence there, has none.",
-        region, paste(haplotypes[!found], collapse = ", ")
-      ),
+      sprintf("No track for haplotypes with no step on the reference over %s:\n%s%s",
+              region, paste(lines, collapse = "\n"), hint),
       call. = FALSE
     )
   }

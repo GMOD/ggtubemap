@@ -883,6 +883,14 @@
   function adjacentSteps(d, squeeze) {
     return d.ownBp === 0 && d.leaveReversed === d.rejoinReversed && squeeze(d.leavePos) === squeeze(d.rejoinPos);
   }
+  function departureKind(d, squeeze = (bp) => bp) {
+    if (d.leaveReversed !== d.rejoinReversed) {
+      return "switch";
+    }
+    const leave = squeeze(d.leavePos);
+    const rejoin = squeeze(d.rejoinPos);
+    return leave === rejoin ? "adjacent" : (d.leaveReversed ? rejoin > leave : rejoin < leave) ? "back" : "forward";
+  }
   function departureStretch(d) {
     const leaveBase = d.leaveReversed ? d.leavePos : d.leavePos - 1;
     const rejoinBase = d.rejoinReversed ? d.rejoinPos - 1 : d.rejoinPos;
@@ -5291,7 +5299,7 @@
         `the walk file has no sequence ${refName} on ${sample}; it holds ${names.slice(0, 5).join(", ")}${names.length > 5 ? ", ..." : ""}`
       );
     }
-    const { graph, kept, fragments } = await reader.cut(
+    const { graph, kept, fragments, departures } = await reader.cut(
       anchor,
       { start, end },
       {
@@ -5315,9 +5323,22 @@
         seq,
         sequence_length: [...tables.nodes.lengths]
       },
-      tracks: tracksOf(tables, anchor)
+      tracks: tracksOf(tables, anchor),
+      absent: absentDepartures(fragments, departures)
     });
   };
+  function absentDepartures(fragments, departures) {
+    const drawn = new Set(fragments.map((f) => f.name));
+    const absent = departures.filter((d) => !drawn.has(d.name));
+    return {
+      name: absent.map((d) => d.name),
+      from: absent.map((d) => Math.min(d.leavePos, d.rejoinPos)),
+      to: absent.map((d) => Math.max(d.leavePos, d.rejoinPos)),
+      own_bp: absent.map((d) => d.ownBp),
+      missing_bp: absent.map((d) => d.missingBp),
+      switch: absent.map((d) => departureKind(d) === "switch")
+    };
+  }
 
   // node_modules/.pnpm/@jbrowse+tubemap-core@2.0.1/node_modules/@jbrowse/tubemap-core/esm/groupBy.js
   function groupBy(items, key) {

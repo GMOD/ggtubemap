@@ -59,9 +59,30 @@ test_that("a haplotype the cut cannot find is named in a warning", {
   expect_warning(
     g <- read_gfa(walk_file, region = "chr:1004500-1004961",
                   haplotypes = c("IAI39#1", "NOPE#1")),
-    "chr:1004500-1004961: NOPE#1\\."
+    "- NOPE#1: no walk near the region in the file"
   )
   expect_equal(vapply(g$tracks, `[[`, "", "name"), c("K12#1#chr", "IAI39#1#chr"))
+})
+
+test_that("a left-out haplotype is described by its departures, and the context to draw it", {
+  absent <- data.frame(
+    name = c("A#1#c", "B#2#c", "C#1#c", "C#1#c"),
+    from = c(1000, 4000, 4000, 4000),
+    to = c(9000, 6000, 6000, 6000),
+    own_bp = c(500, 0, 0, 0),
+    missing_bp = c(200, 0, 0, 0),
+    switch = FALSE
+  )
+  expect_warning(
+    warn_absent(c("A#1", "B#2", "C#1"), "REF#0#c", absent, "c:5,001-5,100"),
+    paste0(
+      "- A#1: leaves the reference at 1,000 and rejoins it at 9,000, with 500 bp of its own between, 200 bp of it not in the graph\n",
+      "- B#2, C#1: leaves the reference at 4,000 and rejoins it at 6,000, with no sequence of its own between\n",
+      "`context = 4000`"
+    ),
+    fixed = TRUE
+  )
+  expect_no_warning(warn_absent("A#1", "A#1#c", absent, "c:5,001-5,100"))
 })
 
 test_that("a walk file needs a region, and a region needs a walk file", {

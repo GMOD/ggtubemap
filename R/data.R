@@ -44,9 +44,9 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #' @param region On a walk file, the locus to cut, such as
 #'   `"chr6:160,653,940-160,654,130"`.
 #' @param haplotypes On a walk file, the `sample#haplotype` walks to keep,
-#'   every one when `NULL`. One with no step on the reference over `region`,
-#'   as where it runs only on its own sequence there, is left out with a
-#'   warning.
+#'   every one when `NULL`. One with no step on the reference over `region`
+#'   gets no track, and a warning says where it leaves the reference and
+#'   rejoins it, and the `context` that would draw it.
 #' @param context On a walk file, bp of reference kept past each end of
 #'   `region`.
 #' @return A list of `nodes` (a data frame of `name` and `seq`, or

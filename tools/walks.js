@@ -1,7 +1,7 @@
 // A region of a gfa-to-tabix --walks file as a tube map's nodes and tracks.
 // V8 has no file system or network, so each byte range and file size comes
 // from R through console.r.call, and @jbrowse/graph-walks does the cut.
-import { WalkReader, walksKept } from '@jbrowse/graph-walks'
+import { departureKind, WalkReader, walksKept } from '@jbrowse/graph-walks'
 
 import { rangeFile } from './v8-host.mjs'
 
@@ -47,7 +47,7 @@ globalThis.cutWalks = async function ({
       `the walk file has no sequence ${refName} on ${sample}; it holds ${names.slice(0, 5).join(', ')}${names.length > 5 ? ', ...' : ''}`,
     )
   }
-  const { graph, kept, fragments } = await reader.cut(
+  const { graph, kept, fragments, departures } = await reader.cut(
     anchor,
     { start, end },
     {
@@ -72,5 +72,21 @@ globalThis.cutWalks = async function ({
       sequence_length: [...tables.nodes.lengths],
     },
     tracks: tracksOf(tables, anchor),
+    absent: absentDepartures(fragments, departures),
   })
+}
+
+// where each walk the cut drew no track for leaves the reference and rejoins
+// it, for R to say what it does over the window
+function absentDepartures(fragments, departures) {
+  const drawn = new Set(fragments.map(f => f.name))
+  const absent = departures.filter(d => !drawn.has(d.name))
+  return {
+    name: absent.map(d => d.name),
+    from: absent.map(d => Math.min(d.leavePos, d.rejoinPos)),
+    to: absent.map(d => Math.max(d.leavePos, d.rejoinPos)),
+    own_bp: absent.map(d => d.ownBp),
+    missing_bp: absent.map(d => d.missingBp),
+    switch: absent.map(d => departureKind(d) === 'switch'),
+  }
 }
