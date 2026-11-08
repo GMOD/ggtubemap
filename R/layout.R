@@ -35,15 +35,16 @@ rename_fields <- function(x, from, to) {
   x
 }
 
+# a missing field is left out, as the layout reads a null one as given
 as_rows <- function(x) {
-  if (is.data.frame(x)) {
-    lapply(seq_len(nrow(x)), function(i) {
-      row <- lapply(x, `[[`, i)
-      row[!vapply(row, function(v) length(v) == 1 && is.na(v), logical(1))]
-    })
+  rows <- if (is.data.frame(x)) {
+    lapply(seq_len(nrow(x)), function(i) lapply(x, `[[`, i))
   } else {
     x
   }
+  lapply(rows, function(row) {
+    row[!vapply(row, function(v) is.null(v) || (length(v) == 1 && is.na(v)), logical(1))]
+  })
 }
 
 # A data frame goes out as JSON already, one object per row without its NA

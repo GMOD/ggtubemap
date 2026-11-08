@@ -44,6 +44,15 @@ test_that("a walk's * start reads as unknown, and a segment of unknown length is
   expect_error(read_gfa(write_gfa(sub("\tLN:i:7", "", gfa))), "Segment 3 has neither")
 })
 
+test_that("the ruler skips a walk whose start is *", {
+  walks <- c("S\t1\tACGT", "S\t2\tA", "S\t3\tTT",
+             "W\tHG002\t1\tchr1\t*\t*\t>1>2>3",
+             "W\tHG003\t1\tchr1\t50\t57\t>1>3")
+  tm <- tubemap_layout(read_gfa(write_gfa(walks)), merge_nodes = FALSE)
+  expect_equal(unique(tm$ruler$track), "HG003#1#chr1")
+  expect_equal(tm$ruler$start, c(50, 54))
+})
+
 test_that("read_gfa reads a file:// URL", {
   path <- write_gfa(gfa)
   expect_equal(read_gfa(paste0("file://", path))$nodes$name, c("1", "2", "3", "4"))
