@@ -13,14 +13,15 @@ the drawing is ordinary ggplot2 layers, so a tube map takes scales, themes,
 - **Out:** every tube, node outline, base and read mismatch as data frames,
   which `autoplot()` draws as sequenceTubeMap does
 
-The package is not published yet, so install it from a checkout:
+The package is not on CRAN yet, so install it from GitHub:
 
 ```r
-devtools::install()
+pak::pak("GMOD/ggtubemap")
 ```
 
-The [V8](https://cran.r-project.org/package=V8) package runs the layout, so
-there is no Node or browser to install.
+The layout bundle is tracked in git and the
+[V8](https://cran.r-project.org/package=V8) package runs it, so there is no
+Node or browser to install.
 
 ## Gallery
 
@@ -51,7 +52,12 @@ autoplot(tm)
 
 `tubemap_layout()` takes a graph, from `read_gfa()` or as a list of `nodes` and
 `tracks`, and returns every tube, node outline, base and read mismatch as data
-frames in layout pixels. `autoplot()` draws them in sequenceTubeMap's order.
+frames in layout pixels: `shapes` (the tubes), `nodes`, `outlines`, `bases`,
+`mismatches`, `panels` and `ruler`. `autoplot()` draws them in
+sequenceTubeMap's order.
+
+`tubemap_example()` loads one of four bundled graphs: `example-6`, `brca1`,
+`micb-kir3dl1` and `hprc-chrM`.
 
 ```r
 g <- read_gfa("graph.gfa", reference = "GRCh38#0#chr6")
@@ -76,6 +82,8 @@ str <- read_gfa(
 autoplot(tubemap_layout(str, node_width = "compressed"))
 ```
 
+![GRCh38, CHM13 and four HPRC haplotypes through a 190 bp tandem repeat near LPA](man/figures/hprc-str.png)
+
 - Range requests fetch only the blocks the region needs, from a 1.2 GB file:
   this cut takes about a second
 - The reference sample's walk comes first; `haplotypes` picks the others by
@@ -85,6 +93,20 @@ autoplot(tubemap_layout(str, node_width = "compressed"))
   V8, and R serves each byte range
 - The HPRC file was built without `--sequences`, so its nodes have lengths but
   no bases to print
+
+Twelve haplotypes through 400 bp of HLA-A, a bubble at nearly every node:
+
+```r
+samples <- c("HG00097", "HG00099", "HG00126", "HG00128", "HG00133", "HG002")
+hla <- read_gfa(
+  walks,
+  region = "chr6:29,942,850-29,943,250",
+  haplotypes = c("CHM13#0", paste0(rep(samples, each = 2), "#", 1:2))
+)
+autoplot(tubemap_layout(hla, node_width = "compressed"))
+```
+
+![GRCh38, CHM13 and twelve HPRC haplotypes through 400 bp of HLA-A](man/figures/hprc-hla.png)
 
 ### Colour by anything
 
@@ -151,7 +173,8 @@ autoplot(chrm)
 ### With ggbandage
 
 [ggbandage](https://github.com/GMOD/ggbandage) cuts the same walk file for its
-Bandage-style layouts, and patchwork stacks the two:
+Bandage-style layouts, and patchwork stacks the two. This reuses `walks` and
+`str` from [From a walk file](#from-a-walk-file):
 
 ```r
 library(patchwork)
@@ -201,49 +224,8 @@ ggsave("tubemap.pdf", autoplot(tm), width = size[["width"]],
 
 ## Development
 
-Git tracks the layout bundle `inst/js/tubemap-core.js`. `pnpm bundle` builds it
-from `tools/bridge.js` and the `@jbrowse/tubemap-core` release pinned in
-`package.json`, and writes that version into its header. The bundle also holds
-`tools/walks.js`, the walk-file cut, with `@gmod/tabix` and
-`@jbrowse/graph-walks`, and `tools/v8-host.mjs` for the web globals R's V8
-lacks.
-
-ggtubemap copies some files from [ggbandage](https://github.com/GMOD/ggbandage):
-`R/import-standalone-*.R`, its byte-range, locus and V8 helpers, and
-`tools/v8-host.mjs`. Each copy's header names the ggbandage commit it came from.
-
-- `tools/check-standalone.sh` fails where a copy differs from that commit,
-  and with `--latest`, where ggbandage's main has changed the file since
-- `tools/check-standalone.sh --update <sha>` copies every file again from that
-  ggbandage commit
-- The `Standalone files` workflow runs the check on every push, and with
-  `--latest` weekly
-
-`pnpm update-core [version]` pins a tubemap-core release, the latest by default,
-rebuilds the bundle, and copies that release's goldens into
-`tests/testthat/golden` and its example graphs into `inst/extdata`.
-`devtools::test()` then checks that V8 lays out exactly as Node does.
-
-`pnpm update-deps [version]` runs `update-core`, then moves the other bundled
-packages to their latest releases and the packages they depend on to the
-newest their ranges allow, and lists what changed.
-
-- The `Update bundled packages` workflow runs `update-deps` daily, committing
-  to main when R CMD check passes
-- `@jbrowse` releases go in the day they come out. Others wait three days,
-  the `minimumReleaseAge` in `pnpm-workspace.yaml`
-- The `Check` workflow runs R CMD check on every other push, and fails if
-  `pnpm bundle` would change the tracked bundle
-
-To try unreleased core changes, bundle from a checkout's source instead:
-
-```sh
-pnpm install
-tools/bundle.sh ../tubemap-core
-```
-
-The header then holds the checkout's commit; `pnpm bundle` puts the release
-back.
+The layout bundle, the files shared with ggbandage and the update workflows
+are described in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## See also
 
