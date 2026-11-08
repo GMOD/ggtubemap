@@ -38,14 +38,14 @@ chrm <- tubemap_layout(tubemap_example("hprc-chrM"), node_width = "compressed",
                        facet_by = "sample_name")
 save("hprc-chrM-facets.png", chrm, 9, mismatches = FALSE, legend = 0)
 
-walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38.GRCh38.walks.gz"
+walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-chr6-sequences.GRCh38.walks.gz"
 samples <- c("HG00097", "HG00099", "HG00126", "HG00128", "HG00133", "HG002",
              "HG00140", "HG00146")
 haplotypes <- paste0(rep(samples, each = 2), "#", 1:2)
 
 str <- read_gfa(walks, region = "chr6:160,653,940-160,654,130",
                 haplotypes = c("CHM13#0", haplotypes[c(1, 3, 10, 13)]))
-save("hprc-str.png", tubemap_layout(str, node_width = "compressed"), 9,
+save("hprc-str.png", tubemap_layout(str), 9, xlim = c(700, 2000),
      legend = 0.6, extra = theme(legend.text = element_text(size = 6)))
 
 hla <- read_gfa(walks, region = "chr6:29,942,850-29,943,250",

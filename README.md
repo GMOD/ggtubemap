@@ -27,7 +27,7 @@ Node or browser to install.
 
 <table>
 <tr><td width="50%"><b><a href="#usage">Nine assemblies, bases printed</a></b><br><img src="man/figures/example-6.png" alt="Nine assemblies through a 3 kb region, each node's bases printed in it" width="100%"></td>
-<td width="50%"><b><a href="#from-a-walk-file">A tandem repeat from the HPRC walk file</a></b><br><img src="man/figures/hprc-str.png" alt="GRCh38, CHM13 and four HPRC haplotypes through a 190 bp tandem repeat near LPA, cut from the hosted walk file" width="100%"></td></tr>
+<td width="50%"><b><a href="#from-a-walk-file">A tandem repeat from the HPRC walk file</a></b><br><img src="man/figures/hprc-str.png" alt="GRCh38, CHM13 and four HPRC haplotypes through the TA repeat near LPA, cut from the hosted walk file, each node's bases printed" width="100%"></td></tr>
 <tr><td width="50%"><b><a href="#from-a-walk-file">HLA-A in fourteen haplotypes</a></b><br><img src="man/figures/hprc-hla.png" alt="GRCh38, CHM13 and twelve HPRC haplotypes through 400 bp of HLA-A, a bubble at nearly every node" width="100%"></td>
 <td width="50%"><b><a href="#colour-by-anything">Sixteen haplotypes by phase</a></b><br><img src="man/figures/hprc-str-phased.png" alt="Eight samples' sixteen haplotypes through the tandem repeat, coloured by haplotype 1 or 2 against GRCh38 in black" width="100%"></td></tr>
 <tr><td width="50%"><b><a href="#colour-by-anything">91 haplotypes through MICB</a></b><br><img src="man/figures/micb.png" alt="91 HPRC haplotypes through MICB, coloured by haplotype 1 or 2" width="100%"></td>
@@ -87,29 +87,33 @@ JBrowse's
 [Hosting your own graph](https://jbrowse.org/jb2/docs/tutorials/pangenome_prepare_graph/)
 covers the steps, and ggbandage's
 [Region-specific pangenomes](https://github.com/GMOD/ggbandage/blob/main/vignettes/region-pangenomes.Rmd)
-the other kind of index. The JBrowse HPRC demo hosts the release 2.1 graph's:
+the other kind of index. The JBrowse HPRC demo hosts the release 2.1 graph's
+chr6, built with `--sequences` so its nodes print their bases:
 
 ```r
-walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38.GRCh38.walks.gz"
+walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-chr6-sequences.GRCh38.walks.gz"
 str <- read_gfa(
   walks,
   region = "chr6:160,653,940-160,654,130",
   haplotypes = c("CHM13#0", "HG00097#1", "HG00099#1", "HG00133#2", "HG00140#1")
 )
-autoplot(tubemap_layout(str, node_width = "compressed"))
+autoplot(tubemap_layout(str), xlim = c(700, 2000))
 ```
 
-![GRCh38, CHM13 and four HPRC haplotypes through a 190 bp tandem repeat near LPA](man/figures/hprc-str.png)
+![GRCh38, CHM13 and four HPRC haplotypes through the TA repeat of a 190 bp tandem repeat near LPA, each node's bases printed](man/figures/hprc-str.png)
 
-- Range requests fetch only the blocks the region needs, from a 1.6 GB file:
-  this cut takes about a second
+- Range requests fetch only the blocks the region needs: this cut takes about
+  half a second
 - The reference sample's walk comes first; `haplotypes` picks the others by
   `sample#haplotype`, every one by default
 - `chr6` names the reference sample's sequence on it, `GRCh38#0#chr6`
 - [@jbrowse/graph-walks](https://github.com/GMOD/graph-walks) does the cut in
   V8, and R serves each byte range
-- The HPRC file was built without `--sequences`, so its nodes have lengths but
-  no bases to print
+- At normal width the repeat is 6,200 layout pixels across, so `xlim` shows
+  part of it; `node_width = "compressed"` fits it whole, without bases
+- The whole genome is in
+  `https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38.GRCh38.walks.gz`, 1.6
+  GB, with the same nodes and walks but no bases
 
 Twelve haplotypes through 400 bp of HLA-A, a bubble at nearly every node:
 
