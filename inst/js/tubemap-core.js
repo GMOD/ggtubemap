@@ -161,7 +161,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.2.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp, overBytes) {
       super(message);
@@ -197,7 +197,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.2.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var otherStrand = (handle) => handle & 1 ? handle - 1 : handle + 1;
@@ -865,7 +865,7 @@
     return links;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.2.0/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
   var ATTACH_BP = 65536;
   function squeezer(holes, refName) {
     const spans = holes.filter((h) => h.refName === refName).sort((a, b) => a.start - b.start);
@@ -942,7 +942,340 @@
     });
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.2.0/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
+  var GAP_KINDS = [
+    "steps",
+    "read",
+    "abridged",
+    "own",
+    "unread"
+  ];
+  function groupByName(items, refName) {
+    const out = /* @__PURE__ */ new Map();
+    for (const item of items) {
+      if (item.name !== refName) {
+        const list = out.get(item.name);
+        if (list) {
+          list.push(item);
+        } else {
+          out.set(item.name, [item]);
+        }
+      }
+    }
+    return out;
+  }
+  function firstEnding(spans, at, touching = false) {
+    let lo = 0;
+    let hi = spans.length;
+    while (lo < hi) {
+      const mid = lo + hi >> 1;
+      const end = spans[mid].end;
+      if (touching ? end >= at : end > at) {
+        hi = mid;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return lo;
+  }
+  function firstStarting(spans, at) {
+    let lo = 0;
+    let hi = spans.length;
+    while (lo < hi) {
+      const mid = lo + hi >> 1;
+      if (spans[mid].start >= at) {
+        hi = mid;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return lo;
+  }
+  var runEnd = (run, bp) => {
+    var _a, _b;
+    return run.hapOffset + ((_b = (_a = run.abridged) === null || _a === void 0 ? void 0 : _a.bp) !== null && _b !== void 0 ? _b : bp[run.ids.length]);
+  };
+  function walkGaps({ runs, attach, fragments, departures, refName, before, length, attached, breakpoint, spans }) {
+    var _a, _b, _c, _d, _e;
+    const inFragment = /* @__PURE__ */ new Map();
+    for (const { run, first, last } of spans) {
+      inFragment.set(run, [...(_a = inFragment.get(run)) !== null && _a !== void 0 ? _a : [], [first, last]]);
+    }
+    const fragmentStep = (run, i) => {
+      var _a2, _b2;
+      return (_b2 = (_a2 = inFragment.get(run)) === null || _a2 === void 0 ? void 0 : _a2.some(([first, last]) => i >= first && i <= last)) !== null && _b2 !== void 0 ? _b2 : false;
+    };
+    const fragmentAbridged = new Set(fragments.flatMap((f) => f.abridged ? [f.abridged] : []));
+    const runsBy = groupByName(runs, refName);
+    const attachBy = groupByName(attach, refName);
+    const fragmentsBy = groupByName(fragments, refName);
+    const departuresBy = groupByName(departures, refName);
+    const names = [
+      .../* @__PURE__ */ new Set([...fragmentsBy.keys(), ...departuresBy.keys()])
+    ].sort();
+    const gaps = [];
+    for (const name of names) {
+      const walkRuns = [...(_b = runsBy.get(name)) !== null && _b !== void 0 ? _b : []].sort((a, b) => a.hapOffset - b.hapOffset);
+      const stepRuns = walkRuns.filter((run) => !run.abridged);
+      const abridgedSpans = walkRuns.flatMap((run) => run.abridged ? [
+        {
+          start: run.hapOffset,
+          end: run.hapOffset + run.abridged.bp,
+          fragment: fragmentAbridged.has(run.abridged)
+        }
+      ] : []);
+      const attachSteps = [];
+      for (const run of (_c = attachBy.get(name)) !== null && _c !== void 0 ? _c : []) {
+        const marks = attached.get(run);
+        if (marks) {
+          const bp = before(run);
+          for (const i of marks) {
+            attachSteps.push({
+              start: run.hapOffset + bp[i],
+              end: run.hapOffset + bp[i + 1],
+              id: run.ids[i],
+              rev: run.rev[i],
+              attached: true
+            });
+          }
+        }
+      }
+      const placed = ((_d = departuresBy.get(name)) !== null && _d !== void 0 ? _d : []).map((d) => ({ d, start: d.hapStart, end: d.hapStart + d.ownBp })).sort((a, b) => a.start - b.start || a.end - b.end);
+      const walkFragments = [...(_e = fragmentsBy.get(name)) !== null && _e !== void 0 ? _e : []].sort((a, b) => a.hapStart - b.hapStart);
+      let anchors;
+      const anchorsOf = () => {
+        anchors !== null && anchors !== void 0 ? anchors : anchors = walkRuns.flatMap((run) => {
+          const bp = before(run);
+          return run.abridged ? [
+            {
+              run,
+              i: 0,
+              start: run.hapOffset,
+              end: run.hapOffset + length(run.ids[0])
+            },
+            {
+              run,
+              i: 1,
+              start: runEnd(run, bp) - length(run.ids[1]),
+              end: runEnd(run, bp)
+            }
+          ] : [...run.ids.keys()].filter((i) => !Number.isNaN(run.refStarts[i])).map((i) => ({
+            run,
+            i,
+            start: run.hapOffset + bp[i],
+            end: run.hapOffset + bp[i + 1]
+          }));
+        }).sort((a, b) => a.start - b.start);
+        return anchors;
+      };
+      const breakpointsAround = (start, end) => {
+        const all = anchorsOf();
+        const back = firstEnding(all, start) - 1;
+        const lastAnchor = back >= 0 ? all[back] : void 0;
+        const nextAnchor = all[firstStarting(all, end)];
+        const backPlaced = firstEnding(placed, start) - 1;
+        const lastPlaced = backPlaced >= 0 ? placed[backPlaced] : void 0;
+        const nextPlaced = placed[firstStarting(placed, end)];
+        const beforeFromPlaced = lastPlaced && (!lastAnchor || lastPlaced.end > lastAnchor.end);
+        const afterFromPlaced = nextPlaced && (!nextAnchor || nextPlaced.start < nextAnchor.start);
+        return {
+          before: beforeFromPlaced ? lastPlaced.d.rejoinPos : lastAnchor ? breakpoint(lastAnchor.run, lastAnchor.i, true).pos : Number.NaN,
+          after: afterFromPlaced ? nextPlaced.d.leavePos : nextAnchor ? breakpoint(nextAnchor.run, nextAnchor.i, false).pos : Number.NaN
+        };
+      };
+      const stepsIn = (start, end) => {
+        var _a2;
+        const out = [];
+        for (const run of stepRuns) {
+          const bp = before(run);
+          if (run.hapOffset <= end && runEnd(run, bp) >= start) {
+            const marks = attached.get(run);
+            let lo = 0;
+            let hi = run.ids.length;
+            while (lo < hi) {
+              const mid = lo + hi >> 1;
+              if (run.hapOffset + bp[mid + 1] >= start) {
+                hi = mid;
+              } else {
+                lo = mid + 1;
+              }
+            }
+            for (let i = lo; i < run.ids.length && run.hapOffset + bp[i] <= end; i++) {
+              const s = run.hapOffset + bp[i];
+              const e = run.hapOffset + bp[i + 1];
+              const isAttached = (_a2 = marks === null || marks === void 0 ? void 0 : marks.has(i)) !== null && _a2 !== void 0 ? _a2 : false;
+              if (!fragmentStep(run, i) && (e > start && s < end || s === e && isAttached)) {
+                out.push({
+                  start: s,
+                  end: e,
+                  id: run.ids[i],
+                  rev: run.rev[i],
+                  attached: isAttached
+                });
+              }
+            }
+          }
+        }
+        for (const x of attachSteps) {
+          if (x.end > start && x.start < end || x.start === x.end && x.start >= start && x.start <= end) {
+            out.push(x);
+          }
+        }
+        return out.sort((a, b) => a.start - b.start || a.end - b.end);
+      };
+      const reach = (start, end, forward2) => {
+        let at = forward2 ? end : start;
+        for (const x of forward2 ? placed : [...placed].reverse()) {
+          if (forward2 && x.end > start && x.start <= at && x.end > at) {
+            at = x.end;
+          } else if (!forward2 && x.start < end && x.end >= at && x.start < at) {
+            at = x.start;
+          }
+        }
+        return at;
+      };
+      const stretches = [];
+      const first = walkFragments[0];
+      const last = walkFragments.at(-1);
+      const rowStart = first ? reach(first.hapStart - first.trimmedBefore, first.hapStart, false) : Infinity;
+      const rowEnd = last ? reach(last.hapEnd, last.hapEnd + last.trimmedAfter, true) : -Infinity;
+      if (first && rowStart < first.hapStart) {
+        stretches.push({
+          name,
+          edge: 1,
+          start: rowStart,
+          end: first.hapStart,
+          fragment: first
+        });
+      }
+      walkFragments.forEach((f, k) => {
+        const next = walkFragments[k + 1];
+        if (next) {
+          stretches.push({
+            name,
+            edge: 0,
+            start: f.hapEnd,
+            end: next.hapStart,
+            fragment: f
+          });
+        }
+      });
+      if (last && rowEnd > last.hapEnd) {
+        stretches.push({
+          name,
+          edge: 2,
+          start: last.hapEnd,
+          end: rowEnd,
+          fragment: last
+        });
+      }
+      for (const x of placed) {
+        const outside = x.end > x.start && (!first || x.end <= rowStart || x.start >= rowEnd);
+        if (outside) {
+          stretches.push({ name, edge: 3, start: x.start, end: x.end });
+        }
+      }
+      stretches.sort((a, b) => a.start - b.start || a.edge - b.edge);
+      for (const stretch of stretches) {
+        const { start, end } = stretch;
+        const inSteps = stepsIn(start, end);
+        const sized = inSteps.filter((x) => x.end > x.start);
+        const zeroSteps = inSteps.filter((x) => x.end === x.start && x.attached);
+        const inAbridged = abridgedSpans.filter((x) => !x.fragment && x.end > start && x.start < end);
+        const from = firstEnding(placed, start, true);
+        const inPlaced = [];
+        for (let k = from; k < placed.length && placed[k].start <= end; k++) {
+          inPlaced.push(placed[k]);
+        }
+        const sizedPlaced = inPlaced.filter((x) => x.end > start && x.start < end);
+        const zeroPlaced = inPlaced.filter((x) => x.end === x.start && x.start > start && x.start < end);
+        const points = /* @__PURE__ */ new Set([start, end]);
+        for (const x of [
+          ...sized,
+          ...inAbridged,
+          ...sizedPlaced,
+          ...zeroPlaced
+        ]) {
+          for (const p2 of [x.start, x.end]) {
+            if (p2 > start && p2 < end) {
+              points.add(p2);
+            }
+          }
+        }
+        const sorted = [...points].sort((a, b) => a - b);
+        const segments = [];
+        let lastOwner;
+        const add = (kind, bp, more = {}, owner) => {
+          var _a2, _b2;
+          const prev = segments.at(-1);
+          if (bp > 0 && (prev === null || prev === void 0 ? void 0 : prev.kind) === kind && prev.bp > 0 && (kind !== "own" || lastOwner === owner)) {
+            prev.bp += bp;
+            prev.after = (_a2 = more.after) !== null && _a2 !== void 0 ? _a2 : prev.after;
+            for (const [j, id] of ((_b2 = more.ids) !== null && _b2 !== void 0 ? _b2 : []).entries()) {
+              prev.ids.push(id);
+              prev.rev.push(more.rev[j]);
+            }
+          } else {
+            segments.push({
+              kind,
+              bp,
+              missingBp: 0,
+              abridged: false,
+              before: Number.NaN,
+              after: Number.NaN,
+              ids: [],
+              rev: [],
+              ...more
+            });
+            lastOwner = owner;
+          }
+        };
+        let p = 0;
+        let z = 0;
+        const flushZeros = (at) => {
+          for (; z < zeroSteps.length && zeroSteps[z].start <= at; z++) {
+            const x = zeroSteps[z];
+            add("steps", 0, { ids: [x.id], rev: [x.rev] });
+          }
+          for (const x of zeroPlaced) {
+            if (x.start === at) {
+              add("own", 0, { missingBp: x.d.missingBp }, x.d);
+            }
+          }
+        };
+        for (let k = 0; k + 1 < sorted.length; k++) {
+          const a = sorted[k];
+          const b = sorted[k + 1];
+          flushZeros(a);
+          while (p < sized.length && sized[p].end <= a) {
+            p++;
+          }
+          const candidate = sized[p];
+          const step = candidate && candidate.start <= a && candidate.end >= b ? candidate : void 0;
+          const piece = inAbridged.find((x) => x.start <= a && x.end >= b);
+          const own = sizedPlaced.find((x) => x.start <= a && x.end >= b);
+          const bp = b - a;
+          if (step) {
+            add(step.attached ? "steps" : "read", bp, step.attached ? { ids: [step.id], rev: [step.rev] } : {});
+          } else if (piece) {
+            add("abridged", bp);
+          } else if (own) {
+            add("own", bp, {
+              missingBp: own.d.missingBp,
+              abridged: abridgedSpans.some((x) => x.end === own.start || x.start === own.end)
+            }, own.d);
+          } else {
+            add("unread", bp, breakpointsAround(a, b));
+          }
+        }
+        flushZeros(end);
+        gaps.push({ ...stretch, segments });
+      }
+    }
+    return gaps;
+  }
+
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.2.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
     return match ? +match[1] : void 0;
@@ -1165,7 +1498,7 @@
         kept.add(span.run.ids[i]);
       }
     }
-    const runEnd = (run) => {
+    const runEnd2 = (run) => {
       var _a, _b;
       return run.hapOffset + ((_b = (_a = run.abridged) === null || _a === void 0 ? void 0 : _a.bp) !== null && _b !== void 0 ? _b : before(run)[run.ids.length]);
     };
@@ -1177,7 +1510,7 @@
           name: run.name,
           fragStart: run.fragStart,
           hapStart: run.hapOffset,
-          hapEnd: runEnd(run),
+          hapEnd: runEnd2(run),
           ids,
           rev,
           refStarts: run.refStarts,
@@ -1201,7 +1534,7 @@
         refStarts: run.refStarts.subarray(first, last + 1),
         against: run.against.subarray(first, last + 1),
         trimmedBefore: hapStart - run.hapOffset,
-        trimmedAfter: runEnd(run) - hapEnd
+        trimmedAfter: runEnd2(run) - hapEnd
       });
     }
     const breakpoint = (run, i, leave) => {
@@ -1213,6 +1546,16 @@
       };
     };
     const departures = [];
+    const attached = /* @__PURE__ */ new Map();
+    const markAttached = (run, from, to) => {
+      var _a;
+      const marks = (_a = attached.get(run)) !== null && _a !== void 0 ? _a : /* @__PURE__ */ new Set();
+      attached.set(run, marks);
+      for (let k = from; k < to; k++) {
+        marks.add(k);
+        kept.add(run.ids[k]);
+      }
+    };
     for (const run of runs) {
       if (run.abridged || run.name === refName) {
         continue;
@@ -1261,9 +1604,7 @@
                     ids: ids.subarray(last + 1, i),
                     rev: rev.subarray(last + 1, i)
                   };
-                  for (let k = last + 1; k < i; k++) {
-                    kept.add(ids[k]);
-                  }
+                  markAttached(run, last + 1, i);
                 }
                 departures.push(d);
               }
@@ -1314,6 +1655,7 @@
             ids.push(run.ids[k]);
             rev.push(run.rev[k]);
           }
+          markAttached(run, i + 1, end);
         }
         const rejoin = rejoins.get(edgeKey(d.name, d.rejoinPos, d.rejoinReversed, d.hapStart + d.ownBp));
         if (rejoin) {
@@ -1322,12 +1664,10 @@
             ids.push(run.ids[k]);
             rev.push(run.rev[k]);
           }
+          markAttached(run, start, i);
         }
         if (ids.length > 0) {
           d.steps = { ids: Int32Array.from(ids), rev: Uint8Array.from(rev) };
-          for (const id of ids) {
-            kept.add(id);
-          }
         }
         if (!leave || !rejoin) {
           unattached.push({ departure: d });
@@ -1336,7 +1676,23 @@
       departures.push(d);
     }
     departures.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || a.hapStart - b.hapStart || a.leavePos - b.leavePos);
-    return { kept, fragments, departures, unattached };
+    let gaps;
+    const gapsOf = () => {
+      gaps !== null && gaps !== void 0 ? gaps : gaps = walkGaps({
+        runs,
+        attach,
+        fragments,
+        departures,
+        refName,
+        before,
+        length,
+        attached,
+        breakpoint,
+        spans
+      });
+      return gaps;
+    };
+    return { kept, fragments, departures, unattached, gapsOf };
   }
   function pieceBounds(run) {
     const bounds = [0];
@@ -1415,7 +1771,7 @@
      * name, and the departures with their own steps. graphTablesGFA writes
      * them as the GFA they stand for, the same bytes for the same rows.
      */
-    tables(kept, fragments, departures) {
+    tables(kept, fragments, departures, gaps = []) {
       if (this.chunks.length > 0) {
         placeAndLink(this.chunks, kept, (id, node) => {
           const held2 = this.nodes.get(id);
@@ -1524,7 +1880,8 @@
             return (_b = (_a = f.abridged) === null || _a === void 0 ? void 0 : _a.bp) !== null && _b !== void 0 ? _b : NaN;
           })
         },
-        departures: departureTable(departures, nodeIndex)
+        departures: departureTable(departures, nodeIndex),
+        gaps: gapTable(gaps, new Map(walks.map((f, p) => [f, p])), nodeIndex)
       };
     }
     // The view anchors on the first walk when no walk names the assembly, as
@@ -1535,6 +1892,48 @@
       return [...fragments].sort((a, b) => Number(b.name === refName) - Number(a.name === refName) || (a.name < b.name ? -1 : a.name > b.name ? 1 : a.hapStart - b.hapStart));
     }
   };
+  function gapTable(gaps, walkIndex, nodeIndex) {
+    const segments = gaps.flatMap((g) => g.segments);
+    const segmentOffsets = new Int32Array(gaps.length + 1);
+    gaps.forEach((g, k) => {
+      segmentOffsets[k + 1] = segmentOffsets[k] + g.segments.length;
+    });
+    const stepOffsets = new Int32Array(segments.length + 1);
+    segments.forEach((x, k) => {
+      stepOffsets[k + 1] = stepOffsets[k] + x.ids.length;
+    });
+    const steps = new Int32Array(stepOffsets[segments.length]);
+    const reversed = new Uint8Array(steps.length);
+    segments.forEach((x, k) => {
+      const at = stepOffsets[k];
+      x.ids.forEach((id, j) => {
+        steps[at + j] = nodeIndex(id);
+      });
+      reversed.set(x.rev, at);
+    });
+    return {
+      names: gaps.map((g) => g.name),
+      walks: Int32Array.from(gaps, (g) => {
+        var _a;
+        return g.fragment ? (_a = walkIndex.get(g.fragment)) !== null && _a !== void 0 ? _a : -1 : -1;
+      }),
+      edges: Uint8Array.from(gaps, (g) => g.edge),
+      starts: Float64Array.from(gaps, (g) => g.start),
+      ends: Float64Array.from(gaps, (g) => g.end),
+      segmentOffsets,
+      segments: {
+        kinds: Uint8Array.from(segments, (x) => GAP_KINDS.indexOf(x.kind)),
+        bp: Float64Array.from(segments, (x) => x.bp),
+        missingBp: Float64Array.from(segments, (x) => x.missingBp),
+        abridged: Uint8Array.from(segments, (x) => x.abridged ? 1 : 0),
+        before: Float64Array.from(segments, (x) => x.before),
+        after: Float64Array.from(segments, (x) => x.after),
+        stepOffsets,
+        steps,
+        reversed
+      }
+    };
+  }
   function departureTable(departures, nodeIndex) {
     const n = departures.length;
     const offsets = new Int32Array(n + 1);
@@ -1627,7 +2026,7 @@
     const fitsBp = Math.max(1, Math.floor(readBp * limit / kept));
     return new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)}${filtered ? "" : ", or choose fewer haplotypes,"} to see the graph`, limit, windowBp, fitsBp);
   }
-  function byteBudgetError(bytesTo, budget, window, tile, names = BUDGET_NAMES) {
+  function byteBudgetError(bytesTo, budget, window, tile, names = BUDGET_NAMES, attaching = false) {
     const bytes = bytesTo(window.end);
     if (bytes <= budget) {
       return void 0;
@@ -1643,7 +2042,7 @@
       fitsBp = cs + tile - window.start;
     }
     const windowBp = window.end - window.start;
-    return fitsBp > 0 ? new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)} to see the graph`, budget, windowBp, fitsBp, { bytes, zoomHelps: true }) : new RegionTooLargeError(`Too much graph here to fetch, even zoomed in (${megabytes(least !== null && least !== void 0 ? least : bytes)} against ${names.bytes} ${megabytes(budget)}). A satellite or rDNA array usually causes this: the graph folds the repeat into a few nodes that each haplotype loops through many times`, budget, windowBp, 1, { bytes });
+    return fitsBp > 0 ? new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)} to see the graph`, budget, windowBp, fitsBp, { bytes, zoomHelps: true }) : new RegionTooLargeError(attaching ? `Too many departures here whose own steps the cut must fetch, even zoomed in (${megabytes(least !== null && least !== void 0 ? least : bytes)} against ${names.bytes} ${megabytes(budget)}); choose fewer haplotypes or a smaller attachBp` : `Too much graph here to fetch, even zoomed in (${megabytes(least !== null && least !== void 0 ? least : bytes)} against ${names.bytes} ${megabytes(budget)}). A satellite or rDNA array usually causes this: the graph folds the repeat into a few nodes that each haplotype loops through many times`, budget, windowBp, 1, { bytes });
   }
   var megabytes = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
 
@@ -1867,7 +2266,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.2.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -1892,7 +2291,7 @@
     return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.2.0/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
   function checkRange(refName, start, end) {
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
       throw new Error(`${refName}:${start}-${end} is not a finite range to query the graph's index for`);
@@ -4685,7 +5084,7 @@
     }
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/walkFile.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.2.0/node_modules/@jbrowse/graph-walks/esm/walkFile.js
   var WALK_FORMAT = 7;
   var WalkFormatError = class extends Error {
     constructor() {
@@ -4922,11 +5321,10 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@6.0.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@6.2.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var WALK_CONTEXT = 1e3;
   var DETAIL_READS = 16;
-  var ATTACH_FETCHES = 8;
   var WALK_BUDGETS = {
     stepBudget: 4e6,
     byteBudget: 8e6,
@@ -5057,8 +5455,8 @@
       return referenceNodes(read.flat().map((line) => line.split("	"))).filter((node) => node.refName === refName && node.end > region.start && node.start < region.end).sort((a, b) => a.start - b.start || a.end - b.end);
     }
     async cut(refName, region, opts = {}) {
-      var _a, _b, _c;
-      const { signal, keep, context = WALK_CONTEXT, stepBudget = WALK_BUDGETS.stepBudget, byteBudget = WALK_BUDGETS.byteBudget, departureByteBudget = WALK_BUDGETS.departureByteBudget, attachBp = ATTACH_BP, attachFetches = ATTACH_FETCHES, links = true, contained = false, nodeLimit = Infinity, expand } = opts;
+      var _a, _b, _c, _d;
+      const { signal, keep, context = WALK_CONTEXT, stepBudget = WALK_BUDGETS.stepBudget, byteBudget = WALK_BUDGETS.byteBudget, departureByteBudget = WALK_BUDGETS.departureByteBudget, attachBp = ATTACH_BP, links = true, contained = false, nodeLimit = Infinity, expand } = opts;
       checkRange(refName, region.start, region.end);
       const [header, units] = await Promise.all([
         this.header({ signal }),
@@ -5068,12 +5466,16 @@
       const drawn = drawnSpan(region, context);
       const tiles = units.filter((u) => u.kind === "tile" && overlaps(u, drawn));
       const blocks = units.filter((u) => u.kind === "departures" && overlaps(u, drawn));
-      if (Number.isFinite(byteBudget)) {
-        const tooLarge = byteBudgetError((end) => bytesOf(tiles.filter((u) => u.start < end)), byteBudget, region, tile, opts.budgetNames);
-        if (tooLarge) {
-          throw tooLarge;
+      const tileBytesTo = (end) => bytesOf(tiles.filter((u) => u.start < end + context));
+      const checkBytes = (bytesTo, attaching = false) => {
+        if (Number.isFinite(byteBudget)) {
+          const tooLarge = byteBudgetError(bytesTo, byteBudget, region, tile, opts.budgetNames, attaching);
+          if (tooLarge) {
+            throw tooLarge;
+          }
         }
-      }
+      };
+      checkBytes(tileBytesTo);
       const departureBytes = bytesOf(blocks);
       if (departureBytes > departureByteBudget) {
         throw new DepartureReadError(departureBytes, departureByteBudget);
@@ -5207,18 +5609,23 @@
         const fetches = /* @__PURE__ */ new Map();
         for (const { departure } of cut.unattached) {
           const { name } = departure;
+          const from = Math.min(departure.leavePos, departure.rejoinPos, region.end + context - 1);
           for (const unit of attachTiles(units, (_a = ownTiles.get(departure)) !== null && _a !== void 0 ? _a : [])) {
             if (!decodedFor(unit, name)) {
-              fetches.set(unit, ((_b = fetches.get(unit)) !== null && _b !== void 0 ? _b : /* @__PURE__ */ new Set()).add(name));
+              const wanting = fetches.get(unit);
+              fetches.set(unit, {
+                names: ((_b = wanting === null || wanting === void 0 ? void 0 : wanting.names) !== null && _b !== void 0 ? _b : /* @__PURE__ */ new Set()).add(name),
+                from: Math.min((_c = wanting === null || wanting === void 0 ? void 0 : wanting.from) !== null && _c !== void 0 ? _c : from, from)
+              });
             }
           }
         }
-        const wanted = [...fetches].slice(0, attachFetches);
-        if (wanted.length > 0) {
-          const fetched = await this.file.read(wanted.map(([unit]) => unit), reads.signal);
-          wanted.forEach(([unit, names], k) => {
+        if (fetches.size > 0) {
+          checkBytes((end) => tileBytesTo(end) + bytesOf([...fetches].filter(([, w]) => w.from < end + context).map(([unit]) => unit)), true);
+          const fetched = await this.file.read([...fetches.keys()], reads.signal);
+          for (const [k, [unit, { names }]] of [...fetches].entries()) {
             decode(unit, fetched[k], attachRows, (name) => names.has(name));
-          });
+          }
           await finish();
           cut = cutRows();
         }
@@ -5228,12 +5635,12 @@
       } finally {
         signal === null || signal === void 0 ? void 0 : signal.removeEventListener("abort", stop);
       }
-      const tooMany = (_c = keptStepsError(cut.fragments, cut.departures, stepBudget, region, filtered)) !== null && _c !== void 0 ? _c : keptNodesError(cut.kept.size, nodeLimit, region, filtered);
+      const tooMany = (_d = keptStepsError(cut.fragments, cut.departures, stepBudget, region, filtered)) !== null && _d !== void 0 ? _d : keptNodesError(cut.kept.size, nodeLimit, region, filtered);
       if (tooMany) {
         throw tooMany;
       }
       const { kept, fragments, departures } = cut;
-      return { graph, kept, fragments, departures };
+      return { graph, kept, fragments, departures, gaps: cut.gapsOf() };
     }
     /**
      * The graph under a region as tables: the reference sample's sequence over
@@ -5252,9 +5659,9 @@
         const names = await this.referenceSequences({ signal });
         throw new Error(`The walk file has no sequence ${region.refName} on ${sample}; it holds ${names.slice(0, 5).join(", ")}${names.length > 5 ? ", \u2026" : ""}`);
       }
-      const { graph, kept, fragments, departures } = await this.cut(refName, region, { ...rest, keep: walksKept(haplotypes, refName) });
+      const { graph, kept, fragments, departures, gaps } = await this.cut(refName, region, { ...rest, keep: walksKept(haplotypes, refName) });
       return {
-        tables: graph.tables(kept, fragments, departures),
+        tables: graph.tables(kept, fragments, departures, gaps),
         refName,
         sample
       };
