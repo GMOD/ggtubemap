@@ -81,8 +81,8 @@ vg convert -f graph.gbz > graph.gfa
 gfa-to-tabix graph.gfa --walks --refs GRCh38 -o graph
 ```
 
-That writes `graph.GRCh38.walks.gz`, in walk format 7. ggtubemap reads format
-7 only, so rebuild an older `.walks.bed.gz` with gfa-to-tabix 4.0 or later.
+That writes `graph.GRCh38.walks.gz`, in walk format 8. ggtubemap reads format
+8 only, so rebuild an older walk file with gfa-to-tabix 5.0 or later.
 JBrowse's
 [Hosting your own graph](https://jbrowse.org/jb2/docs/tutorials/pangenome_prepare_graph/)
 covers the steps, and ggbandage's

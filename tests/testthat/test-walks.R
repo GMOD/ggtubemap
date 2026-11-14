@@ -51,7 +51,7 @@ test_that("a walk file with no index beside it names the index it needs", {
 test_that("an older .walks.bed.gz is refused with the rebuild it needs", {
   expect_error(
     read_gfa("old.GRCh38.walks.bed.gz", region = "chr6:1-10"),
-    "rebuild it with gfa-to-tabix 4.0 or later"
+    "rebuild it with gfa-to-tabix 5.0 or later"
   )
 })
 

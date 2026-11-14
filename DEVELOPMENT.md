@@ -16,7 +16,7 @@ ggbandage's
 says why the bytes come from R and how it reads walk files.
 
 The walk-file fixtures in `tests/testthat/testdata` are ggbandage's, in walk
-format 7; its `tests/testthat/testdata/build.sh` rebuilds them with
+format 8; its `tests/testthat/testdata/build.sh` rebuilds them with
 gfa-to-tabix.
 
 - `tools/check-standalone.sh` fails where a copy differs from that commit,

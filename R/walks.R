@@ -95,7 +95,7 @@ check_walk_file <- function(path) {
   if (grepl("\\.walks\\.bed\\.gz$", bare_name(path))) {
     stop(
       sprintf(
-        "%s is an older walk file, which ggtubemap no longer reads: rebuild it with gfa-to-tabix 4.0 or later, which writes a .walks.gz and its .walks.gz.idx",
+        "%s is an older walk file, which ggtubemap no longer reads: rebuild it with gfa-to-tabix 5.0 or later, which writes a .walks.gz and its .walks.gz.idx",
         path
       ),
       call. = FALSE
