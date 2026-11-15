@@ -894,7 +894,7 @@
       abridged: [],
       nodes: /* @__PURE__ */ new Map(),
       revisits: [],
-      chunk: { path, routes, walks: [], lengths, refLengths: ref === null || ref === void 0 ? void 0 : ref.lengths }
+      path
     };
     const placed = (id) => out.nodes.has(id) || (ref === null || ref === void 0 ? void 0 : ref.lengths.has(id)) === true;
     const previous = { id: 0 };
@@ -983,10 +983,9 @@
       if (cols[3] !== "walk") {
         continue;
       }
-      const choices = parseChoices(cols[10]);
-      out.chunk.walks.push({ cols, choices });
       const name = cols[4];
       if (keep === void 0 || keep(name)) {
+        const choices = parseChoices(cols[10]);
         let interior = 0;
         for (let k = 0; k < choices.length; k += 4) {
           interior += routeOf(choices[k]).interior.length;
@@ -1023,84 +1022,6 @@
       }
     }
     return out;
-  }
-  function placeOffR(chunks, kept, place2) {
-    const offR = /* @__PURE__ */ new Set();
-    for (const id of kept) {
-      if (!chunks.some(({ path }) => path.occurrences.has(id))) {
-        offR.add(id);
-      }
-    }
-    const best = /* @__PURE__ */ new Map();
-    for (const { path, routes, walks, lengths, refLengths } of chunks) {
-      const wanted = Uint8Array.from(routes, ({ interior }) => interior.some((h) => offR.has(idOf(h))) ? 1 : 0);
-      const lengthOf = (h) => {
-        var _a, _b;
-        return (_b = (_a = lengths.get(idOf(h))) !== null && _a !== void 0 ? _a : refLengths === null || refLengths === void 0 ? void 0 : refLengths.get(idOf(h))) !== null && _b !== void 0 ? _b : 0;
-      };
-      const bp = new Float64Array(routes.length).fill(-1);
-      const routeBp = (index) => {
-        if (bp[index] < 0) {
-          bp[index] = routes[index].interior.reduce((s, h) => s + lengthOf(h), 0);
-        }
-        return bp[index];
-      };
-      const taken = new Uint8Array(routes.length);
-      for (const { cols, choices } of walks) {
-        let remaining = 0;
-        for (let k = 0; k < choices.length; k += 4) {
-          const index = choices[k];
-          if (wanted[index] !== 0 && taken[index] === 0) {
-            remaining++;
-          }
-        }
-        if (remaining === 0) {
-          continue;
-        }
-        const name = cols[4];
-        let offset = +cols[6];
-        const [start, startCopy] = parseCopy(cols[9]);
-        traverse(path, routes, start, startCopy, choices, +cols[8], {
-          step(h) {
-            offset += lengthOf(h);
-          },
-          stretch(from, to, forward2) {
-            offset += forward2 ? path.bp(to + 1) - path.bp(from + 1) : path.bp(from) - path.bp(to);
-          },
-          route(index, flip2) {
-            if (wanted[index] === 0 || taken[index] !== 0) {
-              offset += routeBp(index);
-              return true;
-            }
-            taken[index] = 1;
-            const route = routes[index];
-            for (let k = 0; k < route.interior.length; k++) {
-              const h = interiorAt(route, flip2, k);
-              const id = idOf(h);
-              const length = lengthOf(h);
-              if (offR.has(id)) {
-                const held = best.get(id);
-                if (!held || name < held.refName || name === held.refName && offset < held.start) {
-                  best.set(id, {
-                    refName: name,
-                    start: offset,
-                    end: offset + length,
-                    rank: 1,
-                    passes: 0
-                  });
-                }
-              }
-              offset += length;
-            }
-            remaining--;
-            return remaining > 0;
-          }
-        });
-      }
-    }
-    for (const [id, node] of best) {
-      place2(id, node);
-    }
   }
   function referenceNodes(rows) {
     const nodes = [];
@@ -1511,8 +1432,12 @@
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
     return match ? +match[1] : void 0;
   }
+  function stringTag(line, tag) {
+    var _a;
+    return (_a = new RegExp(`(?:^|\\t)${tag}:Z:([^\\t]+)`).exec(line)) === null || _a === void 0 ? void 0 : _a[1];
+  }
   function walkHeader(lines) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const header = {
       references: [],
       haplotypes: [],
@@ -1530,6 +1455,8 @@
         (_a = header.format) !== null && _a !== void 0 ? _a : header.format = integerTag(line, "format");
         (_b = header.tile) !== null && _b !== void 0 ? _b : header.tile = integerTag(line, "tile");
         (_c = header.revisited) !== null && _c !== void 0 ? _c : header.revisited = integerTag(line, "revisited");
+        (_d = header.graph) !== null && _d !== void 0 ? _d : header.graph = stringTag(line, "graph");
+        (_e = header.leftout) !== null && _e !== void 0 ? _e : header.leftout = integerTag(line, "leftout");
       }
     }
     return header;
@@ -2022,19 +1949,19 @@
             held.push(piece);
           }
         }
-        const consecutive = leave !== void 0 && rejoin !== void 0 && leave[0].fragStart === rejoin[0].fragStart && pieceOf(leave[0], leave[1]) + 1 === pieceOf(rejoin[0], rejoin[1]);
-        if (leave && rejoin && consecutive && ids.length > 0) {
-          const [left, leaveStep, end] = leave;
-          const [right, rejoinStep, start] = rejoin;
+        const oneRun = leave !== void 0 && rejoin !== void 0 && leave[0].fragStart === rejoin[0].fragStart && pieceOf(leave[0], leave[1]) + 1 === pieceOf(rejoin[0], rejoin[1]) && (leave[2] - 1 > leave[1] || returned(leave[0], leave[1])) && (rejoin[2] < rejoin[1] || returned(rejoin[0], rejoin[1]));
+        if (leave && rejoin && oneRun && ids.length > 0) {
+          const [left, , end] = leave;
+          const [right, , start] = rejoin;
           const last = left.ids[end - 1];
           const next = right.ids[start];
-          if ((end - 1 > leaveStep || returned(left, leaveStep)) && (start < rejoinStep || returned(right, rejoinStep)) && last !== void 0 && next !== void 0 && last !== SKIPPED && next !== SKIPPED) {
+          if (last !== void 0 && next !== void 0 && last !== SKIPPED && next !== SKIPPED) {
             link(last * 2 + left.rev[end - 1], next * 2 + right.rev[start]);
           }
         }
         if (ids.length > 0) {
           d.steps = { ids: Int32Array.from(ids), rev: Uint8Array.from(rev) };
-          if (!consecutive) {
+          if (!oneRun) {
             d.breakAt = leave ? leave[2] - leave[1] - 1 : 0;
           }
           if (held.length > 0) {
@@ -2111,7 +2038,6 @@
       this.nodes = /* @__PURE__ */ new Map();
       this.sequences = /* @__PURE__ */ new Map();
       this.links = [];
-      this.chunks = [];
       this.window = window;
     }
     // A node with its position, unless the cut already holds it at one that
@@ -2131,9 +2057,6 @@
     addLinkEnds(source, target) {
       this.links.push(source, target);
     }
-    addChunk(chunk) {
-      this.chunks.push(chunk);
-    }
     // Bases of nodes a chunk's rows give, for a window that asks for them
     addSequences(sequences) {
       if (this.window.sequences === true) {
@@ -2150,14 +2073,7 @@
      * them as the GFA they stand for, the same bytes for the same rows.
      */
     tables(kept, fragments, departures, gaps = []) {
-      if (this.chunks.length > 0) {
-        placeOffR(this.chunks, kept, (id, node) => {
-          const held2 = this.nodes.get(id);
-          if (held2) {
-            this.nodes.set(id, { ...held2, ...node });
-          }
-        });
-      }
+      this.placeOffReference(kept, fragments, departures);
       const held = [];
       for (const id of kept) {
         const node = this.nodes.get(id);
@@ -2242,12 +2158,14 @@
       });
       const steps = new Int32Array(offsets[walks.length]);
       const reversed = new Uint8Array(steps.length);
-      walks.forEach(({ ids, rev }, p) => {
+      const refStarts = new Float64Array(steps.length);
+      walks.forEach(({ ids, rev, refStarts: placed }, p) => {
         const at = offsets[p];
         for (let j = 0; j < ids.length; j++) {
           steps[at + j] = nodeIndex(ids[j]);
         }
         reversed.set(rev, at);
+        refStarts.set(placed, at);
       });
       return {
         nodes: {
@@ -2268,6 +2186,7 @@
           offsets,
           steps,
           reversed,
+          refStarts,
           trimmedBefore: Float64Array.from(walks, (f) => f.trimmedBefore),
           trimmedAfter: Float64Array.from(walks, (f) => f.trimmedAfter),
           abridgedSteps
@@ -2275,6 +2194,47 @@
         departures: departureTable(departures, nodeIndex, stepsOf),
         gaps: gapTable(gaps, new Map(walks.map((f, p) => [f, p])), nodeIndex)
       };
+    }
+    placeOffReference(kept, fragments, departures) {
+      var _a;
+      const lengthOf = (id) => {
+        const node = this.nodes.get(id);
+        return node ? node.end - node.start : 0;
+      };
+      const placed = /* @__PURE__ */ new Map();
+      const visit = (name, ids, start) => {
+        let at = start;
+        for (const id of ids) {
+          const node = this.nodes.get(id);
+          const length = lengthOf(id);
+          const held = placed.get(id);
+          if (node && node.rank !== 0 && !node.placeholder && kept.has(id) && (!held || name < held.refName || name === held.refName && at < held.start)) {
+            placed.set(id, {
+              ...node,
+              refName: name,
+              start: at,
+              end: at + length
+            });
+          }
+          at += length;
+        }
+      };
+      for (const f of fragments) {
+        visit(f.name, f.ids, f.hapStart);
+      }
+      for (const d of departures) {
+        if (d.steps) {
+          const { ids } = d.steps;
+          const leaving = ids.subarray(0, (_a = d.breakAt) !== null && _a !== void 0 ? _a : ids.length);
+          const rejoining = ids.subarray(leaving.length);
+          const rejoiningBp = rejoining.reduce((sum, id) => sum + lengthOf(id), 0);
+          visit(d.name, leaving, d.hapStart);
+          visit(d.name, rejoining, d.hapStart + d.ownBp - rejoiningBp);
+        }
+      }
+      for (const [id, node] of placed) {
+        this.nodes.set(id, node);
+      }
     }
     // The view anchors on the first walk when no walk names the assembly, as
     // gbz-base's cut has it; in file order that was whichever haplotype the
@@ -6055,7 +6015,6 @@
           graph.placeNode(id, node);
         }
         graph.addSequences(tileCut.sequences);
-        graph.addChunk(tileCut.chunk);
         checkNodes(tileCut, readTo);
       };
       const decode = (unit, lines, into, from, only) => {
@@ -6065,7 +6024,7 @@
         decodedBy.set(unit.offset, [...earlier, wanted]);
         const tileRows = lines.map((line) => line.split("	"));
         const tileCut = decodeChunk(tileRows, Number(unit.name), (name) => wanted(name) && !earlier.some((took) => took(name)), opts.sequences);
-        const { path } = tileCut.chunk;
+        const { path } = tileCut;
         const hull = into === rows ? path.hull(drawn) : void 0;
         over.start = Math.min(over.start, (_c2 = hull === null || hull === void 0 ? void 0 : hull.start) !== null && _c2 !== void 0 ? _c2 : over.start);
         over.end = Math.max(over.end, (_d2 = hull === null || hull === void 0 ? void 0 : hull.end) !== null && _d2 !== void 0 ? _d2 : over.end);
@@ -6096,17 +6055,7 @@
           }
           into.push(row);
         }
-        place2({
-          ...tileCut,
-          rows: taken,
-          chunk: {
-            ...tileCut.chunk,
-            walks: tileCut.chunk.walks.filter(({ cols }) => {
-              var _a2, _b2, _c2;
-              return pieces.has(pieceKey((_a2 = cols[4]) !== null && _a2 !== void 0 ? _a2 : "", (_b2 = cols[5]) !== null && _b2 !== void 0 ? _b2 : "", (_c2 = cols[7]) !== null && _c2 !== void 0 ? _c2 : ""));
-            })
-          }
-        }, piece.chunkStart + tile);
+        place2({ ...tileCut, rows: taken }, piece.chunkStart + tile);
       };
       const onDrawn = (span) => span.start < over.end && span.end > over.start;
       const linesOf = (held) => {
