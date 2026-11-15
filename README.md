@@ -97,13 +97,17 @@ str <- read_gfa(
   region = "chr6:160,653,940-160,654,130",
   haplotypes = c("CHM13#0", "HG00097#1", "HG00099#1", "HG00133#2", "HG00140#1")
 )
-autoplot(tubemap_layout(str), xlim = c(700, 2000))
+tm <- tubemap_layout(str)
+autoplot(tm, xlim = tubemap_x(tm, c(160653972, 160654042)))
 ```
 
 ![GRCh38, CHM13 and four HPRC haplotypes through the TA repeat of a 190 bp tandem repeat near LPA, each node's bases printed](man/figures/hprc-str.png)
 
 - Range requests fetch only the blocks the region needs: this cut takes under
   a second
+- The cut follows the browser readers' rules, those of BandageJS, the
+  JBrowse graph plugin and sequenceTubeMap, by graph-walks' cut presets, so a
+  region holds the same graph in each; `context` widens or narrows it
 - The reference sample's walk comes first; `haplotypes` picks the others by
   `sample#haplotype`, every one by default
 - A haplotype that takes no step on the reference over the region, such as one
@@ -113,7 +117,7 @@ autoplot(tubemap_layout(str), xlim = c(700, 2000))
 - [@jbrowse/graph-walks](https://github.com/GMOD/graph-walks) does the cut in
   V8, and R serves each byte range
 - At normal width the repeat is 6,200 layout pixels across, so `xlim` shows
-  part of it; `node_width = "compressed"` fits it whole, without bases
+  part of it, between two positions on GRCh38; `node_width = "compressed"` fits it whole, without bases
 - The whole genome is in
   `https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f8.GRCh38.walks.gz`,
   with the same nodes and walks but no bases

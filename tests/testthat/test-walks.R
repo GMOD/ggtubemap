@@ -105,10 +105,11 @@ test_that("a haplotype that jumps across the region many times is told by its sh
 stepless <- test_path("testdata", "stepless.REF.walks.gz")
 
 # REF walks seven 1 kb nodes, DEL >1>6>7, INS >1>8>6>7 through a 2 kb node of
-# its own, and SNP >1>2>3>5>6>7, so none steps on chr1:3000-4000
+# its own, and SNP >1>2>3>5>6>7, so none steps on chr1:3000-4000. The default
+# context reaches SNP's steps on nodes 3 and 5, so these cuts keep none
 test_that("a haplotype with no step on the reference over the region is named in a warning and under the map", {
   expect_warning(
-    g <- read_gfa(stepless, region = "chr1:3201-3800"),
+    g <- read_gfa(stepless, region = "chr1:3201-3800", context = 0),
     paste0(
       "- DEL#1: leaves the reference at 1,000 and rejoins it at 5,000, with no sequence of its own between\n",
       "- INS#1: leaves the reference at 1,000 and rejoins it at 5,000, with 2,000 bp of its own between\n",
@@ -123,9 +124,21 @@ test_that("a haplotype with no step on the reference over the region is named in
   expect_no_error(ggplot2::ggplot_gtable(ggplot2::ggplot_build(p)))
 })
 
+test_that("the cut keeps the browser readers' context by default, which reaches SNP's steps", {
+  expect_warning(
+    g <- read_gfa(stepless, region = "chr1:3201-3800"),
+    "`context = 2000` reaches where each leaves or rejoins",
+    fixed = TRUE
+  )
+  expect_equal(vapply(g$tracks, `[[`, "", "name"), c("REF#0#chr1", "SNP#1#chr1"))
+  expect_equal(g$tracks[[2]]$sequence, c("3", "5"))
+  expect_equal(g$left_out$haplotype, c("DEL#1", "INS#1"))
+})
+
 test_that("the caption tells a haplotype the file lacks from one with no step here", {
   expect_warning(
-    g <- read_gfa(stepless, region = "chr1:3201-3800", haplotypes = c("DEL#1", "NOPE#1"))
+    g <- read_gfa(stepless, region = "chr1:3201-3800", haplotypes = c("DEL#1", "NOPE#1"),
+                  context = 0)
   )
   expect_equal(
     autoplot(tubemap_layout(g))$labels$caption,

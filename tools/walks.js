@@ -1,7 +1,7 @@
 // A region of a gfa-to-tabix --walks file as a tube map's nodes and tracks.
 // V8 has no file system or network, so each byte range and file size comes
 // from R through console.r.call, and @jbrowse/graph-walks does the cut.
-import { departureKind, WalkReader, walksKept } from '@jbrowse/graph-walks'
+import { CUT_PRESETS, departureKind, WalkReader, walksKept } from '@jbrowse/graph-walks'
 
 import { rangeFile } from './v8-host.mjs'
 
@@ -27,8 +27,9 @@ function tracksOf({ nodes, walks }, reference) {
   return tracks.sort((a, b) => (b.name === reference) - (a.name === reference))
 }
 
-// R asks for one region and waits for it, so the cut lifts every budget a
-// browser window sets and reads every abridged walk in full
+// A figure's cut: the browser readers' rules, so a region draws the graph they
+// draw, with the budgets a browser window sets lifted, since R asks for one
+// region and waits for it; every abridged walk read in full
 globalThis.cutWalks = async function ({
   file,
   refName,
@@ -51,16 +52,12 @@ globalThis.cutWalks = async function ({
     anchor,
     { start, end },
     {
-      context,
+      ...CUT_PRESETS.figure,
+      ...(context === undefined ? {} : { context }),
       keep: walksKept(haplotypes, anchor),
       expand: () => true,
       sequences: true,
       links: false,
-      stepBudget: Infinity,
-      byteBudget: Infinity,
-      departureByteBudget: Infinity,
-      attachBp: 0,
-      attachFetches: 0,
     },
   )
   const tables = graph.tables(kept, fragments, [])

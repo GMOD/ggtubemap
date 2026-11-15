@@ -45,7 +45,8 @@ haplotypes <- paste0(rep(samples, each = 2), "#", 1:2)
 
 str <- read_gfa(walks, region = "chr6:160,653,940-160,654,130",
                 haplotypes = c("CHM13#0", haplotypes[c(1, 3, 10, 13)]))
-save("hprc-str.png", tubemap_layout(str), 9, xlim = c(700, 2000),
+str_map <- tubemap_layout(str)
+save("hprc-str.png", str_map, 9, xlim = tubemap_x(str_map, c(160653972, 160654042)),
      legend = 0.6, extra = theme(legend.text = element_text(size = 6)))
 
 hla <- read_gfa(walks, region = "chr6:29,942,850-29,943,250",

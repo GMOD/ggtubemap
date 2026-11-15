@@ -4,7 +4,13 @@
 \alias{read_gfa}
 \title{Read a GFA file}
 \usage{
-read_gfa(path, reference = NULL, region = NULL, haplotypes = NULL, context = 0)
+read_gfa(
+  path,
+  reference = NULL,
+  region = NULL,
+  haplotypes = NULL,
+  context = NULL
+)
 }
 \arguments{
 \item{path}{A GFA file, optionally gzipped, local or a URL; or a
@@ -23,7 +29,8 @@ it, and the \code{context} that would draw it, and \code{\link[=autoplot.tubemap
 it under the map.}
 
 \item{context}{On a walk file, bp of reference kept past each end of
-\code{region}.}
+\code{region}. \code{NULL} keeps what the browser readers keep, graph-walks'
+\code{WALK_CONTEXT}.}
 }
 \value{
 A list of \code{nodes} (a data frame of \code{name} and \code{seq}, or

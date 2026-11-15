@@ -5,7 +5,8 @@ cut_walks <- function(path, region, haplotypes, context) {
   json <- js_call(
     "cutWalks",
     c(
-      list(file = path, context = context),
+      list(file = path),
+      if (!is.null(context)) list(context = context),
       if (length(haplotypes)) list(haplotypes = as.list(haplotypes)),
       parse_region(region)
     ),

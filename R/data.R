@@ -49,7 +49,8 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #'   it, and the `context` that would draw it, and [autoplot.tubemap()] names
 #'   it under the map.
 #' @param context On a walk file, bp of reference kept past each end of
-#'   `region`.
+#'   `region`. `NULL` keeps what the browser readers keep, graph-walks'
+#'   `WALK_CONTEXT`.
 #' @return A list of `nodes` (a data frame of `name` and `seq`, or
 #'   `sequence_length` where a segment's sequence is `*`) and `tracks`, and
 #'   from a walk file `left_out`, a data frame of each `haplotype` that got no
@@ -62,7 +63,7 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #'               haplotypes = c("HG00097#1", "HG00133#2"))
 #' }
 read_gfa <- function(path, reference = NULL, region = NULL, haplotypes = NULL,
-                     context = 0) {
+                     context = NULL) {
   if (!is.null(region)) {
     return(order_tracks(cut_walks(path, region, haplotypes, context), reference))
   }

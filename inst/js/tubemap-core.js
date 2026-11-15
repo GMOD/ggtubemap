@@ -7245,16 +7245,12 @@
       anchor,
       { start, end },
       {
-        context,
+        ...CUT_PRESETS.figure,
+        ...context === void 0 ? {} : { context },
         keep: walksKept(haplotypes, anchor),
         expand: () => true,
         sequences: true,
-        links: false,
-        stepBudget: Infinity,
-        byteBudget: Infinity,
-        departureByteBudget: Infinity,
-        attachBp: 0,
-        attachFetches: 0
+        links: false
       }
     );
     const tables = graph.tables(kept, fragments, []);
