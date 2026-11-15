@@ -45,12 +45,15 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #'   `"chr6:160,653,940-160,654,130"`.
 #' @param haplotypes On a walk file, the `sample#haplotype` walks to keep,
 #'   every one when `NULL`. One with no step on the reference over `region`
-#'   gets no track, and a warning says where it leaves the reference and
-#'   rejoins it, and the `context` that would draw it.
+#'   gets no track: a warning says where it leaves the reference and rejoins
+#'   it, and the `context` that would draw it, and [autoplot.tubemap()] names
+#'   it under the map.
 #' @param context On a walk file, bp of reference kept past each end of
 #'   `region`.
 #' @return A list of `nodes` (a data frame of `name` and `seq`, or
-#'   `sequence_length` where a segment's sequence is `*`) and `tracks`.
+#'   `sequence_length` where a segment's sequence is `*`) and `tracks`, and
+#'   from a walk file `left_out`, a data frame of each `haplotype` that got no
+#'   track and the `reason`.
 #' @export
 #' @examples
 #' \dontrun{

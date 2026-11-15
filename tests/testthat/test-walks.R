@@ -74,7 +74,7 @@ test_that("a left-out haplotype is described by its departures, and the context 
     switch = FALSE
   )
   expect_warning(
-    warn_absent(c("A#1", "B#2", "C#1"), "REF#0#c", absent, "c:5,001-5,100"),
+    warn_absent(left_out(c("A#1", "B#2", "C#1"), "REF#0#c", absent), "c:5,001-5,100"),
     paste0(
       "- A#1: leaves the reference at 1,000 and rejoins it at 9,000, with 500 bp of its own between, 200 bp of it not in the graph\n",
       "- B#2, C#1: leaves the reference at 4,000 and rejoins it at 6,000, with no sequence of its own between\n",
@@ -82,7 +82,58 @@ test_that("a left-out haplotype is described by its departures, and the context 
     ),
     fixed = TRUE
   )
-  expect_no_warning(warn_absent("A#1", "A#1#c", absent, "c:5,001-5,100"))
+  expect_no_warning(warn_absent(left_out("A#1", "A#1#c", absent), "c:5,001-5,100"))
+})
+
+# pggb's HG005#1 has 26 departures across chrY:16,160,000-16,163,000 and no
+# step on the reference over it
+test_that("a haplotype that jumps across the region many times is told by its shortest jump", {
+  absent <- data.frame(
+    name = "D#1#c",
+    from = c(4990, 4000, 4995),
+    to = c(9000, 60000, 266000),
+    own_bp = 0,
+    missing_bp = 0,
+    switch = TRUE
+  )
+  expect_equal(
+    departure_text(absent),
+    "leaves the reference at 4,990 and rejoins it at 9,000 on the other strand, with no sequence of its own between, the shortest of its 3 jumps across the region"
+  )
+})
+
+stepless <- test_path("testdata", "stepless.REF.walks.gz")
+
+# REF walks seven 1 kb nodes, DEL >1>6>7, INS >1>8>6>7 through a 2 kb node of
+# its own, and SNP >1>2>3>5>6>7, so none steps on chr1:3000-4000
+test_that("a haplotype with no step on the reference over the region is named in a warning and under the map", {
+  expect_warning(
+    g <- read_gfa(stepless, region = "chr1:3201-3800"),
+    paste0(
+      "- DEL#1: leaves the reference at 1,000 and rejoins it at 5,000, with no sequence of its own between\n",
+      "- INS#1: leaves the reference at 1,000 and rejoins it at 5,000, with 2,000 bp of its own between\n",
+      "- SNP#1: leaves the reference at 3,000 and rejoins it at 4,000, with no sequence of its own between\n"
+    ),
+    fixed = TRUE
+  )
+  expect_equal(vapply(g$tracks, `[[`, "", "name"), "REF#0#chr1")
+  expect_equal(g$left_out$haplotype, c("DEL#1", "INS#1", "SNP#1"))
+  p <- autoplot(tubemap_layout(g))
+  expect_equal(p$labels$caption, "Not drawn: DEL#1, INS#1, SNP#1 (no step on the reference here)")
+  expect_no_error(ggplot2::ggplot_gtable(ggplot2::ggplot_build(p)))
+})
+
+test_that("the caption tells a haplotype the file lacks from one with no step here", {
+  expect_warning(
+    g <- read_gfa(stepless, region = "chr1:3201-3800", haplotypes = c("DEL#1", "NOPE#1"))
+  )
+  expect_equal(
+    autoplot(tubemap_layout(g))$labels$caption,
+    "Not drawn: DEL#1 (no step on the reference here); NOPE#1 (no walk near here in the file)"
+  )
+  drawn <- read_gfa(stepless, region = "chr1:1-1000")
+  expect_equal(nrow(drawn$left_out), 0)
+  expect_null(autoplot(tubemap_layout(drawn))$labels$caption)
 })
 
 test_that("a walk file needs a region, and a region needs a walk file", {

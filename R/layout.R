@@ -129,7 +129,9 @@ compact <- function(x) x[!vapply(x, is.null, logical(1))]
 #'   `nodes`, `outlines`, `bases`, `mismatches`, `panels`, `ruler`) and the
 #'   `bounds`. `ruler` holds each node visit of the ruler track, the first
 #'   track with an `index_of_first_base`, in coordinate order; it is empty
-#'   when no track has one.
+#'   when no track has one. `left_out` is the graph's `left_out`, the
+#'   haplotypes [read_gfa()] drew no track for, which [autoplot.tubemap()]
+#'   names under the map.
 #' @export
 #' @examples
 #' tm <- tubemap_layout(tubemap_example("example-6"))
@@ -174,7 +176,7 @@ tubemap_layout <- function(graph, reads = graph$reads,
   if (is.null(out)) {
     stop("No visible track is left to lay out.", call. = FALSE)
   }
-  new_tubemap(out, node_width)
+  new_tubemap(out, node_width, graph$left_out)
 }
 
 as_frame <- function(columns) {
@@ -198,7 +200,7 @@ as_polygons <- function(table) {
   as_frame(c(lapply(table[fields], rep, times = n), table[c("x", "y")]))
 }
 
-new_tubemap <- function(out, node_width) {
+new_tubemap <- function(out, node_width, left_out = NULL) {
   tracks <- as_frame(out$tracks)
   tracks$strand <- ifelse(is.na(tracks$is_reverse), NA,
                           ifelse(tracks$is_reverse, "-", "+"))
@@ -237,7 +239,8 @@ new_tubemap <- function(out, node_width) {
       panels = as_frame(out$panels),
       ruler = as_frame(out$ruler),
       bounds = out$bounds,
-      node_width = node_width
+      node_width = node_width,
+      left_out = left_out
     ),
     class = "tubemap"
   )

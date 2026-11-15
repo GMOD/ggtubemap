@@ -106,6 +106,9 @@ autoplot(tubemap_layout(str), xlim = c(700, 2000))
   a second
 - The reference sample's walk comes first; `haplotypes` picks the others by
   `sample#haplotype`, every one by default
+- A haplotype that takes no step on the reference over the region, such as one
+  that jumps across it, has no track; a warning says where it leaves and
+  rejoins the reference, and the map's caption names it
 - `chr6` names the reference sample's sequence on it, `GRCh38#0#chr6`
 - [@jbrowse/graph-walks](https://github.com/GMOD/graph-walks) does the cut in
   V8, and R serves each byte range

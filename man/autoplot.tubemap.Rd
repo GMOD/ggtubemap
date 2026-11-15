@@ -42,7 +42,9 @@ when a track carries coordinates.}
 \value{
 A ggplot. When neither \code{haplotypes} nor \code{reads} maps \code{fill}, it
 carries \code{\link[=scale_fill_tubemap]{scale_fill_tubemap()}}, whose legend is dropped past 12
-haplotypes; a \code{fill} mapping brings its own scale.
+haplotypes; a \code{fill} mapping brings its own scale. A haplotype
+\code{\link[=read_gfa]{read_gfa()}} drew no track for is named in the caption, which
+\code{+ labs(caption = NULL)} removes.
 }
 \description{
 Puts the \link{tubemap_layers} together in sequenceTubeMap's order: haplotypes,

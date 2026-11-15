@@ -22,7 +22,9 @@
 #' @param ... Unused.
 #' @return A ggplot. When neither `haplotypes` nor `reads` maps `fill`, it
 #'   carries [scale_fill_tubemap()], whose legend is dropped past 12
-#'   haplotypes; a `fill` mapping brings its own scale.
+#'   haplotypes; a `fill` mapping brings its own scale. A haplotype
+#'   [read_gfa()] drew no track for is named in the caption, which
+#'   `+ labs(caption = NULL)` removes.
 #' @exportS3Method ggplot2::autoplot
 #' @examples
 #' tm <- tubemap_layout(tubemap_example("example-6"))
@@ -54,9 +56,20 @@ autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
       scale_fill_tubemap(guide = if (levels > 12) "none" else "legend")
     }) +
     (if (ruler) scale_x_tubemap(object)) +
+    (if (length(object$left_out$haplotype)) labs(caption = left_out_caption(object$left_out))) +
     coord_tubemap(object, xlim = xlim, ylim = ylim) +
     theme_tubemap() +
     (if (ruler) theme(plot.margin = margin(4, ruler_side, 4, ruler_side)))
+}
+
+# The haplotypes left out, by reason, at most a few named in each
+left_out_caption <- function(left_out) {
+  groups <- split(left_out$haplotype, factor(left_out$reason, unique(left_out$reason)))
+  shown <- vapply(groups, function(h) {
+    names <- if (length(h) > 6) c(h[1:5], sprintf("%d more", length(h) - 5)) else h
+    paste(names, collapse = ", ")
+  }, "")
+  paste0("Not drawn: ", paste(sprintf("%s (%s)", shown, names(groups)), collapse = "; "))
 }
 
 #' @export

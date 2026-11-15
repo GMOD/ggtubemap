@@ -58,7 +58,9 @@ A \code{tubemap} object: a list of data frames (\code{shapes}, \code{tracks},
 \code{nodes}, \code{outlines}, \code{bases}, \code{mismatches}, \code{panels}, \code{ruler}) and the
 \code{bounds}. \code{ruler} holds each node visit of the ruler track, the first
 track with an \code{index_of_first_base}, in coordinate order; it is empty
-when no track has one.
+when no track has one. \code{left_out} is the graph's \code{left_out}, the
+haplotypes \code{\link[=read_gfa]{read_gfa()}} drew no track for, which \code{\link[=autoplot.tubemap]{autoplot.tubemap()}}
+names under the map.
 }
 \description{
 Runs the sequenceTubeMap layout from \verb{@jbrowse/tubemap-core} and returns

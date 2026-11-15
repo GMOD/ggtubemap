@@ -18,15 +18,18 @@ layout puts first. By default the first path in the file.}
 
 \item{haplotypes}{On a walk file, the \code{sample#haplotype} walks to keep,
 every one when \code{NULL}. One with no step on the reference over \code{region}
-gets no track, and a warning says where it leaves the reference and
-rejoins it, and the \code{context} that would draw it.}
+gets no track: a warning says where it leaves the reference and rejoins
+it, and the \code{context} that would draw it, and \code{\link[=autoplot.tubemap]{autoplot.tubemap()}} names
+it under the map.}
 
 \item{context}{On a walk file, bp of reference kept past each end of
 \code{region}.}
 }
 \value{
 A list of \code{nodes} (a data frame of \code{name} and \code{seq}, or
-\code{sequence_length} where a segment's sequence is \code{*}) and \code{tracks}.
+\code{sequence_length} where a segment's sequence is \code{*}) and \code{tracks}, and
+from a walk file \code{left_out}, a data frame of each \code{haplotype} that got no
+track and the \code{reason}.
 }
 \description{
 Reads the segments and the paths (\code{P} lines) and walks (\code{W} lines) of a GFA
