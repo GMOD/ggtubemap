@@ -161,7 +161,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@a7525fb/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0.tgz/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp, overBytes) {
       super(message);
@@ -201,7 +201,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@a7525fb/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0.tgz/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var ID_LIMIT = 2 ** 31;
@@ -1128,7 +1128,7 @@
     return nodes;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@a7525fb/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0.tgz/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
   var ATTACH_BP = 65536;
   function squeezer(holes, refName) {
     const spans = holes.filter((h) => h.refName === refName).sort((a, b) => a.start - b.start);
@@ -1208,7 +1208,7 @@
     });
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@a7525fb/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0.tgz/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
   var GAP_KINDS = ["steps", "read", "own", "unread"];
   function groupByName(items, refName) {
     const out = /* @__PURE__ */ new Map();
@@ -1505,7 +1505,7 @@
     return gaps;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@a7525fb/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0.tgz/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var isPlaceholder = (id) => id < 0;
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -1990,7 +1990,8 @@
       }
     }
     const unattached = [];
-    for (const d of records) {
+    for (const record of records) {
+      const d = { ...record };
       if (attaches(d)) {
         const ids = [];
         const rev = [];
@@ -2041,7 +2042,7 @@
           }
         }
         if (!leave || !rejoin) {
-          unattached.push({ departure: d });
+          unattached.push({ departure: record });
         }
       }
       departures.push(d);
@@ -2661,7 +2662,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@a7525fb/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0.tgz/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -2686,7 +2687,7 @@
     return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@a7525fb/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0.tgz/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
   function checkRange(refName, start, end) {
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
       throw new Error(`${refName}:${start}-${end} is not a finite range to query the graph's index for`);
@@ -5479,7 +5480,7 @@
     }
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@a7525fb/node_modules/@jbrowse/graph-walks/esm/walkFile.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0.tgz/node_modules/@jbrowse/graph-walks/esm/walkFile.js
   var WALK_FORMAT = 8;
   var WalkFormatError = class extends Error {
     constructor() {
@@ -5533,6 +5534,11 @@
     }
     return found === fixed ? row.slice(at + 1).split("	").find((col) => !TAG.test(col)) : void 0;
   }
+  function lacking(row) {
+    var _a;
+    const fixed = FIXED_COLUMNS.get((_a = row.split("	", 4)[3]) !== null && _a !== void 0 ? _a : "");
+    return fixed !== void 0 && row.split("	", fixed).length < fixed ? fixed : void 0;
+  }
   function checkUnit(unit, head, rows) {
     var _a, _b;
     const stated = [
@@ -5549,12 +5555,15 @@
       return kinds !== void 0 && (seq !== unit.refName || !kinds.includes(kind));
     });
     const extra = kinds === void 0 ? void 0 : rows.find((row) => untagged(row) !== void 0);
+    const short = kinds === void 0 ? void 0 : rows.find((row) => lacking(row) !== void 0);
     if (head !== stated) {
       throw new WalkFormatError(`${unitName(unit)} starts ${JSON.stringify((_a = head === null || head === void 0 ? void 0 : head.slice(0, 80)) !== null && _a !== void 0 ? _a : "")}`);
     } else if (stray !== void 0) {
       throw new WalkFormatError(`${unitName(unit)} holds a row that is not one of ${unit.refName}'s ${kinds === null || kinds === void 0 ? void 0 : kinds.join(", ")} rows: ${JSON.stringify(stray.slice(0, 80))}`);
     } else if (extra !== void 0) {
       throw new WalkFormatError(`${unitName(unit)} holds a row with a column after its fixed ones that is no tag, ${JSON.stringify((_b = untagged(extra)) === null || _b === void 0 ? void 0 : _b.slice(0, 40))}: ${JSON.stringify(extra.slice(0, 80))}`);
+    } else if (short !== void 0) {
+      throw new WalkRowError(`${unitName(unit)} holds a row of fewer columns than the ${lacking(short)} its kind holds: ${JSON.stringify(short.slice(0, 80))}`);
     }
   }
   function integerTag2(fields, tag) {
@@ -5734,7 +5743,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@a7525fb/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0.tgz/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var WALK_CONTEXT = 1e3;
   var DETAIL_READS = 16;
