@@ -115,8 +115,8 @@ autoplot(tubemap_layout(str), xlim = c(700, 2000))
 - At normal width the repeat is 6,200 layout pixels across, so `xlim` shows
   part of it; `node_width = "compressed"` fits it whole, without bases
 - The whole genome is in
-  `https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38.GRCh38.walks.gz`, 1.6
-  GB, with the same nodes and walks but no bases
+  `https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f8.GRCh38.walks.gz`,
+  with the same nodes and walks but no bases
 
 Twelve haplotypes through 400 bp of HLA-A, a bubble at nearly every node:
 
