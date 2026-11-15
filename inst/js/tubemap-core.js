@@ -2034,11 +2034,12 @@
   var nodeName = (id, node) => (node === null || node === void 0 ? void 0 : node.placeholder) ? runName(node.refName, node.start, node.end) : String(id);
   var outranks = (node, held) => node.onWindow !== held.onWindow ? node.onWindow : node.rank === 0 && (held.rank !== 0 || node.refName < held.refName || node.refName === held.refName && node.start < held.start);
   var WalkGraph = class {
-    constructor(window) {
+    constructor(window, revisited = Number.NaN) {
       this.nodes = /* @__PURE__ */ new Map();
       this.sequences = /* @__PURE__ */ new Map();
       this.links = [];
       this.window = window;
+      this.revisited = revisited;
     }
     // A node with its position, unless the cut already holds it at one that
     // outranks it
@@ -2192,7 +2193,8 @@
           abridgedSteps
         },
         departures: departureTable(departures, nodeIndex, stepsOf),
-        gaps: gapTable(gaps, new Map(walks.map((f, p) => [f, p])), nodeIndex)
+        gaps: gapTable(gaps, new Map(walks.map((f, p) => [f, p])), nodeIndex),
+        revisited: this.revisited
       };
     }
     placeOffReference(kept, fragments, departures) {
@@ -5953,7 +5955,7 @@
         end: region.end,
         context,
         sequences: opts.sequences
-      });
+      }, header.revisited);
       const decodedBy = /* @__PURE__ */ new Map();
       const decodedFor = (unit, name) => {
         var _a2;
