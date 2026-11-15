@@ -91,7 +91,7 @@ the other kind of index. The JBrowse HPRC demo hosts the release 2.1 graph's
 chr6, built with `--sequences` so its nodes print their bases:
 
 ```r
-walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-chr6-sequences.GRCh38.walks.gz"
+walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-chr6-sequences-f8.GRCh38.walks.gz"
 str <- read_gfa(
   walks,
   region = "chr6:160,653,940-160,654,130",

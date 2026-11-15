@@ -4,7 +4,11 @@ test_that("the README and the read_gfa() example name the format 8 genome-wide H
   text <- unlist(lapply(files, readLines, warn = FALSE))
   urls <- unique(unlist(regmatches(text, gregexpr("https://[^\"' )`]+\\.walks(\\.bed)?\\.gz", text))))
   expect_identical(
-    grep("-chr6-sequences\\.", urls, value = TRUE, invert = TRUE),
+    grep("-chr6-sequences", urls, value = TRUE, invert = TRUE),
     "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f8.GRCh38.walks.gz"
+  )
+  expect_identical(
+    grep("-chr6-sequences", urls, value = TRUE),
+    "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-chr6-sequences-f8.GRCh38.walks.gz"
   )
 })

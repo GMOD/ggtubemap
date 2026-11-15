@@ -33,8 +33,8 @@ test_that("every hosted walk file the docs name cuts the README's tandem repeat"
 test_that("the chr6 file built with --sequences gives every node its bases, and the genome-wide file's nodes", {
   skip_unless_hosted()
   urls <- hosted_walk_files()
-  chr6 <- grep("-chr6-sequences\\.", urls, value = TRUE)
-  whole <- grep("-chr6-sequences\\.", urls, value = TRUE, invert = TRUE)
+  chr6 <- grep("-chr6-sequences", urls, value = TRUE)
+  whole <- grep("-chr6-sequences", urls, value = TRUE, invert = TRUE)
   expect_length(chr6, 1)
   expect_gt(length(whole), 0)
   region <- "chr6:160,653,940-160,654,130"
@@ -48,7 +48,7 @@ test_that("the chr6 file built with --sequences gives every node its bases, and 
 
 test_that("haplotypes that skip the amylase window are described, and drawn with the context given", {
   skip_unless_hosted()
-  url <- grep("-chr6-sequences\\.", hosted_walk_files(), value = TRUE, invert = TRUE)[1]
+  url <- grep("-chr6-sequences", hosted_walk_files(), value = TRUE, invert = TRUE)[1]
   region <- "chr1:103,640,000-103,660,000"
   haplotypes <- c("HG00097#1", "HG00128#1")
   expect_warning(
