@@ -33,7 +33,7 @@ Node or browser to install.
 <tr><td width="50%"><b><a href="#colour-by-anything">91 haplotypes through MICB</a></b><br><img src="man/figures/micb.png" alt="91 HPRC haplotypes through MICB, coloured by haplotype 1 or 2" width="100%"></td>
 <td width="50%"><b><a href="#reads">Reads under BRCA1</a></b><br><img src="man/figures/brca1.png" alt="Reads stacked under the BRCA1 reference, substitutions printed on them" width="100%"></td></tr>
 <tr><td width="50%"><b><a href="#facets">43 mitochondria, a panel per sample</a></b><br><img src="man/figures/hprc-chrM-facets.png" alt="43 mitochondrial haplotypes, with each sample's reads in a separate panel" width="100%"></td>
-<td width="50%"><b><a href="#with-ggbandage">With ggbandage's force layout</a></b><br><img src="man/figures/with-ggbandage.png" alt="The tandem repeat as a tube map over ggbandage's force-directed layout of the same cut, HG00133#2 lifted and each node named" width="100%"></td></tr>
+<td width="50%"><b><a href="#with-ggbandage">With ggbandage's force layout</a></b><br><img src="man/figures/with-ggbandage.png" alt="The tandem repeat as a tube map over ggbandage's force-directed layout of the same cut, HG00133#2 lifted" width="100%"></td></tr>
 </table>
 
 `tools/readme-figures.R` draws every figure.
@@ -131,7 +131,8 @@ hla <- read_gfa(
   region = "chr6:29,942,850-29,943,250",
   haplotypes = c("CHM13#0", paste0(rep(samples, each = 2), "#", 1:2))
 )
-autoplot(tubemap_layout(hla, node_width = "compressed"))
+hla_map <- tubemap_layout(hla, node_width = "compressed")
+autoplot(hla_map, xlim = tubemap_x(hla_map, c(29942850, 29943250)))
 ```
 
 ![GRCh38, CHM13 and twelve HPRC haplotypes through 400 bp of HLA-A](man/figures/hprc-hla.png)
@@ -161,7 +162,8 @@ phased <- tubemap_layout(
   node_width = "compressed"
 )
 phased$shapes$phase <- sub("^[^#]+#([^#]+)#.*", "\\1", phased$shapes$name)
-autoplot(phased, haplotypes = aes(fill = phase)) +
+autoplot(phased, haplotypes = aes(fill = phase),
+         xlim = tubemap_x(phased, c(160653940, 160654130))) +
   scale_fill_manual(values = c("0" = "black", "1" = "#d97706", "2" = "#0e7490"))
 ```
 
@@ -231,10 +233,11 @@ writeLines(
   cut
 )
 g <- ggbandage::bandage_layout(cut, walks = "HG00133#2#CM090065.1", width = 600)
-autoplot(tubemap_layout(str, node_width = "compressed")) / autoplot(g, labels = TRUE)
+tm <- tubemap_layout(str, node_width = "compressed")
+autoplot(tm, xlim = tubemap_x(tm, c(160653940, 160654130))) / autoplot(g)
 ```
 
-![The tandem repeat as a tube map over ggbandage's force-directed layout of the same cut, HG00133#2 lifted and each node named](man/figures/with-ggbandage.png)
+![The tandem repeat as a tube map over ggbandage's force-directed layout of the same cut, HG00133#2 lifted](man/figures/with-ggbandage.png)
 
 ### Custom plots
 

@@ -51,8 +51,9 @@ save("hprc-str.png", str_map, 9, xlim = tubemap_x(str_map, c(160653972, 16065404
 
 hla <- read_gfa(walks, region = "chr6:29,942,850-29,943,250",
                 haplotypes = c("CHM13#0", haplotypes[1:12]))
-save("hprc-hla.png", tubemap_layout(hla, node_width = "compressed"), 9,
-     legend = 0, extra = theme(legend.position = "none"))
+hla_map <- tubemap_layout(hla, node_width = "compressed")
+save("hprc-hla.png", hla_map, 9,
+     xlim = tubemap_x(hla_map, c(29942850, 29943250)), legend = 0, extra = theme(legend.position = "none"))
 
 phased <- tubemap_layout(
   read_gfa(walks, region = "chr6:160,653,940-160,654,130", haplotypes = haplotypes),
@@ -63,6 +64,7 @@ phased$shapes$phase <- ifelse(
   paste("haplotype", sub("^[^#]+#([^#]+)#.*", "\\1", phased$shapes$name))
 )
 save("hprc-str-phased.png", phased, 9, haplotypes = aes(fill = phase),
+     xlim = tubemap_x(phased, c(160653940, 160654130)),
      extra = scale_fill_manual(values = c(GRCh38 = "black",
                                           "haplotype 1" = "#d97706",
                                           "haplotype 2" = "#0e7490"),
@@ -77,6 +79,6 @@ if (requireNamespace("ggbandage", quietly = TRUE)) {
                                     context = 0), cut)
   g <- ggbandage::bandage_layout(cut, walks = "HG00133#2#CM090065.1", width = 600)
   ggsave("man/figures/with-ggbandage.png",
-         autoplot(tm) / ggplot2::autoplot(g, labels = TRUE) + plot_layout(heights = c(1, 2)),
+         autoplot(tm, xlim = tubemap_x(tm, c(160653940, 160654130))) / ggplot2::autoplot(g) + plot_layout(heights = c(1, 2)),
          width = 9, height = 8, dpi = 150, device = ragg::agg_png)
 }
