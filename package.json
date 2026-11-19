@@ -11,7 +11,7 @@
     "update-deps": "tools/update-deps.sh"
   },
   "devDependencies": {
-    "@jbrowse/graph-walks": "file:../../vendor/walks8-pack/jbrowse-graph-walks-7.0.0-b0d8378.tgz",
+    "@jbrowse/graph-walks": "^7.0.0",
     "@jbrowse/tubemap-core": "2.0.1",
     "esbuild": "^0.28.2"
   }

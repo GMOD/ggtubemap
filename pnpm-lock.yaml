@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@jbrowse/graph-walks':
-        specifier: file:../../vendor/walks8-pack/jbrowse-graph-walks-7.0.0-b0d8378.tgz
-        version: file:../../vendor/walks8-pack/jbrowse-graph-walks-7.0.0-b0d8378.tgz
+        specifier: ^7.0.0
+        version: 7.0.0
       '@jbrowse/tubemap-core':
         specifier: 2.0.1
         version: 2.0.1
@@ -179,9 +179,8 @@ packages:
   '@gmod/bgzf-filehandle@6.8.4':
     resolution: {integrity: sha512-eN3yOAfij5xTKARWFSAn61byFyRWjU5XQSvpm0+C7tptxHOGi/t0xMZt5V1/Lf4VxRT2By5yUu3RtBiG+oP0LA==}
 
-  '@jbrowse/graph-walks@file:../../vendor/walks8-pack/jbrowse-graph-walks-7.0.0-b0d8378.tgz':
-    resolution: {integrity: sha512-RvkcoubzeWZ8bLajwbRHlKaq9uUmBo7i9fC8cSq3Q/YusNAZ/um+6Vm5gvdVfP8unlEt8wwq/xa9x3W97jCNzg==, tarball: file:../../vendor/walks8-pack/jbrowse-graph-walks-7.0.0-b0d8378.tgz}
-    version: 7.0.0
+  '@jbrowse/graph-walks@7.0.0':
+    resolution: {integrity: sha512-RvkcoubzeWZ8bLajwbRHlKaq9uUmBo7i9fC8cSq3Q/YusNAZ/um+6Vm5gvdVfP8unlEt8wwq/xa9x3W97jCNzg==}
     engines: {node: '>=20'}
 
   '@jbrowse/tubemap-core@2.0.1':
@@ -283,7 +282,7 @@ snapshots:
       generic-filehandle2: 2.5.1
       pako-esm2: 2.0.2
 
-  '@jbrowse/graph-walks@file:../../vendor/walks8-pack/jbrowse-graph-walks-7.0.0-b0d8378.tgz':
+  '@jbrowse/graph-walks@7.0.0':
     dependencies:
       '@gmod/bgzf-filehandle': 6.8.4
       generic-filehandle2: 2.5.1
