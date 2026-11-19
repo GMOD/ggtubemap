@@ -161,7 +161,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-730e752.tgz/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-b0d8378.tgz/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp, overBytes) {
       super(message);
@@ -201,7 +201,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-730e752.tgz/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-b0d8378.tgz/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var ID_LIMIT = 2 ** 31;
@@ -1057,7 +1057,7 @@
     return nodes;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-730e752.tgz/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-b0d8378.tgz/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
   var ATTACH_BP = 65536;
   function squeezer(holes, refName) {
     const spans = holes.filter((h) => h.refName === refName).sort((a, b) => a.start - b.start);
@@ -1137,7 +1137,7 @@
     });
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-730e752.tgz/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-b0d8378.tgz/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
   var GAP_KINDS = ["steps", "read", "own", "unread"];
   function groupByName(items, refName) {
     const out = /* @__PURE__ */ new Map();
@@ -1434,7 +1434,7 @@
     return gaps;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-730e752.tgz/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-b0d8378.tgz/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var isPlaceholder = (id) => id < 0;
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -2680,21 +2680,36 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-730e752.tgz/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-b0d8378.tgz/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
+  var AmbiguousSequenceError = class extends Error {
+    constructor(assemblyName, refName, sequences) {
+      super(`${refName} on ${assemblyName} is ${sequences.length} sequences of the file, ${sequences.join(", ")}; name one of them, or its haplotype: ${sequences.map((name) => panSNHaplotype(name)).join(", ")}`);
+      this.name = "AmbiguousSequenceError";
+      this.sequences = sequences;
+    }
+  };
   function refNameLookup(names) {
     const lookup = /* @__PURE__ */ new Map();
+    const file = (key, name) => {
+      const held = lookup.get(key);
+      if (held === void 0) {
+        lookup.set(key, [name]);
+      } else if (!held.includes(name)) {
+        held.push(name);
+      }
+    };
     for (const name of names) {
-      lookup.set(name, name);
+      file(name, name);
       const sample = panSNSample(name);
       if (sample !== name) {
         const contig = panSNContig(name);
-        lookup.set(qualifiedKey(sample, contig), name);
+        file(qualifiedKey(sample, contig), name);
         const haplotype = panSNHaplotype(name);
         if (haplotype !== void 0) {
-          lookup.set(qualifiedKey(haplotype, contig), name);
+          file(qualifiedKey(haplotype, contig), name);
         }
       }
     }
@@ -2702,10 +2717,14 @@
   }
   function resolveRefName(lookup, assemblyName, refName) {
     var _a;
-    return (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
+    const held = (_a = lookup.get(qualifiedKey(assemblyName, refName))) !== null && _a !== void 0 ? _a : lookup.get(refName);
+    if (held !== void 0 && held.length > 1) {
+      throw new AmbiguousSequenceError(assemblyName, refName, held);
+    }
+    return held === null || held === void 0 ? void 0 : held[0];
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-730e752.tgz/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-b0d8378.tgz/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
   function checkRange(refName, start, end) {
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
       throw new Error(`${refName}:${start}-${end} is not a finite range to query the graph's index for`);
@@ -5498,7 +5517,7 @@
     }
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-730e752.tgz/node_modules/@jbrowse/graph-walks/esm/walkFile.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-b0d8378.tgz/node_modules/@jbrowse/graph-walks/esm/walkFile.js
   var WALK_FORMAT = 8;
   var WalkFormatError = class extends Error {
     constructor() {
@@ -5761,7 +5780,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-730e752.tgz/node_modules/@jbrowse/graph-walks/esm/walkCounts.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-b0d8378.tgz/node_modules/@jbrowse/graph-walks/esm/walkCounts.js
   var COUNT_REASONS = Object.freeze({
     unloaded: 1,
     unattached: 2,
@@ -6292,7 +6311,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-730e752.tgz/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@file+..+..+vendor+walks8-pack+jbrowse-graph-walks-7.0.0-b0d8378.tgz/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var WALK_CONTEXT = 1e3;
   var DETAIL_READS = 16;
