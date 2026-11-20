@@ -7426,7 +7426,7 @@
         keep: walksKept(haplotypes, anchor),
         expand: () => true,
         sequences: true,
-        links: false
+        links: "none"
       }
     );
     const tables = graph.tables(kept, fragments, []);
