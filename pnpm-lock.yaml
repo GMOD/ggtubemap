@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@jbrowse/graph-walks':
-        specifier: ^7.0.0
-        version: 7.0.0
+        specifier: ^8.0.1
+        version: 8.0.1
       '@jbrowse/tubemap-core':
         specifier: 2.0.1
         version: 2.0.1
@@ -176,11 +176,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@gmod/bgzf-filehandle@6.8.4':
-    resolution: {integrity: sha512-eN3yOAfij5xTKARWFSAn61byFyRWjU5XQSvpm0+C7tptxHOGi/t0xMZt5V1/Lf4VxRT2By5yUu3RtBiG+oP0LA==}
+  '@gmod/bgzf-filehandle@6.8.5':
+    resolution: {integrity: sha512-kVM/7/OSMkUba9PEokm7kZ3jZqXxZdtYNFjZe6S2a48Xpci7SL74dTBwyFAYCoLm5/ynd8Pr9S2Ycy7Fbvjs2A==}
 
-  '@jbrowse/graph-walks@7.0.0':
-    resolution: {integrity: sha512-RvkcoubzeWZ8bLajwbRHlKaq9uUmBo7i9fC8cSq3Q/YusNAZ/um+6Vm5gvdVfP8unlEt8wwq/xa9x3W97jCNzg==}
+  '@jbrowse/graph-walks@8.0.1':
+    resolution: {integrity: sha512-4AidVXyIsggJkckxlgcTJYEMsObd3p+H1+d7PpRU5wflb8NQA1JuqSHePCrypAcL/Kw7QO57kG+dBecIYgUy3g==}
     engines: {node: '>=20'}
 
   '@jbrowse/tubemap-core@2.0.1':
@@ -277,14 +277,14 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@gmod/bgzf-filehandle@6.8.4':
+  '@gmod/bgzf-filehandle@6.8.5':
     dependencies:
       generic-filehandle2: 2.5.1
       pako-esm2: 2.0.2
 
-  '@jbrowse/graph-walks@7.0.0':
+  '@jbrowse/graph-walks@8.0.1':
     dependencies:
-      '@gmod/bgzf-filehandle': 6.8.4
+      '@gmod/bgzf-filehandle': 6.8.5
       generic-filehandle2: 2.5.1
 
   '@jbrowse/tubemap-core@2.0.1': {}
