@@ -33,6 +33,20 @@ test_that("a reads fill takes the scale and the haplotypes keep their colours", 
   expect_gt(length(unique(data[[2]]$fill)), 1)
 })
 
+test_that("forward reads draw in reds and reverse reads in blues, shaded by read", {
+  tm <- tubemap_layout(tubemap_example("brca1"))
+  reads <- ggplot_build(autoplot(tm))$data[[2]]
+  rgb <- col2rgb(unclass(reads$fill))
+  track <- tm$shapes$track_id[tm$shapes$type == "read"]
+  expect_length(track, nrow(reads))
+  reverse <- tm$tracks$is_reverse[match(track, tm$tracks$id)] %in% TRUE
+  expect_true(any(reverse) && !all(reverse))
+  expect_true(all(rgb["red", !reverse] > rgb["blue", !reverse]))
+  expect_true(all(rgb["blue", reverse] > rgb["red", reverse]))
+  expect_gt(length(unique(reads$fill[!reverse])), 1)
+  expect_gt(length(unique(reads$fill[reverse])), 1)
+})
+
 test_that("opaque tubes get a seam stroke in their fill, translucent ones none", {
   tm <- tubemap_layout(tubemap_example("brca1"))
   reads <- tm$shapes$track_type == "read"

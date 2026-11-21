@@ -14,6 +14,7 @@ import {
   nodeOutlinePath,
   nodePixelCoordinatesInX,
   placeFacets,
+  readColor,
   readMismatches,
 } from '@jbrowse/tubemap-core'
 
@@ -159,6 +160,7 @@ globalThis.tubemapLayout = function (requestJson) {
     'read_group',
     'band_count',
     'band_label',
+    'read_color',
   ])
   const nodeTable = columns([
     'panel',
@@ -220,6 +222,7 @@ globalThis.tubemapLayout = function (requestJson) {
         read_group: t.read_group,
         band_count: band?.count,
         band_label: band?.label,
+        read_color: t.type === 'read' ? readColor(t) : undefined,
       })
     }
     layout.nodes.forEach(n => {

@@ -62,8 +62,9 @@ with the plot.
 \itemize{
 \item \code{geom_tubemap_haplotypes()}: The haplotype tubes, filled by \code{haplotype}.
 
-\item \code{geom_tubemap_reads()}: The reads, coloured by strand with opacity by
-mapping quality unless \code{mapping} says otherwise.
+\item \code{geom_tubemap_reads()}: The reads, forward in reds and reverse in blues
+as JBrowse colours strands, shaded by read so neighbours differ, with
+opacity by mapping quality unless \code{mapping} says otherwise.
 
 \item \code{geom_tubemap_nodes()}: The node outlines, translucent white with a
 black edge 2 layout pixels wide.

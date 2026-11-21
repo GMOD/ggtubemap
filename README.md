@@ -177,8 +177,9 @@ scale, and the haplotypes keep their default colours.
 ### Reads
 
 Reads come with the graph in sequenceTubeMap's extracted form, as in the `brca1`
-and `hprc-chrM` examples. `autoplot()` colours them by strand, fades them by
-mapping quality, and marks their substitutions, deletions and insertions.
+and `hprc-chrM` examples. `autoplot()` colours forward reads red and reverse
+reads blue, as JBrowse's alignments track does, fades them by mapping quality,
+and marks their substitutions, deletions and insertions.
 `xlim` and `ylim` zoom in by layout pixel:
 
 ```r

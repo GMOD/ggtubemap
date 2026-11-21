@@ -122,17 +122,17 @@ geom_tubemap_haplotypes <- function(tubemap, mapping = NULL, seam = TRUE, ...) {
   tube_layer(data, mapping, seam, list(...))
 }
 
-#' @describeIn tubemap_layers The reads, coloured by strand with opacity by
-#'   mapping quality unless `mapping` says otherwise.
+#' @describeIn tubemap_layers The reads, forward in reds and reverse in blues
+#'   as JBrowse colours strands, shaded by read so neighbours differ, with
+#'   opacity by mapping quality unless `mapping` says otherwise.
 #' @export
 geom_tubemap_reads <- function(tubemap, mapping = NULL, seam = TRUE, ...) {
   data <- tubemap$shapes[tubemap$shapes$type == "read", , drop = FALSE]
-  data$.strand_fill <- ifelse(is.na(data$strand) | data$strand == "+",
-                              "#c53030", "#2b6cb0")
+  data$.read_fill <- tubemap$tracks$read_color[match(data$track_id, tubemap$tracks$id)]
   data$.mapq_alpha <- ifelse(is.na(data$mapping_quality), 1,
                              0.25 + 0.75 * pmin(data$mapping_quality, 60) / 60)
   mapping <- merge_aes(
-    aes(x = x, y = y, group = group, fill = I(.strand_fill),
+    aes(x = x, y = y, group = group, fill = I(.read_fill),
         alpha = I(.mapq_alpha)),
     mapping
   )

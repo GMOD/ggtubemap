@@ -9,11 +9,11 @@ importers:
   .:
     devDependencies:
       '@jbrowse/graph-walks':
-        specifier: ^8.0.2
-        version: 8.0.2
+        specifier: ^9.0.0
+        version: 9.0.0
       '@jbrowse/tubemap-core':
-        specifier: 2.0.1
-        version: 2.0.1
+        specifier: 2.1.0
+        version: 2.1.0
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -179,12 +179,12 @@ packages:
   '@gmod/bgzf-filehandle@6.8.5':
     resolution: {integrity: sha512-kVM/7/OSMkUba9PEokm7kZ3jZqXxZdtYNFjZe6S2a48Xpci7SL74dTBwyFAYCoLm5/ynd8Pr9S2Ycy7Fbvjs2A==}
 
-  '@jbrowse/graph-walks@8.0.2':
-    resolution: {integrity: sha512-r/rr7Rb9a6eTHk8JNowjZZIVcdekWjXbT+R+T/ia54kd7YRl0TMhW6TKyRc83L9zChQW29wpZMeEDG5zFbbOpQ==}
+  '@jbrowse/graph-walks@9.0.0':
+    resolution: {integrity: sha512-1n5YkBjcbNQO2rPXnLKOWNqaZG+vHFyQGKgED2EdQahmnZ/c4tEoL9Y2ftsNr8beYyjtS4Q2GIORpjXZfBHGhg==}
     engines: {node: '>=20'}
 
-  '@jbrowse/tubemap-core@2.0.1':
-    resolution: {integrity: sha512-tpufiNVlRWzGiOdbWERDg6vPdmKqZMxbVWAHy8vW0Lk6CLlf9zc2Jy9kcVIR8ybkzsktpfpb0pETdDDK6FWdpA==}
+  '@jbrowse/tubemap-core@2.1.0':
+    resolution: {integrity: sha512-UqNSIkLOfisPZYf/xpzBWxHPB8GrGShSAydXvex39ybJZiItCUWQH3lHhEyedRuQ0fmttfxeuOH6lWh4L8yyxw==}
 
   esbuild@0.28.2:
     resolution: {integrity: sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==}
@@ -282,12 +282,12 @@ snapshots:
       generic-filehandle2: 2.5.1
       pako-esm2: 2.0.2
 
-  '@jbrowse/graph-walks@8.0.2':
+  '@jbrowse/graph-walks@9.0.0':
     dependencies:
       '@gmod/bgzf-filehandle': 6.8.5
       generic-filehandle2: 2.5.1
 
-  '@jbrowse/tubemap-core@2.0.1': {}
+  '@jbrowse/tubemap-core@2.1.0': {}
 
   esbuild@0.28.2:
     optionalDependencies:
