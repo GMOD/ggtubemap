@@ -161,7 +161,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.1/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.2/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp, overBytes) {
       super(message);
@@ -201,7 +201,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.1/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.2/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var ID_LIMIT = 2 ** 31;
@@ -261,6 +261,27 @@
       this.before = [0];
       this.starts = [];
       this.occurrences = /* @__PURE__ */ new Map();
+    }
+    typed() {
+      const n = this.handles.length;
+      const ids = new Int32Array(n);
+      const rev = new Uint8Array(n);
+      const bp = new Int32Array(n);
+      for (let i = 0; i < n; i++) {
+        const h = this.handles[i];
+        ids[i] = idOf(h);
+        rev[i] = h & 1;
+        bp[i] = this.before[i + 1] - this.before[i];
+      }
+      return { ids, rev, bp, starts: Float64Array.from(this.starts) };
+    }
+    // R's node ids, strands, step lengths and starts by position
+    columns() {
+      var _a;
+      if (((_a = this.held) === null || _a === void 0 ? void 0 : _a.ids.length) !== this.handles.length) {
+        this.held = this.typed();
+      }
+      return this.held;
     }
     add(handles, lengths, start) {
       for (let k = 0; k < handles.length; k++) {
@@ -519,16 +540,27 @@
       rev[at++] = h & 1;
     };
     const [start, startCopy] = parseCopy(cols[9]);
+    const along = path.columns();
     traverse(path, routes, start, startCopy, choices, n, {
       step: push,
       stretch(from, to, forward2) {
+        if (at + Math.abs(to - from) > n) {
+          throw new WalkRowError("a walk row decodes to more steps than it states");
+        }
         if (forward2) {
           for (let j = from + 1; j <= to; j++) {
-            push(path.handles[j], j);
+            ids[at] = along.ids[j];
+            rev[at] = along.rev[j];
+            refStarts[at] = along.starts[j];
+            bp[at++] = along.bp[j];
           }
         } else {
           for (let j = from - 1; j >= to; j--) {
-            push(otherStrand(path.handles[j]), j);
+            ids[at] = along.ids[j];
+            rev[at] = along.rev[j] ^ 1;
+            refStarts[at] = along.starts[j];
+            against[at] = 1;
+            bp[at++] = along.bp[j];
           }
         }
       },
@@ -1160,7 +1192,7 @@
     return nodes;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.1/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.2/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
   var ATTACH_BP = 65536;
   function squeezer(holes, refName) {
     const spans = holes.filter((h) => h.refName === refName).sort((a, b) => a.start - b.start);
@@ -1174,9 +1206,6 @@
       }
       return out;
     };
-  }
-  function adjacentSteps(d, squeeze) {
-    return d.ownBp === 0 && d.leaveReversed === d.rejoinReversed && squeeze(d.leavePos) === squeeze(d.rejoinPos);
   }
   function departureKind(d, squeeze = (bp) => bp) {
     if (d.leaveReversed !== d.rejoinReversed) {
@@ -1240,7 +1269,7 @@
     });
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.1/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.2/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
   var GAP_KINDS = ["steps", "read", "own", "unread"];
   function groupByName(items, refName) {
     const out = /* @__PURE__ */ new Map();
@@ -1537,7 +1566,7 @@
     return gaps;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.1/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.2/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var isPlaceholder = (id) => id < 0;
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -1667,6 +1696,115 @@
       ...own.length > 0 ? { own } : {}
     };
   }
+  var MEMO_SLOTS = 1 << 16;
+  var MEMO_MASK = MEMO_SLOTS - 1;
+  var memoKeys = () => new Float64Array(MEMO_SLOTS).fill(Number.NaN);
+  function linkHeld(memo, a, b) {
+    const slot = a & MEMO_MASK;
+    const same = memo.from[slot] === a;
+    const held = same && (memo.to[2 * slot] === b || memo.to[2 * slot + 1] === b);
+    if (!held) {
+      memo.to[2 * slot + 1] = same ? memo.to[2 * slot] : Number.NaN;
+      memo.to[2 * slot] = b;
+      memo.from[slot] = a;
+    }
+    return held;
+  }
+  function linkSteps(ids, rev, from, to, memo, add) {
+    const first = Math.max(from, 0);
+    const end = Math.min(to, ids.length - 1);
+    let before = first <= end ? ids[first] : SKIPPED;
+    let a = first <= end ? before * 2 + rev[first] : 0;
+    for (let k = first + 1; k <= end; k++) {
+      const id = ids[k];
+      const b = id * 2 + rev[k];
+      if (before !== SKIPPED && id !== SKIPPED && !linkHeld(memo, a, b)) {
+        add(a, b);
+      }
+      before = id;
+      a = b;
+    }
+  }
+  function bpBefore(ids, stated, length) {
+    const out = new Float64Array(ids.length + 1);
+    for (let i = 0; i < ids.length; i++) {
+      const bp = stated === void 0 ? -1 : stated[i];
+      out[i + 1] = out[i] + (bp < 0 ? length(ids[i]) : bp);
+    }
+    return out;
+  }
+  function stepsOver(refStarts, bp, start, end) {
+    let first = -1;
+    let last = -1;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i < refStarts.length; i++) {
+      const at = refStarts[i];
+      const to = at + bp[i + 1] - bp[i];
+      if (at < end && to > start) {
+        first = first < 0 ? i : first;
+        last = i;
+        lo = at < lo ? at : lo;
+        hi = to > hi ? to : hi;
+      }
+    }
+    return { first, last, lo, hi };
+  }
+  function keepSteps(ids, first, last, kept, lastKept) {
+    for (let i = first; i <= last; i++) {
+      const id = ids[i];
+      const slot = id & MEMO_MASK;
+      if (lastKept[slot] !== id) {
+        lastKept[slot] = id;
+        kept.add(id);
+      }
+    }
+  }
+  function indexSteps(ids, into, at, lastId, lastIndex, indexOf) {
+    for (let j = 0; j < ids.length; j++) {
+      const id = ids[j];
+      const slot = id & MEMO_MASK;
+      if (lastId[slot] !== id) {
+        lastId[slot] = id;
+        lastIndex[slot] = indexOf(id);
+      }
+      into[at + j] = lastIndex[slot];
+    }
+  }
+  function firstOnR(refStarts, from, to) {
+    let i = from;
+    while (i < to && Number.isNaN(refStarts[i])) {
+      i++;
+    }
+    return i < to ? i : -1;
+  }
+  function lastOnR(refStarts, from, to) {
+    let i = to - 1;
+    while (i >= from && Number.isNaN(refStarts[i])) {
+      i--;
+    }
+    return i >= from ? i : -1;
+  }
+  function departingPairs(refStarts, against, bp, from, to, squeeze, out) {
+    let last = -1;
+    for (let i = from; i < to; i++) {
+      const start = refStarts[i];
+      if (!Number.isNaN(start)) {
+        if (last >= 0) {
+          const leaveReversed = against[last] === 1;
+          const rejoinReversed = against[i] === 1;
+          const leavePos = leaveReversed ? refStarts[last] : refStarts[last] + bp[last + 1] - bp[last];
+          const rejoinPos = rejoinReversed ? start + bp[i + 1] - bp[i] : start;
+          const ownBp = bp[i] - bp[last + 1];
+          const adjacent = ownBp === 0 && leaveReversed === rejoinReversed && (leavePos === rejoinPos || squeeze(leavePos) === squeeze(rejoinPos));
+          if (!adjacent) {
+            out.push(last, i);
+          }
+        }
+        last = i;
+      }
+    }
+  }
   var edgeKey = (name, pos, reversed, hap) => `${name}	${pos}	${reversed ? "-" : "+"}	${hap}`;
   function walkCut(readRuns, nodes, refName, records, { contained = false, context = 0, attachBp = ATTACH_BP, squeeze = (bp) => bp, drawn, attach = [], placeholder, links: linked = true } = {}) {
     var _a, _b, _c, _d, _e;
@@ -1691,26 +1829,16 @@
     const before = (run) => {
       let out = prefixes.get(run);
       if (!out) {
-        out = new Float64Array(run.ids.length + 1);
-        const stated = run.bp;
-        for (let i = 0; i < run.ids.length; i++) {
-          const bp = stated === void 0 ? -1 : stated[i];
-          out[i + 1] = out[i] + (bp < 0 ? length(run.ids[i]) : bp);
-        }
+        out = bpBefore(run.ids, run.bp, length);
         prefixes.set(run, out);
       }
       return out;
     };
     if (drawn) {
       for (const run of readRuns) {
-        const bp = before(run);
-        for (let i = 0; i < run.ids.length; i++) {
-          const start = run.refStarts[i];
-          if (start < drawn.end && start + bp[i + 1] - bp[i] > drawn.start) {
-            windowStart = Math.min(windowStart, start);
-            windowEnd = Math.max(windowEnd, start + bp[i + 1] - bp[i]);
-          }
-        }
+        const over = stepsOver(run.refStarts, before(run), drawn.start, drawn.end);
+        windowStart = Math.min(windowStart, over.lo);
+        windowEnd = Math.max(windowEnd, over.hi);
       }
     }
     const attaches = (d) => attachesOwnSteps(d, drawn !== null && drawn !== void 0 ? drawn : { start: windowStart, end: windowEnd }, attachBp);
@@ -1760,23 +1888,25 @@
     };
     const links = [];
     const linkedTo = /* @__PURE__ */ new Map();
+    const linkMemo = {
+      from: memoKeys(),
+      to: new Float64Array(2 * MEMO_SLOTS).fill(Number.NaN)
+    };
     const link = (a, b) => {
-      var _a2;
       if (linked) {
-        const held = (_a2 = linkedTo.get(a)) !== null && _a2 !== void 0 ? _a2 : /* @__PURE__ */ new Set();
-        linkedTo.set(a, held);
-        if (!held.has(b)) {
+        const held = linkedTo.get(a);
+        if (held === void 0) {
+          linkedTo.set(a, /* @__PURE__ */ new Set([b]));
+          links.push(a, b);
+        } else if (!held.has(b)) {
           held.add(b);
           links.push(a, b);
         }
       }
     };
     const walk = (run, from, to) => {
-      const { ids, rev } = run;
-      for (let k = Math.max(from, 0) + 1; k <= to && k < ids.length; k++) {
-        if (ids[k - 1] !== SKIPPED && ids[k] !== SKIPPED) {
-          link(ids[k - 1] * 2 + rev[k - 1], ids[k] * 2 + rev[k]);
-        }
+      if (linked) {
+        linkSteps(run.ids, run.rev, from, to, linkMemo, link);
       }
     };
     const splitRun = (run, splits, mint) => {
@@ -1845,18 +1975,7 @@
       };
     };
     const stretchSpan = (run) => {
-      const bp = before(run);
-      let first = -1;
-      let last = -1;
-      for (let i = 0; i < run.ids.length; i++) {
-        const start = run.refStarts[i];
-        if (start < windowEnd && start + bp[i + 1] - bp[i] > windowStart) {
-          if (first < 0) {
-            first = i;
-          }
-          last = i;
-        }
-      }
+      const { first, last } = stepsOver(run.refStarts, before(run), windowStart, windowEnd);
       if (first >= 0) {
         spans.push({ run, first, last });
       }
@@ -1879,10 +1998,9 @@
         kept.add(id);
       }
     }
+    const lastKept = memoKeys();
     for (const span of spans) {
-      for (let i = span.first; i <= span.last; i++) {
-        kept.add(span.run.ids[i]);
-      }
+      keepSteps(span.run.ids, span.first, span.last, kept, lastKept);
     }
     const runEnd2 = (run) => run.hapOffset + before(run)[run.ids.length];
     const spansOf = /* @__PURE__ */ new Map();
@@ -1941,6 +2059,7 @@
       var _a2;
       return ((_a2 = run.unloaded) !== null && _a2 !== void 0 ? _a2 : []).filter((u) => u.from < to && u.to > from).map((u) => u.piece);
     };
+    const pairs = [];
     for (const run of runs) {
       if (run.name === refName) {
         continue;
@@ -1949,58 +2068,49 @@
       const bp = before(run);
       const bounds = pieceBounds(run);
       for (let p = 0; p + 1 < bounds.length; p++) {
-        let last = -1;
-        for (let i = bounds[p]; i < bounds[p + 1]; i++) {
-          const start = refStarts[i];
-          if (Number.isNaN(start)) {
-            continue;
-          }
-          if (last >= 0) {
-            const ownBp = bp[i] - bp[last + 1];
-            const leaveReversed = against[last] === 1;
-            const rejoinReversed = against[i] === 1;
-            const leavePos = leaveReversed ? refStarts[last] : refStarts[last] + bp[last + 1] - bp[last];
-            const rejoinPos = rejoinReversed ? start + bp[i + 1] - bp[i] : start;
-            const ends = {
-              ownBp,
-              leavePos,
+        pairs.length = 0;
+        departingPairs(refStarts, against, bp, bounds[p], bounds[p + 1], squeeze, pairs);
+        for (let q = 0; q < pairs.length; q += 2) {
+          const last = pairs[q];
+          const i = pairs[q + 1];
+          const leaveReversed = against[last] === 1;
+          const rejoinReversed = against[i] === 1;
+          const ends = {
+            ownBp: bp[i] - bp[last + 1],
+            leavePos: leaveReversed ? refStarts[last] : refStarts[last] + bp[last + 1] - bp[last],
+            leaveReversed,
+            rejoinPos: rejoinReversed ? refStarts[i] + bp[i + 1] - bp[i] : refStarts[i],
+            rejoinReversed
+          };
+          const [lo, hi] = departureStretch(ends);
+          if (lo < windowEnd && hi > windowStart) {
+            const d = {
+              name: run.name,
+              hapStart: run.hapOffset + bp[last + 1],
+              ownBp: ends.ownBp,
+              missingBp: 0,
+              leavePos: ends.leavePos,
               leaveReversed,
-              rejoinPos,
-              rejoinReversed
+              leavePasses: passesOf(ids[last]),
+              rejoinPos: ends.rejoinPos,
+              rejoinReversed,
+              rejoinPasses: passesOf(ids[i]),
+              fromSteps: true
             };
-            if (!adjacentSteps(ends, squeeze)) {
-              const [lo, hi] = departureStretch(ends);
-              if (lo < windowEnd && hi > windowStart) {
-                const d = {
-                  name: run.name,
-                  hapStart: run.hapOffset + bp[last + 1],
-                  ownBp,
-                  missingBp: 0,
-                  leavePos,
-                  leaveReversed,
-                  leavePasses: passesOf(ids[last]),
-                  rejoinPos,
-                  rejoinReversed,
-                  rejoinPasses: passesOf(ids[i]),
-                  fromSteps: true
-                };
-                if (i > last + 1 && attaches(ends)) {
-                  d.steps = {
-                    ids: ids.subarray(last + 1, i),
-                    rev: rev.subarray(last + 1, i)
-                  };
-                  const held = unloadedIn(run, last + 1, i);
-                  if (held.length > 0) {
-                    d.abridged = held;
-                  }
-                  markAttached(run, last + 1, i);
-                  walk(run, returned(run, last) ? last : last + 1, returned(run, i) ? i : i - 1);
-                }
-                departures.push(d);
+            if (i > last + 1 && attaches(ends)) {
+              d.steps = {
+                ids: ids.subarray(last + 1, i),
+                rev: rev.subarray(last + 1, i)
+              };
+              const held = unloadedIn(run, last + 1, i);
+              if (held.length > 0) {
+                d.abridged = held;
               }
+              markAttached(run, last + 1, i);
+              walk(run, returned(run, last) ? last : last + 1, returned(run, i) ? i : i - 1);
             }
+            departures.push(d);
           }
-          last = i;
         }
       }
     }
@@ -2010,16 +2120,8 @@
       const bp = before(run);
       const bounds = pieceBounds(run);
       for (let p = 0; p + 1 < bounds.length; p++) {
-        let first = -1;
-        let last = -1;
-        for (let i = bounds[p]; i < bounds[p + 1]; i++) {
-          if (onR(run, i)) {
-            if (first < 0) {
-              first = i;
-            }
-            last = i;
-          }
-        }
+        const first = firstOnR(run.refStarts, bounds[p], bounds[p + 1]);
+        const last = lastOnR(run.refStarts, bounds[p], bounds[p + 1]);
         if (first < 0) {
           continue;
         }
@@ -2236,7 +2338,9 @@
         ranks[i] = rank;
         passes[i] = n;
       });
-      const nodeIndex = (id) => {
+      const lastId = memoKeys();
+      const lastIndex = new Int32Array(MEMO_SLOTS);
+      const indexOf = (id) => {
         let i = index.get(id);
         if (i === void 0) {
           i = names.length;
@@ -2244,6 +2348,14 @@
           names.push(nodeName(id, this.nodes.get(id)));
         }
         return i;
+      };
+      const nodeIndex = (id) => {
+        const slot = id & MEMO_MASK;
+        if (lastId[slot] !== id) {
+          lastId[slot] = id;
+          lastIndex[slot] = indexOf(id);
+        }
+        return lastIndex[slot];
       };
       const byLine = /* @__PURE__ */ new Map();
       for (let i = 0; i < this.links.length; i += 2) {
@@ -2289,9 +2401,7 @@
       const refStarts = new Float64Array(steps.length).fill(Number.NaN);
       walks.forEach(({ ids, rev, refStarts: placed }, p) => {
         const at = offsets[p];
-        for (let j = 0; j < ids.length; j++) {
-          steps[at + j] = nodeIndex(ids[j]);
-        }
+        indexSteps(ids, steps, at, lastId, lastIndex, indexOf);
         reversed.set(rev, at);
         refStarts.set(statedPlaces(placed, ids.length), at);
       });
@@ -2332,21 +2442,33 @@
         return node ? node.end - node.start : 0;
       };
       const placed = /* @__PURE__ */ new Map();
+      const passedId = memoKeys();
+      const passedLength = new Float64Array(MEMO_SLOTS);
       const visit = (name, ids, start) => {
         let at = start;
         for (const id of ids) {
-          const node = this.nodes.get(id);
-          const length = lengthOf(id);
-          const held = placed.get(id);
-          if (node && node.rank !== 0 && !node.placeholder && kept.has(id) && (!held || name < held.refName || name === held.refName && at < held.start)) {
-            placed.set(id, {
-              ...node,
-              refName: name,
-              start: at,
-              end: at + length
-            });
+          const slot = id & MEMO_MASK;
+          if (passedId[slot] === id) {
+            at += passedLength[slot];
+          } else {
+            const node = this.nodes.get(id);
+            const length = node ? node.end - node.start : 0;
+            if (node && node.rank !== 0 && !node.placeholder && kept.has(id)) {
+              const held = placed.get(id);
+              if (!held || name < held.refName || name === held.refName && at < held.start) {
+                placed.set(id, {
+                  ...node,
+                  refName: name,
+                  start: at,
+                  end: at + length
+                });
+              }
+            } else {
+              passedId[slot] = id;
+              passedLength[slot] = length;
+            }
+            at += length;
           }
-          at += length;
         }
       };
       for (const f of fragments) {
@@ -2416,11 +2538,12 @@
     };
   }
   function departureTable(departures, nodeIndex, stepsOf) {
+    var _a;
     const n = departures.length;
     const offsets = new Int32Array(n + 1);
     departures.forEach((d, k) => {
-      var _a, _b;
-      offsets[k + 1] = offsets[k] + ((_b = (_a = d.steps) === null || _a === void 0 ? void 0 : _a.ids.length) !== null && _b !== void 0 ? _b : 0);
+      var _a2, _b;
+      offsets[k + 1] = offsets[k] + ((_b = (_a2 = d.steps) === null || _a2 === void 0 ? void 0 : _a2.ids.length) !== null && _b !== void 0 ? _b : 0);
     });
     const steps = new Int32Array(offsets[n]);
     const reversed = new Uint8Array(steps.length);
@@ -2433,26 +2556,52 @@
         reversed.set(d.steps.rev, at);
       }
     });
+    const names = new Array(n);
+    const hapStarts = new Float64Array(n);
+    const ownBp = new Float64Array(n);
+    const missingBp = new Float64Array(n);
+    const leavePos = new Float64Array(n);
+    const leaveReversed = new Uint8Array(n);
+    const leavePasses = new Int32Array(n);
+    const rejoinPos = new Float64Array(n);
+    const rejoinReversed = new Uint8Array(n);
+    const rejoinPasses = new Int32Array(n);
+    const fromSteps = new Uint8Array(n);
+    const breakAt = new Int32Array(n);
+    const abridgedSteps = new Float64Array(n);
+    for (let k = 0; k < n; k++) {
+      const d = departures[k];
+      names[k] = d.name;
+      hapStarts[k] = d.hapStart;
+      ownBp[k] = d.ownBp;
+      missingBp[k] = d.missingBp;
+      leavePos[k] = d.leavePos;
+      leaveReversed[k] = d.leaveReversed ? 1 : 0;
+      leavePasses[k] = d.leavePasses;
+      rejoinPos[k] = d.rejoinPos;
+      rejoinReversed[k] = d.rejoinReversed ? 1 : 0;
+      rejoinPasses[k] = d.rejoinPasses;
+      fromSteps[k] = d.fromSteps ? 1 : 0;
+      breakAt[k] = (_a = d.breakAt) !== null && _a !== void 0 ? _a : -1;
+      abridgedSteps[k] = stepsOf(d.abridged);
+    }
     return {
-      names: departures.map((d) => d.name),
-      hapStarts: Float64Array.from(departures, (d) => d.hapStart),
-      ownBp: Float64Array.from(departures, (d) => d.ownBp),
-      missingBp: Float64Array.from(departures, (d) => d.missingBp),
-      leavePos: Float64Array.from(departures, (d) => d.leavePos),
-      leaveReversed: Uint8Array.from(departures, (d) => d.leaveReversed ? 1 : 0),
-      leavePasses: Int32Array.from(departures, (d) => d.leavePasses),
-      rejoinPos: Float64Array.from(departures, (d) => d.rejoinPos),
-      rejoinReversed: Uint8Array.from(departures, (d) => d.rejoinReversed ? 1 : 0),
-      rejoinPasses: Int32Array.from(departures, (d) => d.rejoinPasses),
-      fromSteps: Uint8Array.from(departures, (d) => d.fromSteps ? 1 : 0),
-      breakAt: Int32Array.from(departures, (d) => {
-        var _a;
-        return (_a = d.breakAt) !== null && _a !== void 0 ? _a : -1;
-      }),
+      names,
+      hapStarts,
+      ownBp,
+      missingBp,
+      leavePos,
+      leaveReversed,
+      leavePasses,
+      rejoinPos,
+      rejoinReversed,
+      rejoinPasses,
+      fromSteps,
+      breakAt,
       offsets,
       steps,
       reversed,
-      abridgedSteps: Float64Array.from(departures, (d) => stepsOf(d.abridged))
+      abridgedSteps
     };
   }
   var BUDGET_NAMES = {
@@ -2783,7 +2932,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.1/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.2/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -2827,7 +2976,7 @@
     return held === null || held === void 0 ? void 0 : held[0];
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.1/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.2/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
   function checkRange(refName, start, end) {
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
       throw new Error(`${refName}:${start}-${end} is not a finite range to query the graph's index for`);
@@ -5620,7 +5769,7 @@
     }
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.1/node_modules/@jbrowse/graph-walks/esm/walkFile.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.2/node_modules/@jbrowse/graph-walks/esm/walkFile.js
   var WALK_FORMAT = 8;
   var WalkFormatError = class extends Error {
     constructor() {
@@ -5648,6 +5797,15 @@
   }
   function unitName(unit) {
     return `The unit at byte ${unit.offset} of the walk file, ${unit.refName}'s ${unit.kind} ${unit.name} over [${unit.start}, ${unit.end}) as its table lists it,`;
+  }
+  function endOfTableBefore({ header, tables }, table) {
+    let start = header.offset + header.length;
+    for (const { offset, length } of tables.values()) {
+      if (offset < table.offset) {
+        start = Math.max(start, offset + length);
+      }
+    }
+    return start;
   }
   function isTableHead(head, refName) {
     const [tag, seq, start, , kind, name, ...more] = head.split("	");
@@ -5680,7 +5838,7 @@
     return fixed !== void 0 && row.split("	", fixed).length < fixed ? fixed : void 0;
   }
   function checkUnit(unit, head, rows) {
-    var _a, _b;
+    var _a, _b, _c;
     const stated = [
       "#unit",
       unit.refName,
@@ -5690,18 +5848,36 @@
       unit.name
     ].join("	");
     const kinds = ROW_KINDS.get(unit.kind);
-    const stray = rows.find((row) => {
-      const [seq, , , kind = ""] = row.split("	", 4);
-      return kinds !== void 0 && (seq !== unit.refName || !kinds.includes(kind));
-    });
-    const extra = kinds === void 0 ? void 0 : rows.find((row) => untagged(row) !== void 0);
-    const short = kinds === void 0 ? void 0 : rows.find((row) => lacking(row) !== void 0);
+    let stray;
+    let extra;
+    let short;
+    if (kinds !== void 0) {
+      for (const row of rows) {
+        const cols = row.split("	");
+        const kind = (_a = cols[3]) !== null && _a !== void 0 ? _a : "";
+        const fixed = FIXED_COLUMNS.get(kind);
+        if (stray === void 0 && (cols[0] !== unit.refName || !kinds.includes(kind))) {
+          stray = row;
+        }
+        if (fixed !== void 0 && cols.length !== fixed) {
+          if (cols.length < fixed) {
+            short !== null && short !== void 0 ? short : short = row;
+          } else if (extra === void 0) {
+            for (let k = fixed; k < cols.length; k++) {
+              if (!TAG.test(cols[k])) {
+                extra = row;
+              }
+            }
+          }
+        }
+      }
+    }
     if (head !== stated) {
-      throw new WalkFormatError(`${unitName(unit)} starts ${JSON.stringify((_a = head === null || head === void 0 ? void 0 : head.slice(0, 80)) !== null && _a !== void 0 ? _a : "")}`);
+      throw new WalkFormatError(`${unitName(unit)} starts ${JSON.stringify((_b = head === null || head === void 0 ? void 0 : head.slice(0, 80)) !== null && _b !== void 0 ? _b : "")}`);
     } else if (stray !== void 0) {
       throw new WalkFormatError(`${unitName(unit)} holds a row that is not one of ${unit.refName}'s ${kinds === null || kinds === void 0 ? void 0 : kinds.join(", ")} rows: ${JSON.stringify(stray.slice(0, 80))}`);
     } else if (extra !== void 0) {
-      throw new WalkFormatError(`${unitName(unit)} holds a row with a column after its fixed ones that is no tag, ${JSON.stringify((_b = untagged(extra)) === null || _b === void 0 ? void 0 : _b.slice(0, 40))}: ${JSON.stringify(extra.slice(0, 80))}`);
+      throw new WalkFormatError(`${unitName(unit)} holds a row with a column after its fixed ones that is no tag, ${JSON.stringify((_c = untagged(extra)) === null || _c === void 0 ? void 0 : _c.slice(0, 40))}: ${JSON.stringify(extra.slice(0, 80))}`);
     } else if (short !== void 0) {
       throw new WalkRowError(`${unitName(unit)} holds a row of fewer columns than the ${lacking(short)} its kind holds: ${JSON.stringify(short.slice(0, 80))}`);
     }
@@ -5808,10 +5984,11 @@
       let read = this.tableReads.get(refName);
       if (!read) {
         read = once(async () => {
-          const range = (await this.readDirectory()).tables.get(refName);
+          const directory = await this.readDirectory();
+          const range = directory.tables.get(refName);
           const [checked, table] = await Promise.allSettled([
             this.header(),
-            range ? this.table(refName, range) : []
+            range ? this.table(refName, range, endOfTableBefore(directory, range)) : []
           ]);
           if (checked.status === "rejected") {
             throw checked.reason;
@@ -5824,12 +6001,12 @@
       }
       return read();
     }
-    async table(refName, { offset, length }) {
+    async table(refName, { offset, length }, unitsStart) {
       const [head = "", ...entries] = await unitLines(await this.data.read(length, offset), `${refName}'s table`);
       if (!isTableHead(head, refName)) {
         throw new WalkFormatError(`${refName}'s table, at byte ${offset} of the walk file, starts ${JSON.stringify(head.slice(0, 80))}`);
       }
-      return entries.map((line) => {
+      const units = entries.map((line) => {
         const [tag, seq = "", start, end, kind = "", name = "", at, size, ...more] = line.split("	");
         const unit = {
           refName: seq,
@@ -5845,6 +6022,17 @@
         }
         return unit;
       });
+      let covered = unitsStart;
+      for (const unit of units) {
+        if (unit.offset !== covered) {
+          throw new WalkFormatError(`${refName}'s unit table lists its ${unit.kind} ${unit.name} at byte ${unit.offset} of the walk file, where the bytes its entries cover so far end at byte ${covered}: a table's entries leave no gap and do not overlap`);
+        }
+        covered = unit.offset + unit.length;
+      }
+      if (covered !== offset) {
+        throw new WalkFormatError(`${refName}'s unit table is at byte ${offset} of the walk file, where the bytes its entries cover end at byte ${covered}: a table's entries leave no gap and do not overlap`);
+      }
+      return units;
     }
     /**
      * The lines of each unit, without its `#unit` line, in the order given.
@@ -5883,7 +6071,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.1/node_modules/@jbrowse/graph-walks/esm/walkCounts.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.2/node_modules/@jbrowse/graph-walks/esm/walkCounts.js
   var COUNT_REASONS = Object.freeze({
     unloaded: 1,
     unattached: 2,
@@ -6414,7 +6602,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.1/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@8.0.2/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var WALK_CONTEXT = 1e3;
   var DETAIL_READS = 16;
@@ -7092,7 +7280,9 @@
         kept,
         fragments,
         departures,
-        gaps: cut.gapsOf(),
+        get gaps() {
+          return cut.gapsOf();
+        },
         placeholders: kept.size - keptNodes(kept)
       };
     }
