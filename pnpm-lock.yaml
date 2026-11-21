@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@jbrowse/graph-walks':
-        specifier: ^9.0.0
-        version: 9.0.0
+        specifier: ^9.1.0
+        version: 9.1.0
       '@jbrowse/tubemap-core':
         specifier: 2.1.0
         version: 2.1.0
@@ -179,8 +179,8 @@ packages:
   '@gmod/bgzf-filehandle@6.8.5':
     resolution: {integrity: sha512-kVM/7/OSMkUba9PEokm7kZ3jZqXxZdtYNFjZe6S2a48Xpci7SL74dTBwyFAYCoLm5/ynd8Pr9S2Ycy7Fbvjs2A==}
 
-  '@jbrowse/graph-walks@9.0.0':
-    resolution: {integrity: sha512-1n5YkBjcbNQO2rPXnLKOWNqaZG+vHFyQGKgED2EdQahmnZ/c4tEoL9Y2ftsNr8beYyjtS4Q2GIORpjXZfBHGhg==}
+  '@jbrowse/graph-walks@9.1.0':
+    resolution: {integrity: sha512-H+G7WQNjaypsjJB1xwFxIMf14gSC0G7t3uckjl8LNVN44edqGlxS4YDuju3VbAyYHUHjbh22HtaUhfFvykipVA==}
     engines: {node: '>=20'}
 
   '@jbrowse/tubemap-core@2.1.0':
@@ -282,7 +282,7 @@ snapshots:
       generic-filehandle2: 2.5.1
       pako-esm2: 2.0.2
 
-  '@jbrowse/graph-walks@9.0.0':
+  '@jbrowse/graph-walks@9.1.0':
     dependencies:
       '@gmod/bgzf-filehandle': 6.8.5
       generic-filehandle2: 2.5.1

@@ -161,7 +161,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.0.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp, overBytes) {
       super(message);
@@ -201,7 +201,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.0.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var ID_LIMIT = 2 ** 31;
@@ -339,20 +339,20 @@
     // does there, first holds `target`, i itself included
     reach(i, h, target) {
       var _a;
-      const forward2 = this.handles[i] === h;
-      let found;
-      for (const j of (_a = this.occurrences.get(idOf(target))) !== null && _a !== void 0 ? _a : []) {
-        if (forward2 && j >= i && this.handles[j] === target) {
-          if (found === void 0 || j < found) {
-            found = j;
-          }
-        } else if (!forward2 && j <= i && otherStrand(this.handles[j]) === target) {
-          if (found === void 0 || j > found) {
-            found = j;
-          }
+      const at = (_a = this.occurrences.get(idOf(target))) !== null && _a !== void 0 ? _a : [];
+      let k = firstAtLeast(at, i);
+      if (this.handles[i] === h) {
+        while (k < at.length && this.handles[at[k]] !== target) {
+          k++;
         }
+        return at[k];
+      } else {
+        k = at[k] === i ? k : k - 1;
+        while (k >= 0 && otherStrand(this.handles[at[k]]) !== target) {
+          k--;
+        }
+        return at[k];
       }
-      return found;
     }
     handleAt(i, forward2) {
       return forward2 ? this.handles[i] : otherStrand(this.handles[i]);
@@ -589,13 +589,14 @@
       at += length;
     }
   }
+  var isCount = (field, least = 0) => field !== void 0 && field !== "" && Number.isSafeInteger(Number(field)) && Number(field) >= least;
+  var abridgedCounts = (cols) => [1, 2, 5, 6, 7, 8, 10].every((k) => isCount(cols[k])) && isCount(cols[9], 1);
   function abridgedPiece(cols, tileStart) {
     const count2 = (k, least = 0) => {
-      const n = Number(cols[k]);
-      if (cols[k] === void 0 || cols[k] === "" || !Number.isSafeInteger(n) || n < least) {
+      if (!isCount(cols[k], least)) {
         throw new WalkRowError(`not an abridged row: ${cols.join("	")}`);
       }
-      return n;
+      return Number(cols[k]);
     };
     const abridged = {
       steps: count2(8),
@@ -1011,6 +1012,89 @@
     return { row, nodes };
   }
   var refRows = (rows) => rows.filter((c) => c[3] === "ref").sort((a, b) => +a[6] - +b[6]);
+  var tokenCount = (field) => field === "." ? 0 : field.split(",").length;
+  function stepsOffR(choices, routes) {
+    let interior = 0;
+    let ends = 0;
+    let sound = true;
+    for (let k = 0; k < choices.length; k += 4) {
+      const route = routes[choices[k]];
+      if (route) {
+        const flip2 = choices[k + 1] === 1;
+        const noEntry = flip2 ? route.noExit : route.noEntry;
+        const noExit = flip2 ? route.noEntry : route.noExit;
+        const leading = k === 0 && noEntry;
+        const trailing = !leading && noExit;
+        sound && (sound = (leading || !noEntry) && (!trailing || k + 4 === choices.length));
+        interior += route.interior;
+        ends += leading || trailing ? route.interior : 0;
+      } else {
+        sound = false;
+      }
+    }
+    return sound ? { interior, ends } : void 0;
+  }
+  var COUNTED_KINDS = /* @__PURE__ */ new Set(["ref", "walk", "abridged"]);
+  function tileSteps(lines, keep, expand) {
+    var _a, _b, _c, _d, _e;
+    const rows = lines.map((line) => line.split("	"));
+    const routes = rows.filter((cols) => cols[3] === "route").map((cols) => {
+      var _a2;
+      return {
+        noEntry: cols[4] === ".",
+        interior: tokenCount((_a2 = cols[5]) !== null && _a2 !== void 0 ? _a2 : "."),
+        noExit: cols[6] === "."
+      };
+    });
+    const tally = { kept: 0, n: 0, interior: 0, blocks: false, expanded: false };
+    let sound = true;
+    for (const cols of rows) {
+      const kind = cols[3];
+      const name = cols[4];
+      if (COUNTED_KINDS.has(kind) && ((_a = keep === null || keep === void 0 ? void 0 : keep(name)) !== null && _a !== void 0 ? _a : true)) {
+        if (kind === "ref") {
+          const n = tokenCount((_b = cols[9]) !== null && _b !== void 0 ? _b : ".");
+          tally.kept += n;
+          tally.n += n;
+        } else if (kind === "walk") {
+          const n = Number(cols[8]);
+          const off = stepsOffR(parseChoices((_c = cols[10]) !== null && _c !== void 0 ? _c : "."), routes);
+          sound && (sound = off !== void 0 && n > off.interior);
+          tally.kept += n - ((_d = off === null || off === void 0 ? void 0 : off.ends) !== null && _d !== void 0 ? _d : 0);
+          tally.n += n;
+          tally.interior += (_e = off === null || off === void 0 ? void 0 : off.interior) !== null && _e !== void 0 ? _e : 0;
+        } else {
+          const n = Number(cols[8]);
+          const expanded = (expand === null || expand === void 0 ? void 0 : expand(name)) === true;
+          sound && (sound = abridgedCounts(cols));
+          tally.n += expanded ? n : Math.max(n, 1);
+          tally.interior += expanded ? n : 0;
+          tally.expanded || (tally.expanded = expanded);
+          tally.blocks || (tally.blocks = !expanded);
+        }
+      }
+    }
+    return sound ? tally : void 0;
+  }
+  var deltaIds = (field, previous) => field === "." ? [] : field.split(",").map((token) => {
+    const delta = Number.parseInt(token, 10);
+    previous.id += (delta - (delta & 1)) / 2;
+    return previous.id;
+  });
+  function tileNodeIds(lines, into) {
+    const previous = { id: 0 };
+    for (const line of lines) {
+      const cols = line.split("	");
+      const columns2 = cols[3] === "ref" ? [cols[9]] : cols[3] === "route" ? cols.slice(4, 7) : [];
+      const from = cols[3] === "ref" ? { id: 0 } : previous;
+      for (const field of columns2) {
+        for (const id of deltaIds(field !== null && field !== void 0 ? field : ".", from)) {
+          into.add(id);
+        }
+      }
+    }
+    return into;
+  }
   function chunkRef(rows) {
     const path = new RefPath();
     const lengths = /* @__PURE__ */ new Map();
@@ -1192,7 +1276,7 @@
     return nodes;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.0.0/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
   var ATTACH_BP = 65536;
   function squeezer(holes, refName) {
     const spans = holes.filter((h) => h.refName === refName).sort((a, b) => a.start - b.start);
@@ -1269,7 +1353,7 @@
     });
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.0.0/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
   var GAP_KINDS = ["steps", "read", "own", "unread"];
   function groupByName(items, refName) {
     const out = /* @__PURE__ */ new Map();
@@ -1566,7 +1650,7 @@
     return gaps;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.0.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var isPlaceholder = (id) => id < 0;
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -1710,6 +1794,72 @@
     }
     return held;
   }
+  function stringOrder(x) {
+    const m = Math.abs(x);
+    let digits = 1;
+    let pad = 1e11;
+    while (m >= 10 ** digits) {
+      digits++;
+      pad /= 10;
+    }
+    return (x < 0 ? 0 : 2 ** 48) + (m * pad * 16 + digits);
+  }
+  function linkLines(links, kept) {
+    const distinct = new PairSet();
+    const chosen = [];
+    const sources = [];
+    const targets = [];
+    for (let i = 0; i < links.length; i += 2) {
+      const a = links[i];
+      const b = links[i + 1];
+      const source = Math.floor(a / 2);
+      const target = Math.floor(b / 2);
+      if (kept.has(source) && kept.has(target) && distinct.add(a, b)) {
+        chosen.push(i);
+        sources.push(2 * stringOrder(source) + (a & 1));
+        targets.push(2 * stringOrder(target) + (b & 1));
+      }
+    }
+    const order = Array.from(chosen.keys()).sort((x, y) => sources[x] - sources[y] || targets[x] - targets[y]);
+    const lines = [];
+    for (const k of order) {
+      lines.push(links[chosen[k]], links[chosen[k] + 1]);
+    }
+    return lines;
+  }
+  var PairSet = class {
+    constructor() {
+      this.keys = new Float64Array(2048).fill(Number.NaN);
+      this.size = 0;
+    }
+    // whether the pair is new, which the set holds from now on
+    add(a, b) {
+      if (4 * (this.size + 1) > this.keys.length) {
+        const held = this.keys;
+        this.keys = new Float64Array(2 * held.length).fill(Number.NaN);
+        this.size = 0;
+        for (let k = 0; k < held.length; k += 2) {
+          if (!Number.isNaN(held[k])) {
+            this.add(held[k], held[k + 1]);
+          }
+        }
+      }
+      const { keys } = this;
+      const mask = keys.length / 2 - 1;
+      const mixed = Math.imul(a | 0, 2654435761) ^ (b | 0);
+      let slot = Math.imul(mixed ^ mixed >>> 16, 2246822507) & mask;
+      while (!Number.isNaN(keys[2 * slot]) && !(keys[2 * slot] === a && keys[2 * slot + 1] === b)) {
+        slot = slot + 1 & mask;
+      }
+      const fresh = Number.isNaN(keys[2 * slot]);
+      if (fresh) {
+        keys[2 * slot] = a;
+        keys[2 * slot + 1] = b;
+        this.size++;
+      }
+      return fresh;
+    }
+  };
   function linkSteps(ids, rev, from, to, memo, add) {
     const first = Math.max(from, 0);
     const end = Math.min(to, ids.length - 1);
@@ -1806,8 +1956,224 @@
     }
   }
   var edgeKey = (name, pos, reversed, hap) => `${name}	${pos}	${reversed ? "-" : "+"}	${hap}`;
-  function walkCut(readRuns, nodes, refName, records, { contained = false, context = 0, attachBp = ATTACH_BP, squeeze = (bp) => bp, drawn, attach = [], placeholder, links: linked = true } = {}) {
-    var _a, _b, _c, _d, _e;
+  function walkCut(readRuns, nodes, refName, records, options = {}) {
+    var _a, _b;
+    const { squeeze = (bp) => bp, attach = [], links: linked = true } = options;
+    const { windowStart, windowEnd, passesOf, before, attaches, breakpoint, runs, spans } = walkSpans(readRuns, nodes, options);
+    const links = [];
+    const linkedTo = new PairSet();
+    const linkMemo = {
+      from: memoKeys(),
+      to: new Float64Array(2 * MEMO_SLOTS).fill(Number.NaN)
+    };
+    const link = (a, b) => {
+      if (linked && linkedTo.add(a, b)) {
+        links.push(a, b);
+      }
+    };
+    const walk = (run, from, to) => {
+      if (linked) {
+        linkSteps(run.ids, run.rev, from, to, linkMemo, link);
+      }
+    };
+    const kept = /* @__PURE__ */ new Set();
+    for (const [id, node] of nodes) {
+      if (node.onWindow) {
+        kept.add(id);
+      }
+    }
+    const lastKept = memoKeys();
+    for (const span of spans) {
+      keepSteps(span.run.ids, span.first, span.last, kept, lastKept);
+    }
+    const runEnd2 = (run) => run.hapOffset + before(run)[run.ids.length];
+    const spansOf = /* @__PURE__ */ new Map();
+    for (const span of spans) {
+      const held = (_a = spansOf.get(span.run)) !== null && _a !== void 0 ? _a : [];
+      spansOf.set(span.run, held);
+      held.push(span);
+    }
+    const returned = (run, i) => {
+      var _a2;
+      return ((_a2 = spansOf.get(run)) === null || _a2 === void 0 ? void 0 : _a2.some(({ first, last }) => first <= i && i <= last)) === true;
+    };
+    const fragments = [];
+    for (const { run, first, last } of spans) {
+      const { ids, rev } = run;
+      const bp = before(run);
+      walk(run, first, last);
+      const hapStart = run.hapOffset + bp[first];
+      const hapEnd = run.hapOffset + bp[last + 1];
+      const held = ((_b = run.unloaded) !== null && _b !== void 0 ? _b : []).filter(({ from, to }) => from <= last && to > first);
+      const unloadedSteps = held.reduce((sum, { from, to }) => sum + Math.min(to, last + 1) - Math.max(from, first), 0);
+      fragments.push({
+        name: run.name,
+        fragStart: run.fragStart,
+        hapStart,
+        hapEnd,
+        ids: ids.subarray(first, last + 1),
+        rev: rev.subarray(first, last + 1),
+        refStarts: run.refStarts.subarray(first, last + 1),
+        against: run.against.subarray(first, last + 1),
+        trimmedBefore: hapStart - run.hapOffset,
+        trimmedAfter: runEnd2(run) - hapEnd,
+        ...held.length > 0 ? { abridged: held.map((u) => u.piece), unloadedSteps } : {}
+      });
+    }
+    const departures = [];
+    const attached = /* @__PURE__ */ new Map();
+    const markAttached = (run, from, to) => {
+      var _a2;
+      const marks = (_a2 = attached.get(run)) !== null && _a2 !== void 0 ? _a2 : /* @__PURE__ */ new Set();
+      attached.set(run, marks);
+      for (let k = from; k < to; k++) {
+        marks.add(k);
+        const id = run.ids[k];
+        const slot = id & MEMO_MASK;
+        if (lastKept[slot] !== id) {
+          lastKept[slot] = id;
+          kept.add(id);
+        }
+      }
+    };
+    const unloadedIn = (run, from, to) => {
+      var _a2;
+      return ((_a2 = run.unloaded) !== null && _a2 !== void 0 ? _a2 : []).filter((u) => u.from < to && u.to > from).map((u) => u.piece);
+    };
+    const pairs = [];
+    for (const run of runs) {
+      if (run.name === refName) {
+        continue;
+      }
+      const { ids, rev, refStarts, against } = run;
+      const bp = before(run);
+      const bounds = pieceBounds(run);
+      for (let p = 0; p + 1 < bounds.length; p++) {
+        pairs.length = 0;
+        departingPairs(refStarts, against, bp, bounds[p], bounds[p + 1], squeeze, pairs);
+        for (let q = 0; q < pairs.length; q += 2) {
+          const last = pairs[q];
+          const i = pairs[q + 1];
+          const leaveReversed = against[last] === 1;
+          const rejoinReversed = against[i] === 1;
+          const ends = {
+            ownBp: bp[i] - bp[last + 1],
+            leavePos: leaveReversed ? refStarts[last] : refStarts[last] + bp[last + 1] - bp[last],
+            leaveReversed,
+            rejoinPos: rejoinReversed ? refStarts[i] + bp[i + 1] - bp[i] : refStarts[i],
+            rejoinReversed
+          };
+          const [lo, hi] = departureStretch(ends);
+          if (lo < windowEnd && hi > windowStart) {
+            const d = {
+              name: run.name,
+              hapStart: run.hapOffset + bp[last + 1],
+              ownBp: ends.ownBp,
+              missingBp: 0,
+              leavePos: ends.leavePos,
+              leaveReversed,
+              leavePasses: passesOf(ids[last]),
+              rejoinPos: ends.rejoinPos,
+              rejoinReversed,
+              rejoinPasses: passesOf(ids[i]),
+              fromSteps: true
+            };
+            if (i > last + 1 && attaches(ends)) {
+              d.steps = {
+                ids: ids.subarray(last + 1, i),
+                rev: rev.subarray(last + 1, i)
+              };
+              const held = unloadedIn(run, last + 1, i);
+              if (held.length > 0) {
+                d.abridged = held;
+              }
+              markAttached(run, last + 1, i);
+              walk(run, returned(run, last) ? last : last + 1, returned(run, i) ? i : i - 1);
+            }
+            departures.push(d);
+          }
+        }
+      }
+    }
+    const { leaves, rejoins } = recordEnds([...runs, ...attach], before, breakpoint);
+    const unattached = [];
+    for (const record of records) {
+      const d = { ...record };
+      if (attaches(d)) {
+        const ids = [];
+        const rev = [];
+        const held = [];
+        const leave = leaves.get(edgeKey(d.name, d.leavePos, d.leaveReversed, d.hapStart));
+        if (leave) {
+          const [run, i, end] = leave;
+          for (let k = i + 1; k < end; k++) {
+            ids.push(run.ids[k]);
+            rev.push(run.rev[k]);
+          }
+          markAttached(run, i + 1, end);
+          walk(run, returned(run, i) ? i : i + 1, end - 1);
+          for (const piece of unloadedIn(run, i + 1, end)) {
+            held.push(piece);
+          }
+        }
+        const rejoin = rejoins.get(edgeKey(d.name, d.rejoinPos, d.rejoinReversed, d.hapStart + d.ownBp));
+        if (rejoin) {
+          const [run, i, start] = rejoin;
+          for (let k = start; k < i; k++) {
+            ids.push(run.ids[k]);
+            rev.push(run.rev[k]);
+          }
+          markAttached(run, start, i);
+          walk(run, start, returned(run, i) ? i : i - 1);
+          for (const piece of unloadedIn(run, start, i)) {
+            held.push(piece);
+          }
+        }
+        const oneRun = leave !== void 0 && rejoin !== void 0 && leave[0].fragStart === rejoin[0].fragStart && pieceOf(leave[0], leave[1]) + 1 === pieceOf(rejoin[0], rejoin[1]) && (leave[2] - 1 > leave[1] || returned(leave[0], leave[1])) && (rejoin[2] < rejoin[1] || returned(rejoin[0], rejoin[1]));
+        if (leave && rejoin && oneRun && ids.length > 0) {
+          const [left, , end] = leave;
+          const [right, , start] = rejoin;
+          const last = left.ids[end - 1];
+          const next = right.ids[start];
+          if (last !== void 0 && next !== void 0 && last !== SKIPPED && next !== SKIPPED) {
+            link(last * 2 + left.rev[end - 1], next * 2 + right.rev[start]);
+          }
+        }
+        if (ids.length > 0) {
+          d.steps = { ids: Int32Array.from(ids), rev: Uint8Array.from(rev) };
+          if (!oneRun) {
+            d.breakAt = leave ? leave[2] - leave[1] - 1 : 0;
+          }
+          if (held.length > 0) {
+            d.abridged = held;
+          }
+        }
+        if (!leave || !rejoin) {
+          unattached.push({ departure: record });
+        }
+      }
+      departures.push(d);
+    }
+    sortByWalk(departures);
+    let gaps;
+    const gapsOf = () => {
+      gaps !== null && gaps !== void 0 ? gaps : gaps = walkGaps({
+        runs,
+        attach,
+        fragments,
+        departures,
+        refName,
+        before,
+        attached,
+        breakpoint,
+        spans
+      });
+      return gaps;
+    };
+    return { kept, fragments, departures, unattached, gapsOf, links };
+  }
+  function walkSpans(readRuns, nodes, { contained = false, context = 0, attachBp = ATTACH_BP, drawn, placeholder }) {
+    var _a, _b;
     let windowStart = (_a = drawn === null || drawn === void 0 ? void 0 : drawn.start) !== null && _a !== void 0 ? _a : Infinity;
     let windowEnd = (_b = drawn === null || drawn === void 0 ? void 0 : drawn.end) !== null && _b !== void 0 ? _b : -Infinity;
     for (const node of nodes.values()) {
@@ -1820,9 +2186,16 @@
       const node = nodes.get(id);
       return node === void 0 ? 0 : node.end - node.start;
     };
+    const passesSeen = memoKeys();
+    const passesHeld = new Float64Array(MEMO_SLOTS);
     const passesOf = (id) => {
       var _a2, _b2;
-      return (_b2 = (_a2 = nodes.get(id)) === null || _a2 === void 0 ? void 0 : _a2.passes) !== null && _b2 !== void 0 ? _b2 : 0;
+      const slot = id & MEMO_MASK;
+      if (passesSeen[slot] !== id) {
+        passesSeen[slot] = id;
+        passesHeld[slot] = (_b2 = (_a2 = nodes.get(id)) === null || _a2 === void 0 ? void 0 : _a2.passes) !== null && _b2 !== void 0 ? _b2 : 0;
+      }
+      return passesHeld[slot];
     };
     const onR = (run, i) => !Number.isNaN(run.refStarts[i]);
     const prefixes = /* @__PURE__ */ new Map();
@@ -1885,29 +2258,6 @@
         }
       }
       return { found, splits };
-    };
-    const links = [];
-    const linkedTo = /* @__PURE__ */ new Map();
-    const linkMemo = {
-      from: memoKeys(),
-      to: new Float64Array(2 * MEMO_SLOTS).fill(Number.NaN)
-    };
-    const link = (a, b) => {
-      if (linked) {
-        const held = linkedTo.get(a);
-        if (held === void 0) {
-          linkedTo.set(a, /* @__PURE__ */ new Set([b]));
-          links.push(a, b);
-        } else if (!held.has(b)) {
-          held.add(b);
-          links.push(a, b);
-        }
-      }
-    };
-    const walk = (run, from, to) => {
-      if (linked) {
-        linkSteps(run.ids, run.rev, from, to, linkMemo, link);
-      }
     };
     const splitRun = (run, splits, mint) => {
       var _a2, _b2;
@@ -1992,50 +2342,6 @@
       }
       return split2;
     });
-    const kept = /* @__PURE__ */ new Set();
-    for (const [id, node] of nodes) {
-      if (node.onWindow) {
-        kept.add(id);
-      }
-    }
-    const lastKept = memoKeys();
-    for (const span of spans) {
-      keepSteps(span.run.ids, span.first, span.last, kept, lastKept);
-    }
-    const runEnd2 = (run) => run.hapOffset + before(run)[run.ids.length];
-    const spansOf = /* @__PURE__ */ new Map();
-    for (const span of spans) {
-      const held = (_c = spansOf.get(span.run)) !== null && _c !== void 0 ? _c : [];
-      spansOf.set(span.run, held);
-      held.push(span);
-    }
-    const returned = (run, i) => {
-      var _a2;
-      return ((_a2 = spansOf.get(run)) === null || _a2 === void 0 ? void 0 : _a2.some(({ first, last }) => first <= i && i <= last)) === true;
-    };
-    const fragments = [];
-    for (const { run, first, last } of spans) {
-      const { ids, rev } = run;
-      const bp = before(run);
-      walk(run, first, last);
-      const hapStart = run.hapOffset + bp[first];
-      const hapEnd = run.hapOffset + bp[last + 1];
-      const held = ((_d = run.unloaded) !== null && _d !== void 0 ? _d : []).filter(({ from, to }) => from <= last && to > first);
-      const unloadedSteps = held.reduce((sum, { from, to }) => sum + Math.min(to, last + 1) - Math.max(from, first), 0);
-      fragments.push({
-        name: run.name,
-        fragStart: run.fragStart,
-        hapStart,
-        hapEnd,
-        ids: ids.subarray(first, last + 1),
-        rev: rev.subarray(first, last + 1),
-        refStarts: run.refStarts.subarray(first, last + 1),
-        against: run.against.subarray(first, last + 1),
-        trimmedBefore: hapStart - run.hapOffset,
-        trimmedAfter: runEnd2(run) - hapEnd,
-        ...held.length > 0 ? { abridged: held.map((u) => u.piece), unloadedSteps } : {}
-      });
-    }
     const breakpoint = (run, i, leave) => {
       const reversed = run.against[i] === 1;
       const start = run.refStarts[i];
@@ -2044,79 +2350,22 @@
         reversed
       };
     };
-    const departures = [];
-    const attached = /* @__PURE__ */ new Map();
-    const markAttached = (run, from, to) => {
-      var _a2;
-      const marks = (_a2 = attached.get(run)) !== null && _a2 !== void 0 ? _a2 : /* @__PURE__ */ new Set();
-      attached.set(run, marks);
-      for (let k = from; k < to; k++) {
-        marks.add(k);
-        kept.add(run.ids[k]);
-      }
+    return {
+      windowStart,
+      windowEnd,
+      passesOf,
+      before,
+      attaches,
+      breakpoint,
+      runs,
+      spans
     };
-    const unloadedIn = (run, from, to) => {
-      var _a2;
-      return ((_a2 = run.unloaded) !== null && _a2 !== void 0 ? _a2 : []).filter((u) => u.from < to && u.to > from).map((u) => u.piece);
-    };
-    const pairs = [];
-    for (const run of runs) {
-      if (run.name === refName) {
-        continue;
-      }
-      const { ids, rev, refStarts, against } = run;
-      const bp = before(run);
-      const bounds = pieceBounds(run);
-      for (let p = 0; p + 1 < bounds.length; p++) {
-        pairs.length = 0;
-        departingPairs(refStarts, against, bp, bounds[p], bounds[p + 1], squeeze, pairs);
-        for (let q = 0; q < pairs.length; q += 2) {
-          const last = pairs[q];
-          const i = pairs[q + 1];
-          const leaveReversed = against[last] === 1;
-          const rejoinReversed = against[i] === 1;
-          const ends = {
-            ownBp: bp[i] - bp[last + 1],
-            leavePos: leaveReversed ? refStarts[last] : refStarts[last] + bp[last + 1] - bp[last],
-            leaveReversed,
-            rejoinPos: rejoinReversed ? refStarts[i] + bp[i + 1] - bp[i] : refStarts[i],
-            rejoinReversed
-          };
-          const [lo, hi] = departureStretch(ends);
-          if (lo < windowEnd && hi > windowStart) {
-            const d = {
-              name: run.name,
-              hapStart: run.hapOffset + bp[last + 1],
-              ownBp: ends.ownBp,
-              missingBp: 0,
-              leavePos: ends.leavePos,
-              leaveReversed,
-              leavePasses: passesOf(ids[last]),
-              rejoinPos: ends.rejoinPos,
-              rejoinReversed,
-              rejoinPasses: passesOf(ids[i]),
-              fromSteps: true
-            };
-            if (i > last + 1 && attaches(ends)) {
-              d.steps = {
-                ids: ids.subarray(last + 1, i),
-                rev: rev.subarray(last + 1, i)
-              };
-              const held = unloadedIn(run, last + 1, i);
-              if (held.length > 0) {
-                d.abridged = held;
-              }
-              markAttached(run, last + 1, i);
-              walk(run, returned(run, last) ? last : last + 1, returned(run, i) ? i : i - 1);
-            }
-            departures.push(d);
-          }
-        }
-      }
-    }
+  }
+  function recordEnds(runs, before, breakpoint) {
+    var _a;
     const leaves = /* @__PURE__ */ new Map();
     const rejoins = /* @__PURE__ */ new Map();
-    for (const run of [...runs, ...attach]) {
+    for (const run of runs) {
       const bp = before(run);
       const bounds = pieceBounds(run);
       for (let p = 0; p + 1 < bounds.length; p++) {
@@ -2131,8 +2380,8 @@
         rejoins.set(edgeKey(run.name, rejoin.pos, rejoin.reversed, run.hapOffset + bp[first]), [run, first, bounds[p]]);
       }
     }
-    for (const run of [...runs, ...attach]) {
-      for (const { key, leave, from, to } of (_e = run.own) !== null && _e !== void 0 ? _e : []) {
+    for (const run of runs) {
+      for (const { key, leave, from, to } of (_a = run.own) !== null && _a !== void 0 ? _a : []) {
         if (leave) {
           leaves.set(key, [run, from - 1, to]);
         } else {
@@ -2140,81 +2389,43 @@
         }
       }
     }
-    const unattached = [];
-    for (const record of records) {
-      const d = { ...record };
-      if (attaches(d)) {
-        const ids = [];
-        const rev = [];
-        const held = [];
-        const leave = leaves.get(edgeKey(d.name, d.leavePos, d.leaveReversed, d.hapStart));
-        if (leave) {
-          const [run, i, end] = leave;
-          for (let k = i + 1; k < end; k++) {
-            ids.push(run.ids[k]);
-            rev.push(run.rev[k]);
-          }
-          markAttached(run, i + 1, end);
-          walk(run, returned(run, i) ? i : i + 1, end - 1);
-          for (const piece of unloadedIn(run, i + 1, end)) {
-            held.push(piece);
-          }
-        }
-        const rejoin = rejoins.get(edgeKey(d.name, d.rejoinPos, d.rejoinReversed, d.hapStart + d.ownBp));
-        if (rejoin) {
-          const [run, i, start] = rejoin;
-          for (let k = start; k < i; k++) {
-            ids.push(run.ids[k]);
-            rev.push(run.rev[k]);
-          }
-          markAttached(run, start, i);
-          walk(run, start, returned(run, i) ? i : i - 1);
-          for (const piece of unloadedIn(run, start, i)) {
-            held.push(piece);
-          }
-        }
-        const oneRun = leave !== void 0 && rejoin !== void 0 && leave[0].fragStart === rejoin[0].fragStart && pieceOf(leave[0], leave[1]) + 1 === pieceOf(rejoin[0], rejoin[1]) && (leave[2] - 1 > leave[1] || returned(leave[0], leave[1])) && (rejoin[2] < rejoin[1] || returned(rejoin[0], rejoin[1]));
-        if (leave && rejoin && oneRun && ids.length > 0) {
-          const [left, , end] = leave;
-          const [right, , start] = rejoin;
-          const last = left.ids[end - 1];
-          const next = right.ids[start];
-          if (last !== void 0 && next !== void 0 && last !== SKIPPED && next !== SKIPPED) {
-            link(last * 2 + left.rev[end - 1], next * 2 + right.rev[start]);
-          }
-        }
-        if (ids.length > 0) {
-          d.steps = { ids: Int32Array.from(ids), rev: Uint8Array.from(rev) };
-          if (!oneRun) {
-            d.breakAt = leave ? leave[2] - leave[1] - 1 : 0;
-          }
-          if (held.length > 0) {
-            d.abridged = held;
-          }
-        }
-        if (!leave || !rejoin) {
-          unattached.push({ departure: record });
-        }
+    return { leaves, rejoins };
+  }
+  function unattachedRecords(readRuns, nodes, records, options = {}) {
+    const { runs, before, attaches, breakpoint } = walkSpans(readRuns, nodes, options);
+    const { leaves, rejoins } = recordEnds(runs, before, breakpoint);
+    return records.filter((d) => attaches(d) && (!leaves.has(edgeKey(d.name, d.leavePos, d.leaveReversed, d.hapStart)) || !rejoins.has(edgeKey(d.name, d.rejoinPos, d.rejoinReversed, d.hapStart + d.ownBp))));
+  }
+  function sortByWalk(departures) {
+    const n = departures.length;
+    const names = /* @__PURE__ */ new Set();
+    let last;
+    for (const { name } of departures) {
+      if (name !== last) {
+        names.add(name);
+        last = name;
       }
-      departures.push(d);
     }
-    departures.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || a.hapStart - b.hapStart || a.leavePos - b.leavePos);
-    let gaps;
-    const gapsOf = () => {
-      gaps !== null && gaps !== void 0 ? gaps : gaps = walkGaps({
-        runs,
-        attach,
-        fragments,
-        departures,
-        refName,
-        before,
-        attached,
-        breakpoint,
-        spans
-      });
-      return gaps;
-    };
-    return { kept, fragments, departures, unattached, gapsOf, links };
+    const rank = new Map([...names].sort().map((name, k) => [name, k]));
+    const ranks = new Float64Array(n);
+    const haps = new Float64Array(n);
+    const leaves = new Float64Array(n);
+    let lastRank = 0;
+    last = void 0;
+    departures.forEach((d, k) => {
+      if (d.name !== last) {
+        lastRank = rank.get(d.name);
+        last = d.name;
+      }
+      ranks[k] = lastRank;
+      haps[k] = d.hapStart;
+      leaves[k] = d.leavePos;
+    });
+    const order = Array.from(departures.keys()).sort((a, b) => ranks[a] - ranks[b] || haps[a] - haps[b] || leaves[a] - leaves[b] || a - b);
+    const sorted = order.map((k) => departures[k]);
+    sorted.forEach((d, k) => {
+      departures[k] = d;
+    });
   }
   var pieceOf = (run, step) => run.firstPiece + run.pieceStarts.filter((start) => start <= step).length;
   function pieceBounds(run) {
@@ -2357,28 +2568,17 @@
         }
         return lastIndex[slot];
       };
-      const byLine = /* @__PURE__ */ new Map();
-      for (let i = 0; i < this.links.length; i += 2) {
-        const a = this.links[i];
-        const b = this.links[i + 1];
-        const source = Math.floor(a / 2);
-        const target = Math.floor(b / 2);
-        if (kept.has(source) && kept.has(target)) {
-          byLine.set(`${source}	${a & 1 ? "-" : "+"}	${target}	${b & 1 ? "-" : "+"}`, i);
-        }
+      const lines = linkLines(this.links, kept);
+      const from = new Int32Array(lines.length / 2);
+      const to = new Int32Array(lines.length / 2);
+      const strands = new Uint8Array(lines.length / 2);
+      for (let k = 0; k < lines.length; k += 2) {
+        const a = lines[k];
+        const b = lines[k + 1];
+        from[k / 2] = nodeIndex(Math.floor(a / 2));
+        to[k / 2] = nodeIndex(Math.floor(b / 2));
+        strands[k / 2] = a & 1 | (b & 1) << 1;
       }
-      const lines = [...byLine.keys()].sort();
-      const from = new Int32Array(lines.length);
-      const to = new Int32Array(lines.length);
-      const strands = new Uint8Array(lines.length);
-      lines.forEach((line, k) => {
-        const i = byLine.get(line);
-        const a = this.links[i];
-        const b = this.links[i + 1];
-        from[k] = nodeIndex(Math.floor(a / 2));
-        to[k] = nodeIndex(Math.floor(b / 2));
-        strands[k] = a & 1 | (b & 1) << 1;
-      });
       const walks = this.referenceFirst(fragments);
       const counted2 = /* @__PURE__ */ new Set();
       const stepsOf = (pieces) => {
@@ -2657,13 +2857,41 @@
     return keptOverError(nodes, limit, window, filtered, readTo);
   }
   function keptOverError(kept, limit, window, filtered, readTo = window.end) {
-    if (kept <= limit) {
-      return void 0;
-    }
-    const windowBp = window.end - window.start;
     const readBp = Math.min(readTo, window.end) - window.start;
-    const fitsBp = Math.max(1, Math.floor(readBp * limit / kept));
-    return new RegionTooLargeError(`Zoom in to about ${bpString(fitsBp)}${filtered ? "" : ", or choose fewer haplotypes,"} to see the graph`, limit, windowBp, fitsBp);
+    return kept > limit ? zoomInError(Math.floor(readBp * limit / kept), limit, window, filtered) : void 0;
+  }
+  function zoomInError(fitsBp, limit, window, filtered) {
+    const fits = Math.max(1, fitsBp);
+    return new RegionTooLargeError(`Zoom in to about ${bpString(fits)}${filtered ? "" : ", or choose fewer haplotypes,"} to see the graph`, limit, window.end - window.start, fits);
+  }
+  function surelyKeptError(tiles, budget, window, context, filtered) {
+    let steps = 0;
+    let bp = 0;
+    for (const tile of tiles) {
+      if (tile.steps !== void 0) {
+        steps += tile.steps;
+        bp += tile.end - tile.start;
+      }
+    }
+    const drawn = {
+      start: Math.max(0, window.start - context),
+      end: window.end + context
+    };
+    return steps > budget ? zoomInError(budgetReach(tiles, bp > 0 ? steps / bp : 0, budget, drawn) - context - window.start, budget, window, filtered) : void 0;
+  }
+  function budgetReach(tiles, perBp, budget, drawn) {
+    let held = 0;
+    let reach;
+    for (const tile of tiles) {
+      const from = Math.max(tile.start, drawn.start);
+      const bp = Math.max(0, Math.min(tile.end, drawn.end) - from);
+      const share = tile.steps === void 0 ? perBp * bp : tile.end > tile.start ? tile.steps * bp / (tile.end - tile.start) : tile.steps;
+      if (reach === void 0 && held + share > budget) {
+        reach = bp > 0 ? from + (budget - held) * bp / share : from;
+      }
+      held += share;
+    }
+    return Math.floor(reach !== null && reach !== void 0 ? reach : drawn.end);
   }
   function byteBudgetError(bytesTo, budget, window, tile, names = BUDGET_NAMES, attaching = false) {
     const over = bytesOver(bytesTo, budget, window, tile);
@@ -2932,7 +3160,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.0.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -2976,7 +3204,7 @@
     return held === null || held === void 0 ? void 0 : held[0];
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.0.0/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
   function checkRange(refName, start, end) {
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
       throw new Error(`${refName}:${start}-${end} is not a finite range to query the graph's index for`);
@@ -5769,7 +5997,7 @@
     }
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.0.0/node_modules/@jbrowse/graph-walks/esm/walkFile.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkFile.js
   var WALK_FORMAT = 8;
   var WalkFormatError = class extends Error {
     constructor() {
@@ -6071,7 +6299,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.0.0/node_modules/@jbrowse/graph-walks/esm/walkCounts.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkCounts.js
   var COUNT_REASONS = Object.freeze({
     unloaded: 1,
     unattached: 2,
@@ -6602,7 +6830,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.0.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var WALK_CONTEXT = 1e3;
   var DETAIL_READS = 16;
@@ -6692,8 +6920,23 @@
       throw new DepartureReadError(bytes, budget);
     }
   }
-  function attachTiles(units, ownTiles) {
-    return units.filter((u) => u.kind === "tile" && u.length > 0 && ownTiles.includes(Number(u.name)));
+  function attachTiles(units) {
+    const byStart = /* @__PURE__ */ new Map();
+    units.forEach((u, k) => {
+      const start = Number(u.name);
+      if (u.kind === "tile" && u.length > 0 && !Number.isNaN(start)) {
+        const held = byStart.get(start);
+        if (held) {
+          held.push(k);
+        } else {
+          byStart.set(start, [k]);
+        }
+      }
+    });
+    return (ownTiles) => [...new Set(ownTiles)].flatMap((start) => {
+      var _a;
+      return (_a = byStart.get(start)) !== null && _a !== void 0 ? _a : [];
+    }).sort((a, b) => a - b).map((k) => units[k]);
   }
   var pieceKey = (name, fragStart, piece) => `${name}	${fragStart}	${piece}`;
   var keyOf = (row) => pieceKey(row.name, row.fragStart, row.piece);
@@ -6913,11 +7156,16 @@
       const pieceEnds = [];
       const blocksRead = /* @__PURE__ */ new Map();
       const placeholderIds = /* @__PURE__ */ new Map();
+      let minted = 0;
       const placeholderId = (name, start, end) => {
-        var _a2;
-        const run = runName(name, start, end);
-        const id = (_a2 = placeholderIds.get(run)) !== null && _a2 !== void 0 ? _a2 : -(placeholderIds.size + 1);
-        placeholderIds.set(run, id);
+        var _a2, _b2, _c2;
+        const byStart = (_a2 = placeholderIds.get(name)) !== null && _a2 !== void 0 ? _a2 : /* @__PURE__ */ new Map();
+        placeholderIds.set(name, byStart);
+        const byEnd = (_b2 = byStart.get(start)) !== null && _b2 !== void 0 ? _b2 : /* @__PURE__ */ new Map();
+        byStart.set(start, byEnd);
+        const id = (_c2 = byEnd.get(end)) !== null && _c2 !== void 0 ? _c2 : -(minted + 1);
+        minted = Math.max(minted, -id);
+        byEnd.set(end, id);
         return id;
       };
       let met = [];
@@ -7186,6 +7434,61 @@
           item.into.push(bpRow(item.piece));
         }
       };
+      const overBytes = (more, attach) => Number.isFinite(byteBudget) && byteBudgetError(bytesWith(more), byteBudget, region, tile, opts.budgetNames, attach) !== void 0;
+      const noEarlierRefusal = (read, counted2, records, ownTiles) => {
+        var _a2, _b2, _c2, _d2;
+        const all = tiles.map((_, k) => {
+          const tally = counted2[k];
+          return tally === "edge" ? tileSteps(read[k], keep, expand) : tally;
+        });
+        const blocks = tiles.filter((_, k) => {
+          var _a3;
+          return ((_a3 = all[k]) === null || _a3 === void 0 ? void 0 : _a3.blocks) === true;
+        }).map((unit) => ({ unit: blocksUnits.get(unit.name), from: unit.start }));
+        const unread = blocks.flatMap(({ unit, from }) => unit && !blocksRead.has(unit) ? [{ unit, from }] : []);
+        const attaching = /* @__PURE__ */ new Map();
+        const decoded = new Set(tiles.map((unit) => unit.offset));
+        const tilesNamed = /* @__PURE__ */ new Map();
+        for (const unit of units) {
+          if (unit.kind === "tile" && unit.length > 0) {
+            const start = Number(unit.name);
+            tilesNamed.set(start, [...(_a2 = tilesNamed.get(start)) !== null && _a2 !== void 0 ? _a2 : [], unit]);
+          }
+        }
+        for (const d of records) {
+          if (attachesOwnSteps(d, bounds, attachBp)) {
+            const from = Math.min(d.leavePos, d.rejoinPos, region.end + context - 1);
+            for (const start of (_b2 = ownTiles.get(d)) !== null && _b2 !== void 0 ? _b2 : []) {
+              for (const unit of (_c2 = tilesNamed.get(start)) !== null && _c2 !== void 0 ? _c2 : []) {
+                if (!decoded.has(unit.offset)) {
+                  attaching.set(unit, Math.min((_d2 = attaching.get(unit)) !== null && _d2 !== void 0 ? _d2 : from, from));
+                }
+              }
+            }
+          }
+        }
+        const fetching = [...attaching].map(([unit, from]) => ({ unit, from }));
+        const nodesFit = () => !Number.isFinite(nodeLimit) || fetching.length === 0 && all.every((t) => (t === null || t === void 0 ? void 0 : t.expanded) === false) && read.slice(0, tiles.length).reduce((ids, lines) => tileNodeIds(lines, ids), /* @__PURE__ */ new Set()).size <= nodeLimit;
+        const held = all.reduce((sum, t) => {
+          var _a3, _b3;
+          return {
+            n: sum.n + ((_a3 = t === null || t === void 0 ? void 0 : t.n) !== null && _a3 !== void 0 ? _a3 : 0),
+            interior: sum.interior + ((_b3 = t === null || t === void 0 ? void 0 : t.interior) !== null && _b3 !== void 0 ? _b3 : 0)
+          };
+        }, { n: 0, interior: 0 });
+        return all.every((t) => t !== void 0) && blocks.every(({ unit }) => unit !== void 0) && readSteps(held) <= stepBudget * READ_STEPS_PER_KEPT && !(unread.length > 0 && overBytes(unread, false)) && !(fetching.length > 0 && overBytes([...unread, ...fetching], true)) && nodesFit();
+      };
+      const earlyRefusal = (read, records, ownTiles) => {
+        const counted2 = tiles.map((unit, k) => unit.start > drawn.start && unit.end < drawn.end ? tileSteps(read[k], keep, expand) : "edge");
+        const kept2 = counted2.reduce((sum, tally) => {
+          var _a2;
+          return sum + (tally === "edge" ? 0 : (_a2 = tally === null || tally === void 0 ? void 0 : tally.kept) !== null && _a2 !== void 0 ? _a2 : 0);
+        }, 0);
+        return kept2 > stepBudget && noEarlierRefusal(read, counted2, records, ownTiles) ? surelyKeptError(tiles.map((unit, k) => {
+          const tally = counted2[k];
+          return tally === "edge" ? unit : { ...unit, steps: tally === null || tally === void 0 ? void 0 : tally.kept };
+        }), stepBudget, region, context, filtered) : void 0;
+      };
       let cut;
       try {
         const jumps = links === "between" ? tiles.flatMap((windowTile) => {
@@ -7207,6 +7510,10 @@
             held.push(d);
           }
         }
+        const early = Number.isFinite(stepBudget) ? earlyRefusal(read, records, ownTiles) : void 0;
+        if (early) {
+          throw early;
+        }
         tiles.forEach((unit, k) => {
           decode(unit, read[k], rows, unit.start);
         });
@@ -7223,22 +7530,22 @@
         if (tooManyRead) {
           throw tooManyRead;
         }
-        const cutRows = () => walkCut(joinPieces(rows), graph.nodes, refName, records, {
+        const joined = joinPieces(rows);
+        const cutOptions = {
           contained,
           context,
           attachBp,
           squeeze: squeezer(header.holes, refName),
           drawn: bounds,
-          attach: joinPieces(attachRows),
           placeholder: placeholderId,
           links: links !== "none"
-        });
-        cut = cutRows();
+        };
         const fetches = /* @__PURE__ */ new Map();
-        for (const { departure } of cut.unattached) {
+        const tilesOwning = attachTiles(units);
+        for (const departure of unattachedRecords(joined, graph.nodes, records, cutOptions)) {
           const { name } = departure;
           const from = Math.min(departure.leavePos, departure.rejoinPos, region.end + context - 1);
-          for (const unit of attachTiles(units, (_b = ownTiles.get(departure)) !== null && _b !== void 0 ? _b : [])) {
+          for (const unit of tilesOwning((_b = ownTiles.get(departure)) !== null && _b !== void 0 ? _b : [])) {
             if (!decodedFor(unit, name)) {
               const wanting = fetches.get(unit);
               fetches.set(unit, {
@@ -7260,8 +7567,11 @@
             decode(unit, fetched[k], attachRows, from, (name) => names.has(name));
           }
           await resolve(true);
-          cut = cutRows();
         }
+        cut = walkCut(joined, graph.nodes, refName, records, {
+          ...cutOptions,
+          attach: joinPieces(attachRows)
+        });
       } catch (error) {
         reads.abort();
         throw error;
