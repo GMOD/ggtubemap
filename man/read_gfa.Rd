@@ -9,7 +9,9 @@ read_gfa(
   reference = NULL,
   region = NULL,
   haplotypes = NULL,
-  context = NULL
+  context = NULL,
+  fold = NULL,
+  cluster = FALSE
 )
 }
 \arguments{
@@ -31,12 +33,50 @@ it under the map.}
 \item{context}{On a walk file, bp of reference kept past each end of
 \code{region}. \code{NULL} keeps what the browser readers keep, graph-walks'
 \code{WALK_CONTEXT}.}
+
+\item{fold}{On a walk file, the size in bp at which a variant is kept, such
+as \code{1000}; \code{NULL} draws the graph as it is. Every smaller bubble is
+merged into the reference, so the nodes are the stretches of reference
+between the breakpoints of the variants kept, and walks that then take
+the same steps become one track whose \code{freq} counts them. A graph whose
+reference passes a node more than once, as a pggb graph's can, is not
+folded: a warning says so and the graph comes back as it is.}
+
+\item{cluster}{With \code{fold}, draw insertions or deletions at one site whose
+lengths differ by at most 5\% as one branch, which says how many lengths
+it stands for and their range.}
 }
 \value{
 A list of \code{nodes} (a data frame of \code{name} and \code{seq}, or
 \code{sequence_length} where a segment's sequence is \code{*}) and \code{tracks}, and
 from a walk file \code{left_out}, a data frame of each \code{haplotype} that got no
 track and the \code{reason}.
+
+With \code{fold}, also \code{fold}, a list of whether the graph was \code{folded}, the
+\code{reason} when it was not, the \code{threshold}, \code{cluster} and the \code{haplotypes}
+counted, and \code{branches}, a data frame of the variants kept, in reference
+order:
+\itemize{
+\item \code{kind}, one of \code{insertion}, \code{deletion}, \code{inversion} and \code{other}, and
+\code{description}, which names an \code{other}, such as \code{replacement}
+\item \code{length}, \code{inserted_bp} and \code{deleted_bp}
+\item \code{ref_start} and \code{ref_end}, on the reference
+\item \code{haplotypes}, how many of the \code{total} carry it
+\item \code{open}, for an inversion the cut runs through
+\item \code{nodes}, the nodes that are its box, and \code{from} and \code{to}, the nodes an
+insertion or deletion lies between
+\item \code{cluster}, and for a cluster \code{cluster_members}, \code{cluster_min_length}
+and \code{cluster_max_length}
+\item \code{label}, as \code{\link[=geom_tubemap_branches]{geom_tubemap_branches()}} prints it
+}
+
+A folded track stands for every haplotype that takes its steps, and
+lists them in \code{haplotypes}. They share its route and orientation and
+nothing under the threshold, which \code{tubes} counts, a row per track:
+\code{haplotypes}, the distinct \code{walks} they took before folding, and the
+least, median and most bp a haplotype had inserted or skipped where it
+was merged (\code{inserted_bp_min}, \code{inserted_bp_median}, \code{inserted_bp_max},
+\code{skipped_bp_min}, \code{skipped_bp_median}, \code{skipped_bp_max}).
 }
 \description{
 Reads the segments and the paths (\code{P} lines) and walks (\code{W} lines) of a GFA
@@ -60,5 +100,10 @@ walk comes first.
 walks <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f8.GRCh38.walks.gz"
 g <- read_gfa(walks, region = "chr6:160,653,940-160,654,130",
               haplotypes = c("HG00097#1", "HG00133#2"))
+
+# a 45.5 kb deletion, with everything under 1 kb folded away
+del <- read_gfa(walks, region = "chr1:72,298,000-72,349,000", fold = 1000,
+                cluster = TRUE)
+del$branches
 }
 }

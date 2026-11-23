@@ -4,13 +4,13 @@ library(ggplot2)
 
 # autoplot(tubemap, ...) plus `extra`, the map `width` inches wide, with room
 # for the ruler and `legend`
-save <- function(name, tubemap, width, ..., xlim = NULL, legend = 0.35,
+save <- function(name, tubemap, width, ..., xlim = NULL, ylim = NULL, legend = 0.35,
                  extra = NULL) {
   map <- tubemap_size(tubemap, px_per_in = 1, xlim = xlim, ruler = FALSE)
   px_per_in <- map[["width"]] / width
-  size <- tubemap_size(tubemap, px_per_in, legend = legend, xlim = xlim)
+  size <- tubemap_size(tubemap, px_per_in, legend = legend, xlim = xlim, ylim = ylim)
   ggsave(file.path("man/figures", name),
-         autoplot(tubemap, ..., xlim = xlim) + extra,
+         autoplot(tubemap, ..., xlim = xlim, ylim = ylim) + extra,
          width = size[["width"]], height = size[["height"]], dpi = 150,
          device = ragg::agg_png)
 }
@@ -69,6 +69,30 @@ save("hprc-str-phased.png", phased, 9, haplotypes = aes(fill = phase),
                                           "haplotype 1" = "#d97706",
                                           "haplotype 2" = "#0e7490"),
                                name = NULL))
+
+genome <- "https://jbrowse.org/demos/hprc/hprc-v2.1-mc-grch38-f8.GRCh38.walks.gz"
+
+# A window as the graph has it, banded, since 464 tubes side by side are
+# taller than the page: whole, as wide as the folded map is drawn, and its
+# first `crop` layout pixels at the folded map's scale
+fold_figures <- function(name, region, crop, ...) {
+  before <- tubemap_layout(read_gfa(genome, region = region),
+                           node_width = "compressed", coarsen = TRUE)
+  none <- theme(legend.position = "none")
+  save(paste0(name, "-before.png"), before, 9, legend = 0.1, extra = none)
+  shown <- before$shapes[before$shapes$x <= crop, ]
+  save(paste0(name, "-before-crop.png"), before, 9, xlim = c(0, crop),
+       ylim = range(shown$y) + c(-20, 20), legend = 0, extra = none)
+  folded <- tubemap_layout(read_gfa(genome, region = region, fold = 1000, ...))
+  save(paste0(name, ".png"), folded, 9, legend = 0.7,
+       extra = theme(legend.text = element_text(size = 6)))
+  message(sprintf("%s: %.0f layout px before, %.0f folded, %d and %d nodes",
+                  name, diff(unlist(before$bounds[c("minX", "maxX")])),
+                  diff(unlist(folded$bounds[c("minX", "maxX")])),
+                  length(unique(before$nodes$name)), nrow(folded$nodes)))
+}
+fold_figures("fold-deletion", "chr1:72,298,000-72,349,000", 1700, cluster = TRUE)
+fold_figures("fold-inversion", "chr16:75,204,000-75,225,000", 1250)
 
 if (requireNamespace("ggbandage", quietly = TRUE)) {
   library(patchwork)

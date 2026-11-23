@@ -219,6 +219,86 @@ geom_tubemap_panel_labels <- function(tubemap, size = 8) {
   )
 }
 
+branch_colours <- c(insertion = "#1f77b4", deletion = "#d62728",
+                    inversion = "#8e44ad", other = "#e67e22")
+
+#' @describeIn tubemap_layers The branches [read_gfa()]'s `fold` kept, each
+#'   labelled above the map with its kind, size and how many haplotypes carry
+#'   it, such as "deletion 45.5 kb, 306 of 464". A leader runs from the label
+#'   to the branch, and the box of an insertion or inversion is edged in the
+#'   colour of its kind. A cluster's label says how many lengths it stands for
+#'   and their range. Draws nothing for a graph that was not folded.
+#' @export
+geom_tubemap_branches <- function(tubemap, mapping = NULL, ...) {
+  branches <- tubemap$branches
+  branches <- branches[!is.na(branches$x), , drop = FALSE]
+  if (NROW(branches) == 0) {
+    return(list())
+  }
+  branches$.branch_colour <- unname(branch_colours[branches$kind])
+  size <- tubemap$branch_size
+  boxes <- tubemap$outlines[tubemap$outlines$panel == 1, , drop = FALSE]
+  box_branch <- rep(seq_len(nrow(branches)), lengths(branches$nodes))
+  boxes$.branch_colour <- branches$.branch_colour[
+    box_branch[match(boxes$name, unlist(branches$nodes))]
+  ]
+  boxes <- boxes[!is.na(boxes$.branch_colour), , drop = FALSE]
+  list(
+    if (nrow(boxes) > 0) {
+      tubemap_layer(GeomTubemapOutline, boxes,
+                    aes(x = x, y = y, group = group, colour = I(.branch_colour)),
+                    list(fill = NA, linewidth = size / 5))
+    },
+    tubemap_layer(GeomSegment, branches,
+                  aes(x = x, xend = x, y = label_y + size * 0.3, yend = y,
+                      colour = I(.branch_colour)),
+                  list(linewidth = 0.3)),
+    tubemap_layer(GeomRect, branches,
+                  aes(xmin = label_x - label_width / 2, xmax = label_x + label_width / 2,
+                      ymin = label_y - size * 0.6, ymax = label_y + size * 0.6),
+                  list(fill = "white", alpha = 0.85)),
+    tubemap_layer(GeomTubemapText, branches,
+                  merge_aes(aes(x = label_x, y = label_y, label = label,
+                                colour = I(.branch_colour)), mapping),
+                  utils::modifyList(list(size = size, min_size = 0, vjust = 0.5,
+                                         family = "sans"), list(...)))
+  )
+}
+
+#' @describeIn tubemap_layers Arrowheads along the tubes of a folded graph,
+#'   pointing the way each walk runs, so the pass through an inversion reads
+#'   against the reference. A piece of tube whose direction is not known has
+#'   none.
+#' @param spacing Layout pixels between arrowheads.
+#' @export
+geom_tubemap_direction <- function(tubemap, spacing = 60, ...) {
+  d <- tubemap$directions
+  d <- d[d$ymax - d$ymin >= 8 & d$xmax - d$xmin >= spacing / 2, , drop = FALSE]
+  if (NROW(d) == 0) {
+    return(list())
+  }
+  heads <- do.call(rbind, lapply(seq_len(nrow(d)), function(i) {
+    n <- max(1, floor((d$xmax[i] - d$xmin[i]) / spacing))
+    centre <- d$xmin[i] + (seq_len(n) - 0.5) * (d$xmax[i] - d$xmin[i]) / n
+    half <- (d$ymax[i] - d$ymin[i]) * 0.3
+    middle <- (d$ymin[i] + d$ymax[i]) / 2
+    data.frame(
+      group = rep(paste(i, seq_len(n)), each = 3),
+      x = as.vector(rbind(centre - half * d$direction[i], centre + half * d$direction[i],
+                          centre - half * d$direction[i])),
+      y = rep(middle + c(-half, 0, half), n)
+    )
+  }))
+  tubemap_layer(GeomPolygon, heads, aes(x = x, y = y, group = group),
+                utils::modifyList(list(fill = "white", alpha = 0.9), list(...)))
+}
+
+# The branches with no box or tube of their own, such as a walk that starts
+# inside the window, which the caption names in place of a label
+unplaced_branches <- function(tubemap) {
+  tubemap$branches$label[is.na(tubemap$branches$x)]
+}
+
 tubemap_limits <- function(tubemap, xlim, ylim, pad) {
   b <- tubemap$bounds
   list(

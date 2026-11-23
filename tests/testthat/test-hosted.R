@@ -58,3 +58,31 @@ test_that("haplotypes that skip the amylase window are described, and drawn with
   g <- expect_no_warning(read_gfa(url, region = region, haplotypes = haplotypes, context = 29000))
   expect_length(g$tracks, 3)
 })
+
+# The two windows the README folds, with the counts its figures and text give
+test_that("the README's deletion and inversion fold to the branches it shows", {
+  skip_unless_hosted()
+  url <- grep("-chr6-sequences", hosted_walk_files(), value = TRUE, invert = TRUE)[1]
+  del <- expect_no_warning(
+    read_gfa(url, region = "chr1:72,298,000-72,349,000", fold = 1000, cluster = TRUE)
+  )
+  expect_true(del$fold$folded)
+  expect_equal(del$fold$haplotypes, 464)
+  expect_true("deletion 45.5 kb, 306 of 464" %in% del$branches$label)
+  expect_true("insertion 9.3 kb (cluster of 56 lengths, 8.9 kb to 9.5 kb), 129 of 464" %in%
+                del$branches$label)
+  expect_equal(nrow(del$nodes), 8)
+  expect_length(del$tracks, 6)
+  unclustered <- read_gfa(url, region = "chr1:72,298,000-72,349,000", fold = 1000)
+  expect_equal(sum(unclustered$branches$kind == "insertion"), 56)
+  expect_no_error(ggplot2::ggplot_build(autoplot(tubemap_layout(del))))
+
+  inv <- expect_no_warning(read_gfa(url, region = "chr16:75,204,000-75,225,000", fold = 1000))
+  expect_equal(inv$branches$label, "inversion 16.6 kb, 439 of 464")
+  loop <- inv$tubes[inv$tubes$haplotypes == 439, ]
+  expect_equal(loop$walks, 356)
+  expect_equal(c(loop$skipped_bp_min, loop$skipped_bp_max), c(2, 699))
+  tm <- tubemap_layout(inv)
+  expect_true(-1 %in% tm$directions$direction)
+  expect_lt(tm$bounds$maxX - tm$bounds$minX, 2000)
+})

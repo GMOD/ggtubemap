@@ -13,6 +13,8 @@
   xlim = NULL,
   ylim = NULL,
   ruler = nrow(object$ruler) > 0,
+  branches = NROW(object$branches) > 0,
+  direction = NROW(object$directions) > 0,
   ...
 )
 }
@@ -36,6 +38,13 @@ in \code{\link[=coord_tubemap]{coord_tubemap()}}.}
 
 \item{ruler}{Draw \code{\link[=scale_x_tubemap]{scale_x_tubemap()}}'s ruler along the top; by default
 when a track carries coordinates.}
+
+\item{branches}{Label the branches of a folded graph with
+\code{\link[=geom_tubemap_branches]{geom_tubemap_branches()}}; by default when the layout has any. A branch
+with no box or tube of its own is named in the caption.}
+
+\item{direction}{Draw \code{\link[=geom_tubemap_direction]{geom_tubemap_direction()}}'s arrowheads along the
+tubes; by default on a folded graph.}
 
 \item{...}{Unused.}
 }

@@ -19,6 +19,11 @@
 #'   in [coord_tubemap()].
 #' @param ruler Draw [scale_x_tubemap()]'s ruler along the top; by default
 #'   when a track carries coordinates.
+#' @param branches Label the branches of a folded graph with
+#'   [geom_tubemap_branches()]; by default when the layout has any. A branch
+#'   with no box or tube of its own is named in the caption.
+#' @param direction Draw [geom_tubemap_direction()]'s arrowheads along the
+#'   tubes; by default on a folded graph.
 #' @param ... Unused.
 #' @return A ggplot. When neither `haplotypes` nor `reads` maps `fill`, it
 #'   carries [scale_fill_tubemap()], whose legend is dropped past 12
@@ -37,7 +42,9 @@
 autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
                              sequence = object$node_width == "normal",
                              mismatches = sequence, xlim = NULL, ylim = NULL,
-                             ruler = nrow(object$ruler) > 0, ...) {
+                             ruler = nrow(object$ruler) > 0,
+                             branches = NROW(object$branches) > 0,
+                             direction = NROW(object$directions) > 0, ...) {
   levels <- nlevels(object$shapes$haplotype)
   default_fill <- is.null(haplotypes$fill) && is.null(reads$fill)
   if (is.null(haplotypes$fill) && !is.null(reads$fill)) {
@@ -48,18 +55,31 @@ autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
   ggplot() +
     geom_tubemap_haplotypes(object, haplotypes) +
     geom_tubemap_reads(object, reads) +
+    (if (direction) geom_tubemap_direction(object)) +
     geom_tubemap_nodes(object) +
     (if (sequence) geom_tubemap_sequence(object)) +
     (if (mismatches) geom_tubemap_mismatches(object)) +
     geom_tubemap_panel_labels(object) +
+    (if (branches) geom_tubemap_branches(object)) +
     (if (default_fill) {
       scale_fill_tubemap(guide = if (levels > 12) "none" else "legend")
     }) +
     (if (ruler) scale_x_tubemap(object)) +
-    (if (length(object$left_out$haplotype)) labs(caption = left_out_caption(object$left_out))) +
+    labs(caption = tubemap_caption(object, branches)) +
     coord_tubemap(object, xlim = xlim, ylim = ylim) +
     theme_tubemap() +
     (if (ruler) theme(plot.margin = margin(4, ruler_side, 4, ruler_side)))
+}
+
+# What the map leaves out, a line each: the haplotypes with no track, and the
+# branches of a folded graph with nothing of their own to label
+tubemap_caption <- function(tubemap, branches) {
+  unplaced <- if (branches) unplaced_branches(tubemap)
+  lines <- c(
+    if (length(tubemap$left_out$haplotype)) left_out_caption(tubemap$left_out),
+    if (length(unplaced)) paste0("No box of its own: ", paste(unplaced, collapse = "; "))
+  )
+  if (length(lines)) paste(lines, collapse = "\n")
 }
 
 # The haplotypes left out, by reason, at most a few named in each

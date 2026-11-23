@@ -4,9 +4,15 @@ Git tracks the layout bundle `inst/js/tubemap-core.js`. `pnpm bundle` builds it
 from `tools/bridge.js` and the `@jbrowse/tubemap-core` release pinned in
 `package.json`, and writes that version into its header. The bundle also holds
 `tools/walks.js`, the walk-file cut, with `@jbrowse/graph-walks`, and
-`tools/v8-host.mjs` for the web globals R's V8 lacks. R serves the cut every
-byte range and file size it asks for, through `fetch_range()` and
-`fetch_size()`.
+`tools/v8-host.mjs` for the web globals R's V8 lacks, and
+`@jbrowse/graph-fold`, which folds a cut for `read_gfa()`'s `fold`. R serves
+the cut every byte range and file size it asks for, through `fetch_range()`
+and `fetch_size()`.
+
+- `@jbrowse/graph-fold` is not published yet, so `package.json` names its
+  tarball, `file:../../graph-fold/jbrowse-graph-fold-0.0.0.tgz`, beside a
+  checkout of this repo in `src/gmod`. `pnpm install` fails without it, and
+  the dependency becomes a version range once the package is on npm
 
 ggtubemap copies some files from [ggbandage](https://github.com/GMOD/ggbandage):
 `R/import-standalone-*.R`, its byte-range, locus and V8 helpers, and

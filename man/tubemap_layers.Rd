@@ -8,6 +8,8 @@
 \alias{geom_tubemap_sequence}
 \alias{geom_tubemap_mismatches}
 \alias{geom_tubemap_panel_labels}
+\alias{geom_tubemap_branches}
+\alias{geom_tubemap_direction}
 \title{Tube map layers}
 \usage{
 geom_tubemap_haplotypes(tubemap, mapping = NULL, seam = TRUE, ...)
@@ -26,6 +28,10 @@ geom_tubemap_mismatches(
 )
 
 geom_tubemap_panel_labels(tubemap, size = 8)
+
+geom_tubemap_branches(tubemap, mapping = NULL, ...)
+
+geom_tubemap_direction(tubemap, spacing = 60, ...)
 }
 \arguments{
 \item{tubemap}{A \code{\link[=tubemap_layout]{tubemap_layout()}}.}
@@ -45,6 +51,8 @@ sequenceTubeMap hides by default.}
 \item{deletion_fill}{Fill of a deletion's bar.}
 
 \item{size}{Label size in points.}
+
+\item{spacing}{Layout pixels between arrowheads.}
 }
 \description{
 Each layer draws one part of a \code{\link[=tubemap_layout]{tubemap_layout()}}. They take the layout
@@ -79,5 +87,17 @@ substituted bases in text, deletions as grey bars, insertions as \code{*}.
 \item \code{geom_tubemap_panel_labels()}: Each facet panel's label above it, with a
 dashed rule between panels, as sequenceTubeMap draws them. Labels are
 \code{size} points at any scale.
+
+\item \code{geom_tubemap_branches()}: The branches \code{\link[=read_gfa]{read_gfa()}}'s \code{fold} kept, each
+labelled above the map with its kind, size and how many haplotypes carry
+it, such as "deletion 45.5 kb, 306 of 464". A leader runs from the label
+to the branch, and the box of an insertion or inversion is edged in the
+colour of its kind. A cluster's label says how many lengths it stands for
+and their range. Draws nothing for a graph that was not folded.
+
+\item \code{geom_tubemap_direction()}: Arrowheads along the tubes of a folded graph,
+pointing the way each walk runs, so the pass through an inversion reads
+against the reference. A piece of tube whose direction is not known has
+none.
 
 }}

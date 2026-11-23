@@ -16,7 +16,8 @@ tubemap_layout(
   ignore_strand = FALSE,
   mapq_cutoff = NULL,
   facet_by = NULL,
-  curve_steps = 16
+  curve_steps = 16,
+  bases_per_px = NULL
 )
 }
 \arguments{
@@ -27,13 +28,17 @@ a list column, each with a \code{name} and a \code{sequence} of node names, \cod
 for a reverse visit. The first track is the reference.}
 
 \item{reads}{Reads in sequenceTubeMap's extracted form; by default those in
-\code{graph}.}
+\code{graph}. A graph \code{\link[=read_gfa]{read_gfa()}} folded draws none, with a warning: reads
+map to the graph's own nodes, which the fold merged.}
 
 \item{node_width}{How node width follows sequence length: \code{"normal"} draws
 every base, \code{"compressed"} its log, \code{"small"} 1\% of it, and \code{"fixed"} one
-width for all.}
+width for all. A folded graph is drawn \code{"small"} by default, at
+\code{bases_per_px}, so a node's width is its length and a variant's size
+reads off the map.}
 
-\item{merge_nodes}{Merge unbranched runs of nodes into one.}
+\item{merge_nodes}{Merge unbranched runs of nodes into one. \code{FALSE} by
+default on a folded graph, whose nodes the branches name.}
 
 \item{track_width}{Tube width in layout pixels.}
 
@@ -52,11 +57,21 @@ one band per edge.}
 \code{"haplotype_sample"} (the PanSN sample of each haplotype).}
 
 \item{curve_steps}{Straight pieces per Bézier when curves are flattened.}
+
+\item{bases_per_px}{On a folded graph at \code{"small"} width, the bases a layout
+pixel stands for. By default enough for the reference to span about
+1,100 pixels.}
 }
 \value{
 A \code{tubemap} object: a list of data frames (\code{shapes}, \code{tracks},
 \code{nodes}, \code{outlines}, \code{bases}, \code{mismatches}, \code{panels}, \code{ruler}) and the
-\code{bounds}. \code{ruler} holds each node visit of the ruler track, the first
+\code{bounds}. For a folded graph, \code{branches} is the graph's \code{branches} with
+where each is drawn (\code{xmin}, \code{xmax}, \code{x} and \code{y}, \code{NA} for one with no
+box or tube of its own) and where its label goes (\code{label_x}, \code{label_y}),
+and the \code{bounds} hold the labels; \code{tubes} is the graph's \code{tubes}; and
+\code{directions} has a row for each straight piece of a tube whose direction
+is known, 1 with the reference and -1 against it, for
+\code{\link[=geom_tubemap_direction]{geom_tubemap_direction()}}. \code{ruler} holds each node visit of the ruler track, the first
 track with an \code{index_of_first_base}, in coordinate order; it is empty
 when no track has one. \code{left_out} is the graph's \code{left_out}, the
 haplotypes \code{\link[=read_gfa]{read_gfa()}} drew no track for, which \code{\link[=autoplot.tubemap]{autoplot.tubemap()}}

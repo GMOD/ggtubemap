@@ -110,11 +110,15 @@ compact <- function(x) x[!vapply(x, is.null, logical(1))]
 #'   a list column, each with a `name` and a `sequence` of node names, `-name`
 #'   for a reverse visit. The first track is the reference.
 #' @param reads Reads in sequenceTubeMap's extracted form; by default those in
-#'   `graph`.
+#'   `graph`. A graph [read_gfa()] folded draws none, with a warning: reads
+#'   map to the graph's own nodes, which the fold merged.
 #' @param node_width How node width follows sequence length: `"normal"` draws
 #'   every base, `"compressed"` its log, `"small"` 1% of it, and `"fixed"` one
-#'   width for all.
-#' @param merge_nodes Merge unbranched runs of nodes into one.
+#'   width for all. A folded graph is drawn `"small"` by default, at
+#'   `bases_per_px`, so a node's width is its length and a variant's size
+#'   reads off the map.
+#' @param merge_nodes Merge unbranched runs of nodes into one. `FALSE` by
+#'   default on a folded graph, whose nodes the branches name.
 #' @param track_width Tube width in layout pixels.
 #' @param freq_width How a track's `freq` widens its tube: `"log"` or `"linear"`.
 #' @param show_reads Draw the reads.
@@ -125,9 +129,18 @@ compact <- function(x) x[!vapply(x, is.null, logical(1))]
 #' @param facet_by Stack one panel per `"sample_name"`, `"read_group"` or
 #'   `"haplotype_sample"` (the PanSN sample of each haplotype).
 #' @param curve_steps Straight pieces per Bézier when curves are flattened.
+#' @param bases_per_px On a folded graph at `"small"` width, the bases a layout
+#'   pixel stands for. By default enough for the reference to span about
+#'   1,100 pixels.
 #' @return A `tubemap` object: a list of data frames (`shapes`, `tracks`,
 #'   `nodes`, `outlines`, `bases`, `mismatches`, `panels`, `ruler`) and the
-#'   `bounds`. `ruler` holds each node visit of the ruler track, the first
+#'   `bounds`. For a folded graph, `branches` is the graph's `branches` with
+#'   where each is drawn (`xmin`, `xmax`, `x` and `y`, `NA` for one with no
+#'   box or tube of its own) and where its label goes (`label_x`, `label_y`),
+#'   and the `bounds` hold the labels; `tubes` is the graph's `tubes`; and
+#'   `directions` has a row for each straight piece of a tube whose direction
+#'   is known, 1 with the reference and -1 against it, for
+#'   [geom_tubemap_direction()]. `ruler` holds each node visit of the ruler track, the first
 #'   track with an `index_of_first_base`, in coordinate order; it is empty
 #'   when no track has one. `left_out` is the graph's `left_out`, the
 #'   haplotypes [read_gfa()] drew no track for, which [autoplot.tubemap()]
@@ -142,8 +155,19 @@ tubemap_layout <- function(graph, reads = graph$reads,
                            freq_width = c("log", "linear"), show_reads = TRUE,
                            coarsen = FALSE, ignore_strand = FALSE,
                            mapq_cutoff = NULL, facet_by = NULL,
-                           curve_steps = 16) {
-  node_width <- match.arg(node_width)
+                           curve_steps = 16, bases_per_px = NULL) {
+  folded <- isTRUE(graph$fold$folded)
+  node_width <- if (folded && missing(node_width)) "small" else match.arg(node_width)
+  if (folded && missing(merge_nodes)) merge_nodes <- FALSE
+  if (folded && length(reads)) {
+    warning(
+      sprintf("The %d reads are not drawn: they map to the graph's own nodes, which `fold` merged.",
+              NROW(reads)),
+      call. = FALSE
+    )
+    reads <- NULL
+  }
+  scale <- fold_scale(graph, folded && node_width == "small", bases_per_px)
   freq_width <- match.arg(freq_width)
   if (!is.null(facet_by)) {
     facet_by <- match.arg(facet_by, c("sample_name", "read_group", "haplotype_sample"))
@@ -152,7 +176,7 @@ tubemap_layout <- function(graph, reads = graph$reads,
   reads <- if (is.null(reads)) list() else normalize_tracks(reads, "read")
   all <- fill_ids(c(tracks, reads))
   request <- list(
-    nodes = normalize_nodes(graph$nodes),
+    nodes = normalize_nodes(scale_nodes(graph$nodes, scale)),
     tracks = all[seq_along(tracks)],
     reads = all[length(tracks) + seq_along(reads)],
     topology = compact(list(
@@ -176,7 +200,156 @@ tubemap_layout <- function(graph, reads = graph$reads,
   if (is.null(out)) {
     stop("No visible track is left to lay out.", call. = FALSE)
   }
-  new_tubemap(out, node_width, graph$left_out)
+  place_branches(
+    true_lengths(new_tubemap(out, node_width, graph$left_out), graph$nodes, scale),
+    graph
+  )
+}
+
+# tubemap-core's character width, which its small node width counts in: a node
+# is a 100th of its length in characters
+char_width <- 8.401
+
+# The bases a layout pixel stands for on a folded graph at small width: those
+# asked for, or enough for the reference to span about 1,100 pixels, and never
+# fewer than small's own 1%
+fold_scale <- function(graph, scaled, bases_per_px) {
+  if (!is.null(bases_per_px) && !scaled) {
+    stop("`bases_per_px` sets the scale of a folded graph at `node_width = \"small\"`.",
+         call. = FALSE)
+  }
+  if (scaled) {
+    on_reference <- sub("^-", "", graph$tracks[[1]]$sequence)
+    span <- sum(graph$nodes$sequence_length[match(on_reference, graph$nodes$name)])
+    if (is.null(bases_per_px)) max(100 / char_width, ceiling(span / 1100)) else bases_per_px
+  }
+}
+
+# The released layout draws small at 1% alone, so another scale goes in as
+# node lengths that 1% turns into the widths wanted; true_lengths() puts the
+# lengths back
+scale_nodes <- function(nodes, bases_per_px) {
+  if (!is.null(bases_per_px)) {
+    nodes$sequence_length <- nodes$sequence_length * 100 / (bases_per_px * char_width)
+  }
+  nodes
+}
+
+true_lengths <- function(tubemap, nodes, bases_per_px) {
+  if (!is.null(bases_per_px)) {
+    length_of <- function(name) nodes$sequence_length[match(name, nodes$name)]
+    tubemap$nodes$sequence_length <- length_of(tubemap$nodes$name)
+    ruler <- tubemap$ruler
+    if (nrow(ruler)) {
+      ruler$length <- length_of(ruler$node)
+      ruler$start <- ruler$start[1] + cumsum(c(0, ruler$length[-nrow(ruler)]))
+      tubemap$ruler <- ruler
+    }
+    tubemap$bases_per_px <- bases_per_px
+  }
+  tubemap
+}
+
+x_range <- function(shapes) {
+  if (nrow(shapes)) range(shapes$x) else c(NA_real_, NA_real_)
+}
+
+# Where each branch of a folded graph is drawn: the box of its nodes, or for a
+# deletion the gap between the two nodes it steps across and the top of the
+# tube that steps
+branch_anchor <- function(branch, tubemap, tracks) {
+  outlines <- tubemap$outlines[tubemap$outlines$panel == 1, , drop = FALSE]
+  boxes <- outlines[outlines$name %in% branch$nodes[[1]], , drop = FALSE]
+  if (nrow(boxes)) {
+    c(x_range(boxes), min(boxes$y))
+  } else if (is.na(branch$from) || is.na(branch$to)) {
+    rep(NA_real_, 3)
+  } else {
+    ends <- sort(c(x_range(outlines[outlines$name == branch$from, , drop = FALSE]),
+                   x_range(outlines[outlines$name == branch$to, , drop = FALSE])))
+    gap <- ends[2:3]
+    steps <- vapply(tracks, function(t) {
+      at <- sub("^-", "", t$sequence)
+      any(paste(at[-length(at)], at[-1]) %in%
+            c(paste(branch$from, branch$to), paste(branch$to, branch$from)))
+    }, logical(1))
+    tubes <- tubemap$shapes[tubemap$shapes$panel == 1 &
+                              tubemap$shapes$track_id %in% (which(steps) - 1L), ,
+                            drop = FALSE]
+    across <- vapply(split(tubes, tubes$group), function(tube) {
+      if (min(tube$x) <= mean(gap) && max(tube$x) >= mean(gap)) min(tube$y) else NA_real_
+    }, 0)
+    top <- if (all(is.na(across))) NA_real_ else min(across, na.rm = TRUE)
+    c(gap, top)
+  }
+}
+
+# Which way each straight piece of a folded graph's tubes runs, 1 with the
+# reference and -1 against it. A walk with no reverse step runs with it
+# throughout; one with a reverse step is told piece by piece, from the nodes
+# the piece crosses, and a piece that crosses none, or nodes the walk takes
+# both ways, has no row. Neither has a walk the layout turned around
+tube_directions <- function(tubemap, tracks) {
+  shapes <- tubemap$shapes[tubemap$shapes$panel == 1 & tubemap$shapes$shape == "rectangle", ,
+                           drop = FALSE]
+  boxes <- tubemap$outlines[tubemap$outlines$panel == 1, , drop = FALSE]
+  box <- lapply(split(boxes, boxes$name), function(o) c(range(o$x), range(o$y)))
+  turned <- tubemap$tracks$id[tubemap$tracks$is_reverse %in% TRUE]
+  rows <- lapply(split(shapes, shapes$group), function(piece) {
+    steps <- tracks[[piece$track_id[1] + 1]]$sequence
+    reverse <- startsWith(steps, "-")
+    x <- range(piece$x)
+    y <- range(piece$y)
+    crossed <- vapply(box[sub("^-", "", steps)], function(b) {
+      !is.null(b) && x[1] < b[2] && x[2] > b[1] && y[1] >= b[3] && y[2] <= b[4]
+    }, logical(1))
+    way <- if (!any(reverse)) 1 else unique(ifelse(reverse[crossed], -1, 1))
+    if (length(way) == 1 && !piece$track_id[1] %in% turned) {
+      data.frame(track_id = piece$track_id[1], xmin = x[1], xmax = x[2],
+                 ymin = y[1], ymax = y[2], direction = way)
+    }
+  })
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+  out
+}
+
+# Branch labels sit in rows above the map, each centred over its branch where
+# it fits, in text an 80th of the map's width. The
+# bounds grow to hold the rows
+place_branches <- function(tubemap, graph) {
+  branches <- graph$branches
+  if (!is.null(branches)) {
+    b <- tubemap$bounds
+    anchors <- vapply(seq_len(nrow(branches)), function(i) {
+      branch_anchor(branches[i, , drop = FALSE], tubemap, graph$tracks)
+    }, numeric(3))
+    branches$xmin <- anchors[1, ]
+    branches$xmax <- anchors[2, ]
+    branches$x <- (branches$xmin + branches$xmax) / 2
+    branches$y <- anchors[3, ]
+    size <- max(14, (b$maxX - b$minX) / 80)
+    width <- nchar(branches$label) * size * 0.55
+    left <- pmin(pmax(branches$x - width / 2, b$minX), pmax(b$maxX - width, b$minX))
+    row_end <- numeric()
+    branches$label_x <- left + width / 2
+    branches$label_width <- width
+    branches$label_y <- rep(NA_real_, nrow(branches))
+    for (i in which(!is.na(branches$x))) {
+      free <- which(row_end + size < left[i])
+      row <- if (length(free)) free[1] else length(row_end) + 1
+      row_end[row] <- left[i] + width[i]
+      branches$label_y[i] <- b$minY - size * (1.6 * row - 0.6)
+    }
+    tubemap$branches <- branches
+    tubemap$branch_size <- size
+    tubemap$tubes <- graph$tubes
+    tubemap$directions <- tube_directions(tubemap, graph$tracks)
+    if (length(row_end)) {
+      tubemap$bounds$minY <- b$minY - size * 1.6 * length(row_end)
+    }
+  }
+  tubemap
 }
 
 as_frame <- function(columns) {
@@ -240,7 +413,11 @@ new_tubemap <- function(out, node_width, left_out = NULL) {
       ruler = as_frame(out$ruler),
       bounds = out$bounds,
       node_width = node_width,
-      left_out = left_out
+      left_out = left_out,
+      branches = NULL,
+      branch_size = NULL,
+      tubes = NULL,
+      directions = NULL
     ),
     class = "tubemap"
   )

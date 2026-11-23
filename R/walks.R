@@ -1,6 +1,7 @@
 # A region of a walk file, cut in V8 by @jbrowse/graph-walks, which reads the
 # file's directory by its name with .idx after it
-cut_walks <- function(path, region, haplotypes, context) {
+cut_walks <- function(path, region, haplotypes, context, fold = NULL,
+                      cluster = FALSE) {
   check_walk_file(path)
   json <- js_call(
     "cutWalks",
@@ -8,16 +9,18 @@ cut_walks <- function(path, region, haplotypes, context) {
       list(file = path),
       if (!is.null(context)) list(context = context),
       if (length(haplotypes)) list(haplotypes = as.list(haplotypes)),
+      if (!is.null(fold)) list(fold = fold, cluster = cluster),
       parse_region(region)
     ),
     await = TRUE
   )
   out <- jsonlite::fromJSON(json, simplifyVector = FALSE)
-  absent <- left_out(haplotypes, vapply(out$tracks, `[[`, "", "name"),
-                     as_frame(out$absent))
+  drawn <- if (is.null(out$drawn)) vapply(out$tracks, `[[`, "", "name") else unlist(out$drawn)
+  absent <- left_out(haplotypes, drawn, as_frame(out$absent))
   warn_absent(absent, region)
+  warn_unfolded(out$fold, region)
   nodes <- out$nodes
-  list(
+  c(list(
     nodes = data.frame(
       name = unlist(nodes$name),
       seq = vapply(nodes$seq, function(s) if (is.null(s)) NA_character_ else s, ""),
@@ -26,6 +29,7 @@ cut_walks <- function(path, region, haplotypes, context) {
     ),
     tracks = lapply(out$tracks, function(t) {
       t$sequence <- unlist(t$sequence)
+      if (!is.null(t$haplotypes)) t$haplotypes <- unlist(t$haplotypes)
       t
     }),
     left_out = data.frame(
@@ -35,7 +39,68 @@ cut_walks <- function(path, region, haplotypes, context) {
                                    "no walk near here in the file")),
       stringsAsFactors = FALSE
     )
+  ), if (!is.null(out$fold)) {
+    list(fold = out$fold, branches = branch_frame(out$branches, out$fold$haplotypes),
+         tubes = cbind(name = vapply(out$tracks, `[[`, "", "name"), as_frame(out$tubes)))
+  })
+}
+
+# A window graph-fold hands back as it came is drawn unfolded, and says why
+warn_unfolded <- function(fold, region) {
+  if (!is.null(fold) && !fold$folded) {
+    warning(
+      sprintf("%s is drawn unfolded: %s.", region, fold$reason),
+      call. = FALSE
+    )
+  }
+}
+
+# The branches graph-fold kept, one row each in reference order, with the
+# label geom_tubemap_branches() prints
+branch_frame <- function(branches, total) {
+  nodes <- lapply(branches$nodes, function(n) as.character(unlist(n)))
+  out <- as_frame(branches[setdiff(names(branches), "nodes")])
+  if (nrow(out) == 0) {
+    out <- data.frame(
+      kind = character(), description = character(), length = numeric(),
+      inserted_bp = numeric(), deleted_bp = numeric(), ref_start = numeric(),
+      ref_end = numeric(), haplotypes = numeric(), open = logical(),
+      from = character(), to = character(), cluster_members = numeric(),
+      cluster_min_length = numeric(), cluster_max_length = numeric(),
+      stringsAsFactors = FALSE
+    )
+  }
+  out$from <- as.character(out$from)
+  out$to <- as.character(out$to)
+  out$cluster <- !is.na(out$cluster_members)
+  out$total <- rep(total, nrow(out))
+  out$nodes <- I(nodes)
+  out$label <- branch_label(out)
+  out
+}
+
+bp_size <- function(x) {
+  ifelse(x >= 1000,
+         paste(ifelse(x >= 1e5, sprintf("%.0f", x / 1000), sprintf("%.1f", x / 1000)), "kb"),
+         paste(x, "bp"))
+}
+
+# "deletion 45.5 kb, 306 of 464"; a replacement gives both sizes, a cluster
+# how many lengths it stands for and their range, and an inversion the window
+# cuts through says so
+branch_label <- function(b) {
+  size <- ifelse(b$inserted_bp > 0 & b$deleted_bp > 0,
+                 paste(bp_size(b$inserted_bp), "for", bp_size(b$deleted_bp)),
+                 bp_size(b$length))
+  cluster <- ifelse(
+    b$cluster,
+    sprintf(" (cluster of %s lengths, %s to %s)", b$cluster_members,
+            bp_size(b$cluster_min_length), bp_size(b$cluster_max_length)),
+    ""
   )
+  open <- ifelse(b$open, ", cut by the window", "")
+  sprintf("%s %s%s%s, %s of %s", b$description, size, cluster, open,
+          b$haplotypes, b$total)
 }
 
 of_haplotype <- function(names, haplotype) {
