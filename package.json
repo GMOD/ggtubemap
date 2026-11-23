@@ -12,7 +12,7 @@
   },
   "devDependencies": {
     "@jbrowse/graph-walks": "^9.1.0",
-    "@jbrowse/tubemap-core": "2.1.0",
+    "@jbrowse/tubemap-core": "2.1.1",
     "esbuild": "^0.28.2"
   }
 }

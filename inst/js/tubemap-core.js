@@ -1,5 +1,5 @@
 /*
- * @jbrowse/tubemap-core 2.1.0, bundled by tools/bridge.js
+ * @jbrowse/tubemap-core 2.1.1, bundled by tools/bridge.js
  *
  * MIT License
  *
@@ -7954,7 +7954,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.0/node_modules/@jbrowse/tubemap-core/esm/groupBy.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/groupBy.js
   function groupBy(items, key) {
     const groups = /* @__PURE__ */ new Map();
     for (const item of items) {
@@ -7969,7 +7969,51 @@
     return groups;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.0/node_modules/@jbrowse/tubemap-core/esm/panSN.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/minHeap.js
+  var MinHeap = class {
+    constructor(key) {
+      __publicField(this, "items", []);
+      __publicField(this, "key");
+      this.key = key;
+    }
+    get size() {
+      return this.items.length;
+    }
+    push(item) {
+      const { items, key } = this;
+      let i = items.length;
+      items.push(item);
+      while (i > 0 && key(items[i - 1 >> 1]) > key(item)) {
+        items[i] = items[i - 1 >> 1];
+        i = i - 1 >> 1;
+      }
+      items[i] = item;
+    }
+    pop() {
+      const { items, key } = this;
+      const top = items[0];
+      const last = items.pop();
+      if (items.length > 0 && last !== void 0) {
+        let i = 0;
+        let child = this.lesserChild(0);
+        while (child !== void 0 && key(items[child]) < key(last)) {
+          items[i] = items[child];
+          i = child;
+          child = this.lesserChild(i);
+        }
+        items[i] = last;
+      }
+      return top;
+    }
+    lesserChild(i) {
+      const { items, key } = this;
+      const left = 2 * i + 1;
+      const right = left + 1;
+      return left >= items.length ? void 0 : right < items.length && key(items[right]) < key(items[left]) ? right : left;
+    }
+  };
+
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/panSN.js
   var NOT_SAMPLES = /* @__PURE__ */ new Set(["_gbwt_ref", "unknown"]);
   function parsePanSN(name) {
     const [sample, haplotype, contig] = name?.split("#") ?? [];
@@ -7979,7 +8023,7 @@
     return { sample, haplotype: Number(haplotype), contig };
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.0/node_modules/@jbrowse/tubemap-core/esm/layout.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/layout.js
   var READ_FACET_FIELDS = ["read_group", "sample_name"];
   var FACET_FIELDS = [...READ_FACET_FIELDS, "haplotype_sample"];
   var DEFAULT_CHAR_WIDTH = 8.401;
@@ -9007,33 +9051,35 @@
     });
   }
   function increaseOrderForSuccessors(state, startingNode, tabuNode, newOrder) {
+    const orders = state.nodeOrders;
     const increasedOrders = /* @__PURE__ */ new Map();
-    const queue = [[startingNode, newOrder]];
-    let head = 0;
-    while (head < queue.length) {
-      const [currentNode, currentOrder] = queue[head];
-      head += 1;
-      const currentNodeOrder = state.nodeOrders[currentNode];
-      if (currentNodeOrder !== void 0 && currentNodeOrder < currentOrder) {
-        if ((increasedOrders.get(currentNode) ?? -Infinity) < currentOrder) {
-          increasedOrders.set(currentNode, currentOrder);
-          state.nodes[currentNode].successors.forEach((successor) => {
-            if (state.nodeOrders[successor] > currentNodeOrder && successor !== tabuNode) {
-              queue.push([successor, currentOrder + 1]);
-            }
-          });
-          if (currentNode !== startingNode) {
-            state.nodes[currentNode].predecessors.forEach((predecessor) => {
-              if (state.nodeOrders[predecessor] > currentNodeOrder && predecessor !== tabuNode) {
-                queue.push([predecessor, currentOrder + 1]);
-              }
-            });
-          }
+    const pending = new MinHeap((node) => orders[node]);
+    const raise = (node, order) => {
+      const old = orders[node];
+      if (old !== void 0 && old < order && (increasedOrders.get(node) ?? -Infinity) < order) {
+        if (!increasedOrders.has(node)) {
+          pending.push(node);
         }
+        increasedOrders.set(node, order);
+      }
+    };
+    const passOn = (from, to, order) => {
+      for (const next of to) {
+        if (orders[next] > orders[from] && next !== tabuNode) {
+          raise(next, order);
+        }
+      }
+    };
+    raise(startingNode, newOrder);
+    for (let node = pending.pop(); node !== void 0; node = pending.pop()) {
+      const order = increasedOrders.get(node) + 1;
+      passOn(node, state.nodes[node].successors, order);
+      if (node !== startingNode) {
+        passOn(node, state.nodes[node].predecessors, order);
       }
     }
     increasedOrders.forEach((value, key) => {
-      state.nodeOrders[key] = value;
+      orders[key] = value;
     });
   }
   function generateNodeDegree(state) {
@@ -9828,7 +9874,7 @@
     return successor !== 0 && soleNeighbor(pred, successor) !== 0;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.0/node_modules/@jbrowse/tubemap-core/esm/geometry.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/geometry.js
   function compareCurvesByXYStartValue(a, b) {
     return b.xStart - a.xStart || a.yStart - b.yStart;
   }
@@ -9984,7 +10030,7 @@
     return d;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.0/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
   function readMismatches(layout) {
     const { nodes, nodeMap } = layout;
     const out = [];
@@ -10031,7 +10077,7 @@
     return out;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.0/node_modules/@jbrowse/tubemap-core/esm/readColors.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/readColors.js
   var FORWARD_READ_COLORS = Object.freeze([
     "#fb6a4a",
     "#ef3b2c",
