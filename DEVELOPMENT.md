@@ -9,11 +9,6 @@ from `tools/bridge.js` and the `@jbrowse/tubemap-core` release pinned in
 the cut every byte range and file size it asks for, through `fetch_range()`
 and `fetch_size()`.
 
-- `@jbrowse/graph-fold` is not published yet, so `package.json` names its
-  tarball, `file:../../graph-fold/jbrowse-graph-fold-0.0.0.tgz`, beside a
-  checkout of this repo in `src/gmod`. `pnpm install` fails without it, and
-  the dependency becomes a version range once the package is on npm
-
 ggtubemap copies some files from [ggbandage](https://github.com/GMOD/ggbandage):
 `R/import-standalone-*.R`, its byte-range, locus and V8 helpers, and
 `tools/v8-host.mjs`. Each copy's header names the ggbandage commit it came from.

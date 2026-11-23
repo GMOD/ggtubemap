@@ -161,7 +161,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@file+..+..+graph-fold+jbrowse-graph-fold-0.0.0.tgz/node_modules/@jbrowse/graph-fold/esm/chain.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@0.1.0/node_modules/@jbrowse/graph-fold/esm/chain.js
   function runsOf(anchors) {
     const runs = [];
     for (const anchor of anchors) {
@@ -226,7 +226,7 @@
     return runs;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@file+..+..+graph-fold+jbrowse-graph-fold-0.0.0.tgz/node_modules/@jbrowse/graph-fold/esm/cluster.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@0.1.0/node_modules/@jbrowse/graph-fold/esm/cluster.js
   function siteKey({ left, right, inserted }) {
     return `${left}:${right}:${inserted}`;
   }
@@ -249,7 +249,7 @@
     return leaderOf;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@file+..+..+graph-fold+jbrowse-graph-fold-0.0.0.tgz/node_modules/@jbrowse/graph-fold/esm/labels.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@0.1.0/node_modules/@jbrowse/graph-fold/esm/labels.js
   function bpLabel(bp) {
     return bp >= 1e3 ? `${(bp / 1e3).toFixed(bp >= 1e5 ? 0 : 1).replace(/\.0$/, "")} kb` : `${bp} bp`;
   }
@@ -274,7 +274,7 @@
     return `${plural(freq, "haplotype")} on ${plural(walks, "distinct walk")}, ${hidden}`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@file+..+..+graph-fold+jbrowse-graph-fold-0.0.0.tgz/node_modules/@jbrowse/graph-fold/esm/fold.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@0.1.0/node_modules/@jbrowse/graph-fold/esm/fold.js
   function parseStep(step) {
     return step.startsWith("-") ? { name: step.slice(1), reversed: true } : { name: step, reversed: false };
   }

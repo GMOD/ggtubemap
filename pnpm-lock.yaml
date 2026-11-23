@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@jbrowse/graph-fold':
-        specifier: file:../../graph-fold/jbrowse-graph-fold-0.0.0.tgz
-        version: file:../../graph-fold/jbrowse-graph-fold-0.0.0.tgz
+        specifier: ^0.1.0
+        version: 0.1.0
       '@jbrowse/graph-walks':
         specifier: ^9.1.0
         version: 9.1.0
@@ -182,9 +182,8 @@ packages:
   '@gmod/bgzf-filehandle@6.8.5':
     resolution: {integrity: sha512-kVM/7/OSMkUba9PEokm7kZ3jZqXxZdtYNFjZe6S2a48Xpci7SL74dTBwyFAYCoLm5/ynd8Pr9S2Ycy7Fbvjs2A==}
 
-  '@jbrowse/graph-fold@file:../../graph-fold/jbrowse-graph-fold-0.0.0.tgz':
-    resolution: {integrity: sha512-6b8S/wVX2VfCm3v3+TNpLqKpC8nSsRtbXlIpa6iLjzf2UEbzQUZe8cbLkNhQa/4DwyY6JVSrXZTHLS1rqf9GhA==, tarball: file:../../graph-fold/jbrowse-graph-fold-0.0.0.tgz}
-    version: 0.0.0
+  '@jbrowse/graph-fold@0.1.0':
+    resolution: {integrity: sha512-KnJR6phkpl5hKXDjwdETo3MK9Ma9JrLwb94rDb4UK4YWv/tIfa8IEYuRyq9+ge0R0G0jrO38xXr/tgzyEoLG/A==}
 
   '@jbrowse/graph-walks@9.1.0':
     resolution: {integrity: sha512-H+G7WQNjaypsjJB1xwFxIMf14gSC0G7t3uckjl8LNVN44edqGlxS4YDuju3VbAyYHUHjbh22HtaUhfFvykipVA==}
@@ -289,7 +288,7 @@ snapshots:
       generic-filehandle2: 2.5.1
       pako-esm2: 2.0.2
 
-  '@jbrowse/graph-fold@file:../../graph-fold/jbrowse-graph-fold-0.0.0.tgz': {}
+  '@jbrowse/graph-fold@0.1.0': {}
 
   '@jbrowse/graph-walks@9.1.0':
     dependencies:
