@@ -69,9 +69,10 @@ A \code{tubemap} object: a list of data frames (\code{shapes}, \code{tracks},
 where each is drawn (\code{xmin}, \code{xmax}, \code{x} and \code{y}, \code{NA} for one with no
 box or tube of its own) and where its label goes (\code{label_x}, \code{label_y}),
 and the \code{bounds} hold the labels; \code{tubes} is the graph's \code{tubes}; and
-\code{directions} has a row for each straight piece of a tube whose direction
-is known, 1 with the reference and -1 against it, for
-\code{\link[=geom_tubemap_direction]{geom_tubemap_direction()}}. \code{ruler} holds each node visit of the ruler track, the first
+\code{pieces} has a row for each straight piece of a tube, cut where it
+enters and leaves the nodes its walk steps on: whether it \code{reads} a node
+or passes outside one, and its \code{direction}, 1 with the reference, -1
+against it and \code{NA} where it is not known. \code{ruler} holds each node visit of the ruler track, the first
 track with an \code{index_of_first_base}, in coordinate order; it is empty
 when no track has one. \code{left_out} is the graph's \code{left_out}, the
 haplotypes \code{\link[=read_gfa]{read_gfa()}} drew no track for, which \code{\link[=autoplot.tubemap]{autoplot.tubemap()}}

@@ -59,8 +59,8 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #'   reference passes a node more than once, as a pggb graph's can, is not
 #'   folded: a warning says so and the graph comes back as it is.
 #' @param cluster With `fold`, draw insertions or deletions at one site whose
-#'   lengths differ by at most 5% as one branch, which says how many lengths
-#'   it stands for and their range.
+#'   lengths differ by at most 5% as one branch, whose label gives the range
+#'   of lengths it stands for and how many.
 #' @return A list of `nodes` (a data frame of `name` and `seq`, or
 #'   `sequence_length` where a segment's sequence is `*`) and `tracks`, and
 #'   from a walk file `left_out`, a data frame of each `haplotype` that got no
@@ -74,21 +74,27 @@ tubemap_example <- function(name = c("example-6", "brca1", "micb-kir3dl1", "hprc
 #'     `description`, which names an `other`, such as `replacement`
 #'   - `length`, `inserted_bp` and `deleted_bp`
 #'   - `ref_start` and `ref_end`, on the reference
-#'   - `haplotypes`, how many of the `total` carry it
+#'   - `haplotypes`, how many of the `total` carry it, and `tracks`, which
+#'     of the folded tracks do
+#'   - `anchored`, `FALSE` for a branch with no node or step of its own to
+#'     label, such as a walk that ends inside the window
 #'   - `open`, for an inversion the cut runs through
-#'   - `nodes`, the nodes that are its box, and `from` and `to`, the nodes an
-#'     insertion or deletion lies between
+#'   - `nodes`, the nodes that are its box, and `from` and `to`, the nodes on
+#'     either side of it
 #'   - `cluster`, and for a cluster `cluster_members`, `cluster_min_length`
 #'     and `cluster_max_length`
-#'   - `label`, as [geom_tubemap_branches()] prints it
+#'   - `label`, graph-fold's text for it, which [geom_tubemap_branches()]
+#'     prints
 #'
 #'   A folded track stands for every haplotype that takes its steps, and
-#'   lists them in `haplotypes`. They share its route and orientation and
-#'   nothing under the threshold, which `tubes` counts, a row per track:
-#'   `haplotypes`, the distinct `walks` they took before folding, and the
-#'   least, median and most bp a haplotype had inserted or skipped where it
-#'   was merged (`inserted_bp_min`, `inserted_bp_median`, `inserted_bp_max`,
-#'   `skipped_bp_min`, `skipped_bp_median`, `skipped_bp_max`).
+#'   lists them in `haplotypes`; its `name` is their count. They share its
+#'   route and orientation and nothing under the threshold, which `tubes`
+#'   counts, a row per track: `haplotypes`, the distinct `walks` they took
+#'   before folding, and the least, median and most bp by which a haplotype
+#'   differs from the nodes drawn (`folded_away_bp_min`,
+#'   `folded_away_bp_median`, `folded_away_bp_max`), with its two halves, the
+#'   bp inserted and skipped, in the `inserted_bp_` and `skipped_bp_` columns,
+#'   and a `label` that says so in words.
 #' @export
 #' @examples
 #' \dontrun{

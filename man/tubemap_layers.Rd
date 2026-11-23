@@ -10,6 +10,7 @@
 \alias{geom_tubemap_panel_labels}
 \alias{geom_tubemap_branches}
 \alias{geom_tubemap_direction}
+\alias{geom_tubemap_passes}
 \title{Tube map layers}
 \usage{
 geom_tubemap_haplotypes(tubemap, mapping = NULL, seam = TRUE, ...)
@@ -32,6 +33,8 @@ geom_tubemap_panel_labels(tubemap, size = 8)
 geom_tubemap_branches(tubemap, mapping = NULL, ...)
 
 geom_tubemap_direction(tubemap, spacing = 60, ...)
+
+geom_tubemap_passes(tubemap, veil = 0.55)
 }
 \arguments{
 \item{tubemap}{A \code{\link[=tubemap_layout]{tubemap_layout()}}.}
@@ -53,6 +56,9 @@ sequenceTubeMap hides by default.}
 \item{size}{Label size in points.}
 
 \item{spacing}{Layout pixels between arrowheads.}
+
+\item{veil}{How much of a passing tube's colour the veil takes away, from
+0 to 1.}
 }
 \description{
 Each layer draws one part of a \code{\link[=tubemap_layout]{tubemap_layout()}}. They take the layout
@@ -92,12 +98,20 @@ dashed rule between panels, as sequenceTubeMap draws them. Labels are
 labelled above the map with its kind, size and how many haplotypes carry
 it, such as "deletion 45.5 kb, 306 of 464". A leader runs from the label
 to the branch, and the box of an insertion or inversion is edged in the
-colour of its kind. A cluster's label says how many lengths it stands for
-and their range. Draws nothing for a graph that was not folded.
+colour of its kind. The text is graph-fold's, so a cluster's label gives
+the range of lengths it stands for and how many. Draws nothing for a
+graph that was not folded.
 
 \item \code{geom_tubemap_direction()}: Arrowheads along the tubes of a folded graph,
 pointing the way each walk runs, so the pass through an inversion reads
 against the reference. A piece of tube whose direction is not known has
 none.
+
+\item \code{geom_tubemap_passes()}: A veil over each tube of a folded graph where
+it passes outside the nodes its walk steps on, so a tube is solid where
+it reads a node and pale where it only passes one: a deletion's is pale
+over the reference it leaves out, and an inversion's on the two passes
+round the block. Draw the nodes over it with \code{fill = NA}, as
+\code{\link[=autoplot.tubemap]{autoplot.tubemap()}} does for a folded graph.
 
 }}

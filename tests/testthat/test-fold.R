@@ -38,6 +38,10 @@ test_that("fold keeps the variants of its size or more as branches, in reference
   expect_equal(b$from, c("1", "1", "2~3"))
   expect_equal(b$to, c("6~7", "6~7", "5"))
   expect_equal(lengths(b$nodes), c(0, 1, 0))
+  expect_true(all(b$anchored))
+  carried_by <- function(i) g$tracks[[b$tracks[[i]]]]$haplotypes
+  expect_equal(c(carried_by(1), carried_by(2), carried_by(3)),
+               c("DEL#1#chr1", "INS#1#chr1", "SNP#1#chr1"))
   expect_false(any(b$cluster))
   expect_true(all(is.na(b$cluster_members)))
   expect_equal(b$label, c("deletion 4.0 kb, 1 of 4",
@@ -62,6 +66,7 @@ test_that("walks that fold to the same steps are one track that counts and lists
                                    "replacement 2.0 kb for 4.0 kb, 1 of 4"))
   freq <- vapply(g$tracks, `[[`, 0, "freq")
   expect_equal(sum(freq), 4)
+  expect_equal(lengths(lapply(g$tracks, `[[`, "haplotypes")), freq)
   as_reference <- g$tracks[[which(vapply(g$tracks, function(t) "SNP#1#chr1" %in% t$haplotypes, NA))]]
   expect_equal(as_reference$sequence, g$tracks[[1]]$sequence)
 })
@@ -103,28 +108,6 @@ test_that("cluster folds a window with no near-equal alleles as fold alone does"
   expect_equal(clustered$branches, plain$branches)
 })
 
-test_that("a cluster's label gives its member count and size range, and an open inversion says so", {
-  b <- data.frame(
-    description = c("insertion", "inversion", "deletion"),
-    length = c(9264, 16562, 74),
-    inserted_bp = c(9264, 0, 0),
-    deleted_bp = c(0, 0, 74),
-    haplotypes = c(129, 439, 310),
-    total = 464,
-    open = c(FALSE, TRUE, FALSE),
-    cluster = c(TRUE, FALSE, FALSE),
-    cluster_members = c(56, NA, NA),
-    cluster_min_length = c(8866, NA, NA),
-    cluster_max_length = c(9527, NA, NA)
-  )
-  expect_equal(branch_label(b), c(
-    "insertion 9.3 kb (cluster of 56 lengths, 8.9 kb to 9.5 kb), 129 of 464",
-    "inversion 16.6 kb, cut by the window, 439 of 464",
-    "deletion 74 bp, 310 of 464"
-  ))
-  expect_equal(bp_size(c(999, 1000, 45516, 123456)), c("999 bp", "1.0 kb", "45.5 kb", "123 kb"))
-})
-
 test_that("a pggb window whose reference passes each node once folds, by either way in", {
   g <- read_gfa(pggb, region = "chr:1004500-1004961", fold = 50)
   local_mocked_bindings(js_call = revisiting(0))
@@ -136,6 +119,7 @@ test_that("a pggb window whose reference passes each node once folds, by either 
 test_that("a graph that cannot be folded is drawn as it is, with a warning that says why", {
   reason <- "the reference passes 3 nodes of the graph more than once, so a run off it may be a copy of reference sequence and not a variant"
   as_it_is <- read_gfa(pggb, region = "chr:1004500-1004961")
+  tube_columns <- names(read_gfa(pggb, region = "chr:1004500-1004961", fold = 50)$tubes)
   local_mocked_bindings(js_call = revisiting(3))
   expect_warning(
     g <- read_gfa(pggb, region = "chr:1004500-1004961", fold = 50),
@@ -147,8 +131,8 @@ test_that("a graph that cannot be folded is drawn as it is, with a warning that 
   expect_equal(nrow(g$branches), 0)
   expect_equal(g$nodes, as_it_is$nodes)
   expect_equal(g$tracks, as_it_is$tracks)
-  expect_equal(g$tubes$haplotypes, rep(1, 5))
-  expect_equal(g$tubes$skipped_bp_max, rep(0, 5))
+  expect_equal(nrow(g$tubes), 0)
+  expect_named(g$tubes, tube_columns)
   tm <- tubemap_layout(g)
   expect_equal(tm$node_width, "normal")
   expect_equal(nrow(tm$branches), 0)
@@ -209,6 +193,7 @@ test_that("a branch with no box or tube of its own is named in the caption", {
   g <- read_gfa(pggb, region = "chr:1004500-1004961", fold = 50)
   expect_equal(g$branches$description, "walk starts inside the window")
   tm <- tubemap_layout(g)
+  expect_false(g$branches$anchored)
   expect_true(is.na(tm$branches$x))
   expect_length(geom_tubemap_branches(tm), 0)
   expect_equal(autoplot(tm)$labels$caption,
@@ -238,6 +223,8 @@ test_that("tubes counts what each folded track stands for and what the fold hid 
   expect_equal(unlist(snp[c("skipped_bp_min", "skipped_bp_median", "skipped_bp_max")],
                       use.names = FALSE), c(1000, 1000, 1000))
   expect_equal(snp$inserted_bp_max, 0)
+  expect_equal(snp$folded_away_bp_max, 1000)
+  expect_equal(snp$label, "1 haplotype on 1 distinct walk, 1.0 kb folded away in each")
   expect_equal(tubemap_layout(g)$tubes, g$tubes)
 })
 
@@ -253,10 +240,11 @@ inverted <- function() {
     branches = branch_frame(
       list(kind = list("inversion"), description = list("inversion"), length = list(6000),
            inserted_bp = list(0), deleted_bp = list(0), ref_start = list(2000),
-           ref_end = list(8000), haplotypes = list(3), open = list(FALSE), from = list(NULL),
-           to = list(NULL), nodes = list(list("B")), cluster_members = list(NULL),
-           cluster_min_length = list(NULL), cluster_max_length = list(NULL)),
-      4
+           ref_end = list(8000), haplotypes = list(3), total = list(4),
+           anchored = list(TRUE), open = list(FALSE), from = list("A"), to = list("C"),
+           nodes = list(list("B")), tracks = list(list(2)), cluster_members = list(NULL),
+           cluster_min_length = list(NULL), cluster_max_length = list(NULL),
+           label = list("inversion 6.0 kb, 3 of 4"))
     )
   )
 }
@@ -267,20 +255,29 @@ test_that("the pass through an inversion runs against the reference, and the pas
   box <- tm$outlines[tm$outlines$name == "B", ]
   expect_equal(c(tm$branches$xmin, tm$branches$xmax, tm$branches$y),
                c(range(box$x), min(box$y)))
-  d <- tm$directions
+  d <- tm$pieces
   expect_true(all(d$direction[d$track_id == 0] == 1))
+  expect_true(all(d$reads[d$track_id == 0]))
   loop <- d[d$track_id == 1, ]
-  inside <- loop$ymin >= min(box$y) & loop$ymax <= max(box$y) &
+  in_block <- loop$ymin >= min(box$y) & loop$ymax <= max(box$y) &
     loop$xmin >= min(box$x) & loop$xmax <= max(box$x)
-  expect_equal(loop$direction[inside], -1)
-  expect_equal(loop$direction[!inside], c(1, 1))
+  expect_equal(loop$direction[in_block], -1)
+  expect_true(loop$reads[in_block])
+  expect_true(all(loop$direction[!in_block] == 1))
+  under <- loop[!loop$reads, ]
+  expect_equal(nrow(under), 2)
+  expect_true(all(under$xmax > min(box$x) & under$xmin < max(box$x)))
+  expect_true(all(under$ymin > max(box$y) | under$ymax < min(box$y)))
+  expect_equal(sum(loop$reads), 3)
+  expect_equal(nrow(geom_tubemap_passes(tm)$data), sum(!d$reads))
   p <- autoplot(tm)
   expect_no_error(ggplot2::ggplot_gtable(ggplot2::ggplot_build(p)))
   expect_length(autoplot(tm, direction = FALSE)$layers, length(p$layers) - 1)
 })
 
-test_that("only a folded graph has directions", {
+test_that("only a folded graph has tube pieces", {
   tm <- tubemap_layout(tubemap_example("example-6"))
-  expect_null(tm$directions)
+  expect_null(tm$pieces)
   expect_length(geom_tubemap_direction(tm), 0)
+  expect_length(geom_tubemap_passes(tm), 0)
 })

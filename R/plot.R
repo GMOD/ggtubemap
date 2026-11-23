@@ -23,7 +23,9 @@
 #'   [geom_tubemap_branches()]; by default when the layout has any. A branch
 #'   with no box or tube of its own is named in the caption.
 #' @param direction Draw [geom_tubemap_direction()]'s arrowheads along the
-#'   tubes; by default on a folded graph.
+#'   tubes; by default on a folded graph, whose tubes are also drawn solid
+#'   inside the nodes they read and pale where they pass one, by
+#'   [geom_tubemap_passes()].
 #' @param ... Unused.
 #' @return A ggplot. When neither `haplotypes` nor `reads` maps `fill`, it
 #'   carries [scale_fill_tubemap()], whose legend is dropped past 12
@@ -44,7 +46,8 @@ autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
                              mismatches = sequence, xlim = NULL, ylim = NULL,
                              ruler = nrow(object$ruler) > 0,
                              branches = NROW(object$branches) > 0,
-                             direction = NROW(object$directions) > 0, ...) {
+                             direction = !is.null(object$pieces), ...) {
+  folded <- !is.null(object$pieces)
   levels <- nlevels(object$shapes$haplotype)
   default_fill <- is.null(haplotypes$fill) && is.null(reads$fill)
   if (is.null(haplotypes$fill) && !is.null(reads$fill)) {
@@ -55,8 +58,9 @@ autoplot.tubemap <- function(object, haplotypes = NULL, reads = NULL,
   ggplot() +
     geom_tubemap_haplotypes(object, haplotypes) +
     geom_tubemap_reads(object, reads) +
+    (if (folded) geom_tubemap_passes(object)) +
     (if (direction) geom_tubemap_direction(object)) +
-    geom_tubemap_nodes(object) +
+    (if (folded) geom_tubemap_nodes(object, fill = NA) else geom_tubemap_nodes(object)) +
     (if (sequence) geom_tubemap_sequence(object)) +
     (if (mismatches) geom_tubemap_mismatches(object)) +
     geom_tubemap_panel_labels(object) +

@@ -249,6 +249,28 @@
     return leaderOf;
   }
 
+  // node_modules/.pnpm/@jbrowse+graph-fold@file+..+..+graph-fold+jbrowse-graph-fold-0.0.0.tgz/node_modules/@jbrowse/graph-fold/esm/labels.js
+  function bpLabel(bp) {
+    return bp >= 1e3 ? `${(bp / 1e3).toFixed(bp >= 1e5 ? 0 : 1)} kb` : `${bp} bp`;
+  }
+  function plural(count2, noun) {
+    return `${count2.toLocaleString("en-US")} ${noun}${count2 === 1 ? "" : "s"}`;
+  }
+  function branchLabel(branch, haplotypes) {
+    const { cluster, insertedBp, deletedBp, length } = branch;
+    const size = cluster && cluster.minLength !== cluster.maxLength ? `${bpLabel(cluster.minLength)} to ${bpLabel(cluster.maxLength)}` : insertedBp > 0 && deletedBp > 0 ? `${bpLabel(insertedBp)} for ${bpLabel(deletedBp)}` : bpLabel(length);
+    const lengths = cluster ? ` (${plural(cluster.members, "length")})` : "";
+    return `${branch.description} ${size}${lengths}, ${branch.haplotypes} of ${haplotypes}`;
+  }
+  function trackLabel(freq, names) {
+    return freq === 1 && names[0] !== void 0 ? names[0] : plural(freq, "haplotype");
+  }
+  function variationLabel({ freq, variation }) {
+    const { walks, foldedAwayBp } = variation;
+    const hidden = foldedAwayBp.max === 0 ? "nothing folded away" : foldedAwayBp.min === foldedAwayBp.max ? `${bpLabel(foldedAwayBp.max)} folded away in each` : `${bpLabel(foldedAwayBp.min)} to ${bpLabel(foldedAwayBp.max)} folded away in each`;
+    return `${plural(freq, "haplotype")} on ${plural(walks, "distinct walk")}, ${hidden}`;
+  }
+
   // node_modules/.pnpm/@jbrowse+graph-fold@file+..+..+graph-fold+jbrowse-graph-fold-0.0.0.tgz/node_modules/@jbrowse/graph-fold/esm/fold.js
   function parseStep(step) {
     return step.startsWith("-") ? { name: step.slice(1), reversed: true } : { name: step, reversed: false };
@@ -262,67 +284,76 @@
   function trackName(track, index) {
     return track.name ?? `track ${index}`;
   }
+  function spread(amounts) {
+    const sorted = [...amounts].sort((a, b) => a.bp - b.bp);
+    const half = sorted.reduce((sum, a) => sum + a.freq, 0) / 2;
+    let passed = 0;
+    let median = 0;
+    let found = false;
+    for (const { bp, freq } of sorted) {
+      passed += freq;
+      if (!found && passed >= half) {
+        median = bp;
+        found = true;
+      }
+    }
+    const result = {
+      min: sorted[0]?.bp ?? 0,
+      median,
+      max: sorted.at(-1)?.bp ?? 0
+    };
+    return result;
+  }
+  function variationOf(walks) {
+    const result = {
+      walks: walks.length,
+      foldedAwayBp: spread(walks.map((w) => ({ bp: w.insertedBp + w.skippedBp, freq: w.freq }))),
+      insertedBp: spread(walks.map((w) => ({ bp: w.insertedBp, freq: w.freq }))),
+      skippedBp: spread(walks.map((w) => ({ bp: w.skippedBp, freq: w.freq })))
+    };
+    return result;
+  }
+  var noVariation = variationOf([{ insertedBp: 0, skippedBp: 0, freq: 1 }]);
+  function haplotypesOf(tracks) {
+    return tracks.reduce((sum, track) => sum + (track.freq ?? 1), 0);
+  }
   function unfolded(nodes, tracks, threshold, reason) {
-    const lengths = new Map(nodes.map((n) => [n.name, lengthOfNode(n)]));
     const result = {
       folded: false,
       reason,
       threshold,
-      nodes: nodes.map((n) => ({
-        name: n.name,
-        sequenceLength: lengthOfNode(n),
-        kind: "branch"
-      })),
-      tracks: tracks.map((track, id) => ({
-        id,
-        name: trackName(track, id),
-        sequence: track.sequence,
-        freq: track.freq ?? 1,
-        sourceTrackID: id,
-        ...track.indexOfFirstBase === void 0 ? {} : { indexOfFirstBase: track.indexOfFirstBase },
-        names: [trackName(track, id)]
-      })),
-      members: Object.fromEntries(nodes.map((n) => [n.name, [n.name]])),
+      haplotypes: haplotypesOf(tracks),
+      nodes,
+      tracks,
+      members: {},
       branches: [],
-      walks: tracks.map((track, id) => {
-        const bp = track.sequence.reduce((sum, step) => sum + (lengths.get(parseStep(step).name) ?? 0), 0);
-        return {
-          name: trackName(track, id),
-          freq: track.freq ?? 1,
-          track: id,
-          originalBp: bp,
-          foldedBp: bp,
-          insertedBp: 0,
-          skippedBp: 0,
-          clippedBp: 0,
-          steps: []
-        };
-      })
+      walks: []
     };
     return result;
   }
-  function whyUnfoldable(tracks, reference, referenceRevisits) {
+  function whyUnfoldable(nodes, tracks, reference, referenceRevisits) {
     const sequence = tracks[reference]?.sequence ?? [];
     const names = sequence.map((step) => parseStep(step).name);
     const repeats = names.length - new Set(names).size;
-    return sequence.length === 0 ? `there is no reference walk at track ${reference}` : referenceRevisits !== void 0 && referenceRevisits > 0 ? `the reference passes ${referenceRevisits} nodes of the graph more than once, so a run off it may be a copy of reference sequence and not a variant` : repeats > 0 ? `the reference passes ${repeats} nodes of this window more than once, so a run off it may be a copy of reference sequence and not a variant` : void 0;
+    const known = new Set(nodes.map((n) => n.name));
+    const missing = tracks.flatMap((track, index) => {
+      const step = track.sequence.find((s) => !known.has(parseStep(s).name));
+      return step === void 0 ? [] : [
+        `${trackName(track, index)} steps node ${parseStep(step).name}, which is not among the nodes`
+      ];
+    })[0];
+    return sequence.length === 0 ? `there is no reference walk at track ${reference}` : missing ?? (referenceRevisits !== void 0 && referenceRevisits > 0 ? `the reference passes ${referenceRevisits} nodes of the graph more than once, so a run off it may be a copy of reference sequence and not a variant` : repeats > 0 ? `the reference passes ${repeats} nodes of this window more than once, so a run off it may be a copy of reference sequence and not a variant` : void 0);
   }
-  function foldWindow(nodes, tracks, reference, threshold, cluster, tolerance) {
+  function foldWindow(nodes, tracks, reference, threshold, cluster, tolerance, boxed) {
     const lengths = new Map(nodes.map((n) => [n.name, lengthOfNode(n)]));
-    const lengthOf = (name, track) => {
-      const length = lengths.get(name);
-      if (length === void 0) {
-        throw new Error(`${track} steps node ${name}, which is not among the nodes`);
-      }
-      return length;
-    };
+    const lengthOf = (name) => lengths.get(name) ?? 0;
     const refTrack = tracks[reference];
     const refName = trackName(refTrack, reference);
     const refSteps = refTrack.sequence.map(parseStep);
     const refIndex = new Map(refSteps.map((step, i) => [step.name, i]));
     const offsets = [0];
     for (const step of refSteps) {
-      offsets.push(offsets.at(-1) + lengthOf(step.name, refName));
+      offsets.push(offsets.at(-1) + lengthOf(step.name));
     }
     const refBase = refTrack.indexOfFirstBase ?? 0;
     const refPos = (boundary) => refBase + offsets[boundary];
@@ -332,7 +363,7 @@
       const steps = track.sequence.map(parseStep);
       const prefix = [0];
       for (const step of steps) {
-        prefix.push(prefix.at(-1) + lengthOf(step.name, name));
+        prefix.push(prefix.at(-1) + lengthOf(step.name));
       }
       const anchors = steps.flatMap((step, at) => {
         const ref = refIndex.get(step.name);
@@ -458,12 +489,30 @@
       }
       return name;
     };
+    const unusedName = (name) => lengths.has(name) ? unusedName(`${name}'`) : name;
+    const invertedCopy = (name) => {
+      const original = foldedNodes.get(name);
+      const copy = unusedName(`inv:${name}`);
+      if (!foldedNodes.has(copy)) {
+        foldedNodes.set(copy, {
+          ...original,
+          name: copy,
+          kind: "branch",
+          invertedOf: name
+        });
+        members.set(copy, new Set(members.get(name)));
+      }
+      return copy;
+    };
+    const insideInversion = (name, length, at) => branchNode(unusedName(`inv:${name}`), length, at);
     const branches = /* @__PURE__ */ new Map();
+    const carriers = /* @__PURE__ */ new Map();
     const tallies = /* @__PURE__ */ new Map();
-    const carry = (key, freq, branch) => {
+    const carry = (key, walk, branch) => {
       const seen = branches.get(key) ?? branch();
-      seen.haplotypes += freq;
+      seen.haplotypes += walk.freq;
       branches.set(key, seen);
+      carriers.set(key, (carriers.get(key) ?? /* @__PURE__ */ new Set()).add(walk.index));
     };
     const foldedWalks = drawn.map((walk) => {
       const { steps, prefix, runs, freq } = walk;
@@ -499,7 +548,7 @@
           const visit = ownVisit(node, bp, false);
           absorb(visit, from, to);
           visits.push(visit);
-          carry(node, freq, () => ({
+          carry(node, walk, () => ({
             kind: "other",
             description,
             length: bp,
@@ -526,14 +575,14 @@
       const walkEnd = (boundary, leftward, starts) => {
         const unwalked = unwalkedPast(boundary, leftward);
         if (unwalked >= threshold && leftward === (starts !== mostlyReversed)) {
-          carry(`end:${boundary}:${leftward}:${starts}`, freq, () => ({
+          carry(`end:${boundary}:${leftward}:${starts}`, walk, () => ({
             kind: "other",
             description: starts ? "walk starts inside the window" : "walk ends inside the window",
             length: unwalked,
             insertedBp: 0,
             deletedBp: 0,
-            refStart: refPos(leftward ? 0 : boundary),
-            refEnd: refPos(leftward ? boundary : refSteps.length),
+            refStart: refPos(boundary),
+            refEnd: refPos(boundary),
             haplotypes: 0,
             nodes: []
           }));
@@ -552,7 +601,7 @@
           if (before.reversed === run.reversed) {
             const from = Math.min(entered, reached);
             const to = Math.max(entered, reached);
-            carry(`repeat:${from}:${to}:${run.reversed}`, freq, () => ({
+            carry(`repeat:${from}:${to}:${run.reversed}`, walk, () => ({
               kind: "other",
               description: "reference walked twice",
               length: refBp(from, to),
@@ -565,9 +614,10 @@
             }));
           }
         }
+        const boxing = boxed && run.reversed !== mostlyReversed;
         if (run.reversed !== mostlyReversed) {
           const open = r === 0 || r === runs.length - 1;
-          carry(`inversion:${run.start}:${run.end}:${open}`, freq, () => ({
+          carry(`inversion:${run.start}:${run.end}:${open}`, walk, () => ({
             kind: "inversion",
             description: "inversion",
             length: refBp(run.start, run.end),
@@ -576,7 +626,9 @@
             refStart: refPos(run.start),
             refEnd: refPos(run.end),
             haplotypes: 0,
-            nodes: segmentNames(run.start, run.end),
+            nodes: boxed ? segmentNames(run.start, run.end).map(invertedCopy) : segmentNames(run.start, run.end),
+            ...run.start > 0 ? { from: segments[segmentOf[run.start - 1]].name } : {},
+            ...run.end < refSteps.length ? { to: segments[segmentOf[run.end]].name } : {},
             ...open ? { open } : {}
           }));
         }
@@ -598,8 +650,8 @@
             for (let s = segmentOf[from]; s <= segmentOf[to - 1]; s++) {
               const segment = segments[s];
               const visit = {
-                node: segment.name,
-                reversed: run.reversed,
+                node: boxing ? invertedCopy(segment.name) : segment.name,
+                reversed: boxing ? mostlyReversed : run.reversed,
                 length: segment.length,
                 walked: 0,
                 extra: 0,
@@ -611,8 +663,9 @@
           }
           const detour = detours[k / 2];
           if (detour !== void 0 && detour.inserted > 0) {
-            const node = branchNode(detour.right > detour.left ? `ins:${refNameAt(detour.left - 1)}:${detour.inserted}:${refNameAt(detour.right)}` : `ins:${refNameAt(detour.left - 1)}:${detour.inserted}`, detour.inserted, detour);
-            const visit = ownVisit(node, detour.inserted, run.reversed);
+            const name = detour.right > detour.left ? `ins:${refNameAt(detour.left - 1)}:${detour.inserted}:${refNameAt(detour.right)}` : `ins:${refNameAt(detour.left - 1)}:${detour.inserted}`;
+            const node = boxing ? insideInversion(name, detour.inserted, detour) : branchNode(name, detour.inserted, detour);
+            const visit = ownVisit(node, detour.inserted, boxing ? mostlyReversed : run.reversed);
             byPair.set(detour.pair, visit);
             elements.push(visit);
           }
@@ -637,7 +690,11 @@
           const key = `detour:${siteKey(detour)}`;
           const deletedBp = refBp(detour.left, detour.right);
           const node = byPair.get(detour.pair)?.node;
-          carry(key, freq, () => ({
+          const listed = branches.get(key);
+          if (listed !== void 0 && node !== void 0 && !listed.nodes.includes(node)) {
+            listed.nodes.push(node);
+          }
+          carry(key, walk, () => ({
             kind: detour.inserted > 0 && deletedBp > 0 ? "other" : detour.inserted > 0 ? "insertion" : "deletion",
             description: detour.inserted > 0 && deletedBp > 0 ? "replacement" : detour.inserted > 0 ? "insertion" : "deletion",
             length: Math.max(detour.inserted, deletedBp),
@@ -711,72 +768,106 @@
         alleles: alleles.sort((a, b) => b.haplotypes - a.haplotypes || a.refStart - b.refStart || a.insertedBp - b.insertedBp)
       };
     };
-    const branchList = [...branches].map(([key, branch]) => {
+    const groups = /* @__PURE__ */ new Map();
+    foldedWalks.forEach(({ sequence }, w) => {
+      const key = sequence.join();
+      groups.set(key, [...groups.get(key) ?? [], w]);
+    });
+    const trackOfWalk = /* @__PURE__ */ new Map();
+    const refFolded = {
+      ...refTrack,
+      id: 0,
+      name: refName,
+      label: refName,
+      sequence: segments.map((segment) => segment.name),
+      freq: refTrack.freq ?? 1,
+      sourceTrackID: refTrack.sourceTrackID ?? 0,
+      names: [refName],
+      variation: noVariation
+    };
+    const haplotypeTracks = [...groups.values()].map((group, g) => {
+      const held = group.map((w) => foldedWalks[w]);
+      const first = held[0];
+      const id = g + 1;
+      for (const { walk } of held) {
+        trackOfWalk.set(walk.index, id);
+      }
+      const freq = held.reduce((sum, { walk }) => sum + walk.freq, 0);
+      const names = held.map(({ walk }) => walk.name);
+      const track = {
+        ...tracks[first.walk.index],
+        id,
+        name: first.walk.name,
+        label: trackLabel(freq, names),
+        sequence: first.sequence,
+        freq,
+        sourceTrackID: tracks[first.walk.index].sourceTrackID ?? id,
+        names,
+        variation: variationOf(held.map((h) => ({
+          insertedBp: h.insertedBp,
+          skippedBp: h.skippedBp,
+          freq: h.walk.freq
+        })))
+      };
+      return track;
+    });
+    const refLength = offsets.at(-1);
+    const refWalk = {
+      name: refName,
+      freq: refFolded.freq,
+      track: 0,
+      originalBp: refLength,
+      foldedBp: refLength,
+      insertedBp: 0,
+      skippedBp: 0,
+      clippedBp: 0,
+      steps: []
+    };
+    const walkOfInput = new Map(foldedWalks.map(({ walk, sequence: _, ...amounts }) => {
+      const folded = {
+        name: walk.name,
+        freq: walk.freq,
+        track: trackOfWalk.get(walk.index) ?? 0,
+        ...amounts
+      };
+      return [walk.index, folded];
+    }));
+    const branchList = [...branches].map(([key, draft]) => {
       const clustered = clusterOf(key);
       if (clustered !== void 0) {
-        for (const name of branch.nodes) {
+        for (const name of draft.nodes) {
           const node = foldedNodes.get(name);
           if (node !== void 0) {
             node.cluster = clustered.cluster;
           }
         }
       }
-      return { ...branch, ...clustered };
-    });
-    const refFolded = {
-      id: 0,
-      name: refName,
-      sequence: segments.map((segment) => segment.name),
-      freq: refTrack.freq ?? 1,
-      sourceTrackID: 0,
-      ...refTrack.indexOfFirstBase === void 0 ? {} : { indexOfFirstBase: refTrack.indexOfFirstBase },
-      names: [refName]
-    };
-    const distinct = /* @__PURE__ */ new Map();
-    const walkList = foldedWalks.map(({ walk, sequence, ...amounts }) => {
-      const key = sequence.join();
-      const track = distinct.get(key) ?? {
-        id: distinct.size + 1,
-        name: walk.name,
-        sequence,
-        freq: 0,
-        sourceTrackID: distinct.size + 1,
-        names: []
+      const branch = {
+        ...draft,
+        ...clustered,
+        tracks: [
+          ...new Set([...carriers.get(key) ?? []].map((w) => trackOfWalk.get(w) ?? 0))
+        ].sort((a, b) => a - b),
+        anchored: draft.nodes.length > 0 || draft.from !== void 0 && draft.to !== void 0
       };
-      track.freq += walk.freq;
-      track.names.push(walk.name);
-      distinct.set(key, track);
-      return { name: walk.name, freq: walk.freq, track: track.id, ...amounts };
+      return branch;
     });
-    const refLength = offsets.at(-1);
     const result = {
       folded: true,
       threshold,
+      haplotypes: haplotypesOf(tracks),
       nodes: [...foldedNodes.values()],
-      tracks: [refFolded, ...distinct.values()],
+      tracks: [refFolded, ...haplotypeTracks],
       members: Object.fromEntries([...members].map(([name, held]) => [name, [...held]])),
       branches: branchList.sort((a, b) => a.refStart - b.refStart || a.refEnd - b.refEnd),
-      walks: [
-        {
-          name: refName,
-          freq: refFolded.freq,
-          track: 0,
-          originalBp: refLength,
-          foldedBp: refLength,
-          insertedBp: 0,
-          skippedBp: 0,
-          clippedBp: 0,
-          steps: []
-        },
-        ...walkList
-      ]
+      walks: tracks.map((_, index) => walkOfInput.get(index) ?? refWalk)
     };
     return result;
   }
   function foldGraph(nodes, tracks, options = {}) {
-    const { threshold = 50, cluster = false, clusterTolerance = 0.05, reference = 0, referenceRevisits } = options;
-    const reason = whyUnfoldable(tracks, reference, referenceRevisits);
-    return reason === void 0 ? foldWindow(nodes, tracks, reference, threshold, cluster, clusterTolerance) : unfolded(nodes, tracks, threshold, reason);
+    const { threshold = 50, cluster = false, clusterTolerance = 0.05, reference = 0, referenceRevisits, inversions = "walk" } = options;
+    const reason = whyUnfoldable(nodes, tracks, reference, referenceRevisits);
+    return reason === void 0 ? foldWindow(nodes, tracks, reference, threshold, cluster, clusterTolerance, inversions === "box") : unfolded(nodes, tracks, threshold, reason);
   }
 
   // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/util.js
@@ -8580,44 +8671,14 @@
       absent
     };
   }
-  function foldedTrackName({ names, freq }) {
-    return freq > 1 ? `${freq} haplotypes: ${names[0]}, ...` : names[0];
+  function legendNames(tracks) {
+    const count2 = /* @__PURE__ */ new Map();
+    for (const t of tracks) {
+      count2.set(t.label, (count2.get(t.label) ?? 0) + 1);
+    }
+    return tracks.map((t) => count2.get(t.label) > 1 ? `${t.label}: ${t.names[0]}, ...` : t.label);
   }
-  function spread(values) {
-    const sorted = [...values].sort((a, b) => a - b);
-    const middle = (sorted.length - 1) / 2;
-    return {
-      min: sorted[0],
-      median: (sorted[Math.floor(middle)] + sorted[Math.ceil(middle)]) / 2,
-      max: sorted.at(-1)
-    };
-  }
-  function tubeTable(result, tracks) {
-    const tubes = result.tracks.map((_, track) => {
-      const members = result.walks.flatMap(
-        (walk, i) => walk.track === track ? [{ walk, sequence: tracks[i].sequence.join() }] : []
-      );
-      const perHaplotype = (amount) => spread(members.flatMap(({ walk }) => Array(walk.freq).fill(walk[amount])));
-      return {
-        haplotypes: members.reduce((sum, { walk }) => sum + walk.freq, 0),
-        walks: new Set(members.map((m) => m.sequence)).size,
-        inserted: perHaplotype("insertedBp"),
-        skipped: perHaplotype("skippedBp")
-      };
-    });
-    return {
-      track: tubes.map((_, i) => i + 1),
-      haplotypes: tubes.map((t) => t.haplotypes),
-      walks: tubes.map((t) => t.walks),
-      inserted_bp_min: tubes.map((t) => t.inserted.min),
-      inserted_bp_median: tubes.map((t) => t.inserted.median),
-      inserted_bp_max: tubes.map((t) => t.inserted.max),
-      skipped_bp_min: tubes.map((t) => t.skipped.min),
-      skipped_bp_median: tubes.map((t) => t.skipped.median),
-      skipped_bp_max: tubes.map((t) => t.skipped.max)
-    };
-  }
-  function branchTable(branches) {
+  function branchTable(branches, haplotypes) {
     return {
       kind: branches.map((b) => b.kind),
       description: branches.map((b) => b.description),
@@ -8627,50 +8688,92 @@
       ref_start: branches.map((b) => b.refStart),
       ref_end: branches.map((b) => b.refEnd),
       haplotypes: branches.map((b) => b.haplotypes),
+      total: branches.map(() => haplotypes),
+      anchored: branches.map((b) => b.anchored),
       open: branches.map((b) => b.open === true),
       from: branches.map((b) => b.from ?? null),
       to: branches.map((b) => b.to ?? null),
       nodes: branches.map((b) => b.nodes),
+      tracks: branches.map((b) => b.tracks.map((id) => id + 1)),
       cluster_members: branches.map((b) => b.cluster?.members ?? null),
       cluster_min_length: branches.map((b) => b.cluster?.minLength ?? null),
-      cluster_max_length: branches.map((b) => b.cluster?.maxLength ?? null)
+      cluster_max_length: branches.map((b) => b.cluster?.maxLength ?? null),
+      label: branches.map((b) => branchLabel(b, haplotypes))
     };
   }
+  function tubeTable(tracks, names) {
+    const spread2 = (amount, stat) => tracks.map((t) => t.variation[amount][stat]);
+    return {
+      name: names,
+      track: tracks.map((t) => t.id + 1),
+      haplotypes: tracks.map((t) => t.freq),
+      walks: tracks.map((t) => t.variation.walks),
+      folded_away_bp_min: spread2("foldedAwayBp", "min"),
+      folded_away_bp_median: spread2("foldedAwayBp", "median"),
+      folded_away_bp_max: spread2("foldedAwayBp", "max"),
+      inserted_bp_min: spread2("insertedBp", "min"),
+      inserted_bp_median: spread2("insertedBp", "median"),
+      inserted_bp_max: spread2("insertedBp", "max"),
+      skipped_bp_min: spread2("skippedBp", "min"),
+      skipped_bp_median: spread2("skippedBp", "median"),
+      skipped_bp_max: spread2("skippedBp", "max"),
+      label: tracks.map((t) => variationLabel(t))
+    };
+  }
+  function distinctWalks(tracks) {
+    const groups = /* @__PURE__ */ new Map();
+    tracks.forEach((t, i) => {
+      const key = i === 0 ? "" : t.sequence.join();
+      const group = groups.get(key);
+      if (group) {
+        group.freq += 1;
+        group.members.push(t.name);
+      } else {
+        groups.set(key, {
+          name: t.name,
+          sequence: t.sequence,
+          indexOfFirstBase: t.index_of_first_base,
+          freq: 1,
+          members: [t.name]
+        });
+      }
+    });
+    return [...groups.values()];
+  }
   function foldedWindow(nodes, tracks, options) {
+    const walks = distinctWalks(tracks);
     const result = foldGraph(
       nodes.name.map((name, i) => ({ name, sequenceLength: nodes.sequence_length[i] })),
-      tracks.map((t) => ({
-        name: t.name,
-        sequence: t.sequence,
-        indexOfFirstBase: t.index_of_first_base
-      })),
+      walks,
       options
     );
     const fold = {
       folded: result.folded,
-      reason: result.reason ?? null,
+      reason: result.folded ? null : result.reason,
       threshold: result.threshold,
       cluster: options.cluster === true,
-      haplotypes: result.tracks.reduce((sum, t) => sum + t.freq, 0),
-      walks: tracks.length
+      haplotypes: result.haplotypes
     };
+    const names = result.folded ? legendNames(result.tracks) : [];
     return result.folded ? {
       nodes: {
         name: result.nodes.map((n) => n.name),
         seq: result.nodes.map(() => null),
         sequence_length: result.nodes.map((n) => n.sequenceLength)
       },
-      tracks: result.tracks.map((t) => ({
-        name: foldedTrackName(t),
+      tracks: result.tracks.map((t, i) => ({
+        name: names[i],
         sequence: t.sequence,
         ...t.indexOfFirstBase === void 0 ? {} : { index_of_first_base: t.indexOfFirstBase },
         freq: t.freq,
-        haplotypes: t.names
+        haplotypes: result.walks.flatMap(
+          (walk, w) => walk.track === t.id ? walks[w].members : []
+        )
       })),
       fold,
-      branches: branchTable(result.branches),
-      tubes: tubeTable(result, tracks)
-    } : { nodes, tracks, fold, branches: branchTable([]), tubes: tubeTable(result, tracks) };
+      branches: branchTable(result.branches, result.haplotypes),
+      tubes: tubeTable(result.tracks, names)
+    } : { nodes, tracks, fold, branches: branchTable([], result.haplotypes), tubes: tubeTable([], []) };
   }
   function absentDepartures(fragments, departures) {
     const drawn = new Set(fragments.map((f) => f.name));

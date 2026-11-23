@@ -14,7 +14,7 @@
   ylim = NULL,
   ruler = nrow(object$ruler) > 0,
   branches = NROW(object$branches) > 0,
-  direction = NROW(object$directions) > 0,
+  direction = !is.null(object$pieces),
   ...
 )
 }
@@ -44,7 +44,9 @@ when a track carries coordinates.}
 with no box or tube of its own is named in the caption.}
 
 \item{direction}{Draw \code{\link[=geom_tubemap_direction]{geom_tubemap_direction()}}'s arrowheads along the
-tubes; by default on a folded graph.}
+tubes; by default on a folded graph, whose tubes are also drawn solid
+inside the nodes they read and pale where they pass one, by
+\code{\link[=geom_tubemap_passes]{geom_tubemap_passes()}}.}
 
 \item{...}{Unused.}
 }

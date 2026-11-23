@@ -69,7 +69,7 @@ test_that("the README's deletion and inversion fold to the branches it shows", {
   expect_true(del$fold$folded)
   expect_equal(del$fold$haplotypes, 464)
   expect_true("deletion 45.5 kb, 306 of 464" %in% del$branches$label)
-  expect_true("insertion 9.3 kb (cluster of 56 lengths, 8.9 kb to 9.5 kb), 129 of 464" %in%
+  expect_true("insertion 8.9 kb to 9.5 kb (56 lengths), 129 of 464" %in%
                 del$branches$label)
   expect_equal(nrow(del$nodes), 8)
   expect_length(del$tracks, 6)
@@ -81,8 +81,13 @@ test_that("the README's deletion and inversion fold to the branches it shows", {
   expect_equal(inv$branches$label, "inversion 16.6 kb, 439 of 464")
   loop <- inv$tubes[inv$tubes$haplotypes == 439, ]
   expect_equal(loop$walks, 356)
-  expect_equal(c(loop$skipped_bp_min, loop$skipped_bp_max), c(2, 699))
+  expect_equal(loop$name, "439 haplotypes")
+  expect_equal(loop$label,
+               "439 haplotypes on 356 distinct walks, 8 bp to 795 bp folded away in each")
+  expect_equal(c(loop$folded_away_bp_min, loop$folded_away_bp_max), c(8, 795))
   tm <- tubemap_layout(inv)
-  expect_true(-1 %in% tm$directions$direction)
+  against <- tm$pieces[tm$pieces$direction %in% -1, ]
+  expect_true(nrow(against) > 0 && all(against$reads))
+  expect_equal(sum(!tm$pieces$reads & tm$pieces$track_id == inv$branches$tracks[[1]] - 1), 2)
   expect_lt(tm$bounds$maxX - tm$bounds$minX, 2000)
 })

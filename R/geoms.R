@@ -226,8 +226,9 @@ branch_colours <- c(insertion = "#1f77b4", deletion = "#d62728",
 #'   labelled above the map with its kind, size and how many haplotypes carry
 #'   it, such as "deletion 45.5 kb, 306 of 464". A leader runs from the label
 #'   to the branch, and the box of an insertion or inversion is edged in the
-#'   colour of its kind. A cluster's label says how many lengths it stands for
-#'   and their range. Draws nothing for a graph that was not folded.
+#'   colour of its kind. The text is graph-fold's, so a cluster's label gives
+#'   the range of lengths it stands for and how many. Draws nothing for a
+#'   graph that was not folded.
 #' @export
 geom_tubemap_branches <- function(tubemap, mapping = NULL, ...) {
   branches <- tubemap$branches
@@ -272,8 +273,9 @@ geom_tubemap_branches <- function(tubemap, mapping = NULL, ...) {
 #' @param spacing Layout pixels between arrowheads.
 #' @export
 geom_tubemap_direction <- function(tubemap, spacing = 60, ...) {
-  d <- tubemap$directions
-  d <- d[d$ymax - d$ymin >= 8 & d$xmax - d$xmin >= spacing / 2, , drop = FALSE]
+  d <- tubemap$pieces
+  d <- d[!is.na(d$direction) & d$ymax - d$ymin >= 8 & d$xmax - d$xmin >= spacing / 2, ,
+         drop = FALSE]
   if (NROW(d) == 0) {
     return(list())
   }
@@ -291,6 +293,25 @@ geom_tubemap_direction <- function(tubemap, spacing = 60, ...) {
   }))
   tubemap_layer(GeomPolygon, heads, aes(x = x, y = y, group = group),
                 utils::modifyList(list(fill = "white", alpha = 0.9), list(...)))
+}
+
+#' @describeIn tubemap_layers A veil over each tube of a folded graph where
+#'   it passes outside the nodes its walk steps on, so a tube is solid where
+#'   it reads a node and pale where it only passes one: a deletion's is pale
+#'   over the reference it leaves out, and an inversion's on the two passes
+#'   round the block. Draw the nodes over it with `fill = NA`, as
+#'   [autoplot.tubemap()] does for a folded graph.
+#' @param veil How much of a passing tube's colour the veil takes away, from
+#'   0 to 1.
+#' @export
+geom_tubemap_passes <- function(tubemap, veil = 0.55) {
+  passes <- tubemap$pieces[!tubemap$pieces$reads %in% TRUE, , drop = FALSE]
+  if (NROW(passes) == 0) {
+    return(list())
+  }
+  tubemap_layer(GeomRect, passes,
+                aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+                list(fill = "white", alpha = veil))
 }
 
 # The branches with no box or tube of their own, such as a walk that starts

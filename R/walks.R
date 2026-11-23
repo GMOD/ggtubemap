@@ -40,8 +40,8 @@ cut_walks <- function(path, region, haplotypes, context, fold = NULL,
       stringsAsFactors = FALSE
     )
   ), if (!is.null(out$fold)) {
-    list(fold = out$fold, branches = branch_frame(out$branches, out$fold$haplotypes),
-         tubes = cbind(name = vapply(out$tracks, `[[`, "", "name"), as_frame(out$tubes)))
+    list(fold = out$fold, branches = branch_frame(out$branches),
+         tubes = tube_frame(out$tubes))
   })
 }
 
@@ -55,52 +55,41 @@ warn_unfolded <- function(fold, region) {
   }
 }
 
-# The branches graph-fold kept, one row each in reference order, with the
-# label geom_tubemap_branches() prints
-branch_frame <- function(branches, total) {
-  nodes <- lapply(branches$nodes, function(n) as.character(unlist(n)))
-  out <- as_frame(branches[setdiff(names(branches), "nodes")])
+# The branches graph-fold kept, one row each in reference order, with
+# graph-fold's label for each, which geom_tubemap_branches() prints
+branch_frame <- function(branches) {
+  lists <- c("nodes", "tracks")
+  out <- as_frame(branches[setdiff(names(branches), lists)])
   if (nrow(out) == 0) {
     out <- data.frame(
       kind = character(), description = character(), length = numeric(),
       inserted_bp = numeric(), deleted_bp = numeric(), ref_start = numeric(),
-      ref_end = numeric(), haplotypes = numeric(), open = logical(),
-      from = character(), to = character(), cluster_members = numeric(),
-      cluster_min_length = numeric(), cluster_max_length = numeric(),
+      ref_end = numeric(), haplotypes = numeric(), total = numeric(),
+      anchored = logical(), open = logical(), from = character(), to = character(),
+      cluster_members = numeric(), cluster_min_length = numeric(),
+      cluster_max_length = numeric(), label = character(),
       stringsAsFactors = FALSE
     )
   }
   out$from <- as.character(out$from)
   out$to <- as.character(out$to)
   out$cluster <- !is.na(out$cluster_members)
-  out$total <- rep(total, nrow(out))
-  out$nodes <- I(nodes)
-  out$label <- branch_label(out)
+  out$nodes <- I(lapply(branches$nodes, function(n) as.character(unlist(n))))
+  out$tracks <- I(lapply(branches$tracks, function(t) as.integer(unlist(t))))
   out
 }
 
-bp_size <- function(x) {
-  ifelse(x >= 1000,
-         paste(ifelse(x >= 1e5, sprintf("%.0f", x / 1000), sprintf("%.1f", x / 1000)), "kb"),
-         paste(x, "bp"))
-}
-
-# "deletion 45.5 kb, 306 of 464"; a replacement gives both sizes, a cluster
-# how many lengths it stands for and their range, and an inversion the window
-# cuts through says so
-branch_label <- function(b) {
-  size <- ifelse(b$inserted_bp > 0 & b$deleted_bp > 0,
-                 paste(bp_size(b$inserted_bp), "for", bp_size(b$deleted_bp)),
-                 bp_size(b$length))
-  cluster <- ifelse(
-    b$cluster,
-    sprintf(" (cluster of %s lengths, %s to %s)", b$cluster_members,
-            bp_size(b$cluster_min_length), bp_size(b$cluster_max_length)),
-    ""
-  )
-  open <- ifelse(b$open, ", cut by the window", "")
-  sprintf("%s %s%s%s, %s of %s", b$description, size, cluster, open,
-          b$haplotypes, b$total)
+# What each folded track stands for and hides; no rows for a graph not folded
+tube_frame <- function(tubes) {
+  out <- as_frame(tubes)
+  if (nrow(out) == 0) {
+    out <- as.data.frame(c(
+      list(name = character(), track = integer()),
+      lapply(tubes[setdiff(names(tubes), c("name", "track", "label"))], function(x) numeric()),
+      list(label = character())
+    ), stringsAsFactors = FALSE)
+  }
+  out
 }
 
 of_haplotype <- function(names, haplotype) {

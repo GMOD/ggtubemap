@@ -152,8 +152,9 @@ wide, so the first picture shows all of it at 1.2% and the second its first
 
 ![The first 1,700 of those 113,671 layout pixels: a bubble every few dozen bases](man/figures/fold-deletion-before-crop.png)
 
-`fold` gives the size in bp at which a variant is kept. `@jbrowse/graph-fold`
-merges every smaller bubble into the reference, so the nodes left are the stretches of reference
+`fold` gives the size in bp at which a variant is kept.
+[@jbrowse/graph-fold](https://github.com/GMOD/graph-fold) merges every smaller
+bubble into the reference, so the nodes left are the stretches of reference
 between the breakpoints of the variants kept, and haplotypes that then take
 the same steps share one tube, as wide as the log of their count.
 
@@ -171,21 +172,25 @@ autoplot(tubemap_layout(del))
   `bases_per_px` sets the scale
 - `del$branches` has a row for each variant kept: `kind`, `length`,
   `inserted_bp`, `deleted_bp`, `ref_start`, `ref_end`, how many `haplotypes`
-  of the `total` carry it, and the `label` drawn.
-  `geom_tubemap_branches()` draws the labels, and `autoplot()` adds it
+  of the `total` carry it, in which `tracks`, and the `label` drawn, which is
+  graph-fold's text. `geom_tubemap_branches()` draws the labels, and
+  `autoplot()` adds it
 - `cluster = TRUE` draws alleles at one site whose lengths differ by at most
   5% as one branch. The insertion here is 56 lengths from 8.9 to 9.5 kb, and
   its label says so; without `cluster` each length is a box of its own
 - A branch with no box or tube of its own, such as a walk that starts inside
   the window, is named in the caption
+- A tube is solid where it reads a node and pale where it only passes one,
+  as the deletion's is over the 39 kb it leaves out
 - A tube stands for every haplotype that shares its route and orientation,
-  not for identical ones: `del$tubes` counts, for each, the distinct walks
-  they took before folding and the least, median and most bp the fold hid in
-  one
+  not for identical ones, and the legend gives their count. `del$tubes`
+  counts, for each, the distinct walks they took before folding and the
+  least, median and most bp folded away in one
 
 An inversion stays a block the walk takes in reverse. Of 464 haplotypes, 439
 pass these 16.6 kb of chr16 against the reference: their tube runs under the
-block to its far end, turns, comes back through it, turns again and goes on.
+block to its far end, turns, comes back through it, turns again and goes on,
+pale on the two passes under the block and solid on the pass back through it.
 `geom_tubemap_direction()`, which `autoplot()` adds to a folded graph, points
 an arrowhead along each tube the way its walk runs.
 
@@ -201,9 +206,9 @@ Before folding, this window is 1,653 nodes and 83,329 pixels wide. Its first
 
 ![The first 1,250 of the 83,329 layout pixels of the chr16 window before folding](man/figures/fold-inversion-before-crop.png)
 
-The 439-haplotype tube is 356 distinct walks, each with 2 to 699 bp skipped
-under the threshold, as `inv$tubes` counts; 26 of them carry a 584 bp deletion
-that `fold = 50` draws.
+`inv$tubes` says what that tube hides: 439 haplotypes on 356 distinct walks,
+8 bp to 795 bp folded away in each. 26 of them carry a 584 bp deletion that
+`fold = 50` draws.
 
 What `fold` does not do:
 

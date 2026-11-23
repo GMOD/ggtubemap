@@ -138,9 +138,10 @@ compact <- function(x) x[!vapply(x, is.null, logical(1))]
 #'   where each is drawn (`xmin`, `xmax`, `x` and `y`, `NA` for one with no
 #'   box or tube of its own) and where its label goes (`label_x`, `label_y`),
 #'   and the `bounds` hold the labels; `tubes` is the graph's `tubes`; and
-#'   `directions` has a row for each straight piece of a tube whose direction
-#'   is known, 1 with the reference and -1 against it, for
-#'   [geom_tubemap_direction()]. `ruler` holds each node visit of the ruler track, the first
+#'   `pieces` has a row for each straight piece of a tube, cut where it
+#'   enters and leaves the nodes its walk steps on: whether it `reads` a node
+#'   or passes outside one, and its `direction`, 1 with the reference, -1
+#'   against it and `NA` where it is not known. `ruler` holds each node visit of the ruler track, the first
 #'   track with an `index_of_first_base`, in coordinate order; it is empty
 #'   when no track has one. `left_out` is the graph's `left_out`, the
 #'   haplotypes [read_gfa()] drew no track for, which [autoplot.tubemap()]
@@ -257,24 +258,19 @@ x_range <- function(shapes) {
 # Where each branch of a folded graph is drawn: the box of its nodes, or for a
 # deletion the gap between the two nodes it steps across and the top of the
 # tube that steps
-branch_anchor <- function(branch, tubemap, tracks) {
+branch_anchor <- function(branch, tubemap) {
   outlines <- tubemap$outlines[tubemap$outlines$panel == 1, , drop = FALSE]
   boxes <- outlines[outlines$name %in% branch$nodes[[1]], , drop = FALSE]
-  if (nrow(boxes)) {
-    c(x_range(boxes), min(boxes$y))
-  } else if (is.na(branch$from) || is.na(branch$to)) {
+  if (!branch$anchored) {
     rep(NA_real_, 3)
+  } else if (nrow(boxes)) {
+    c(x_range(boxes), min(boxes$y))
   } else {
     ends <- sort(c(x_range(outlines[outlines$name == branch$from, , drop = FALSE]),
                    x_range(outlines[outlines$name == branch$to, , drop = FALSE])))
     gap <- ends[2:3]
-    steps <- vapply(tracks, function(t) {
-      at <- sub("^-", "", t$sequence)
-      any(paste(at[-length(at)], at[-1]) %in%
-            c(paste(branch$from, branch$to), paste(branch$to, branch$from)))
-    }, logical(1))
     tubes <- tubemap$shapes[tubemap$shapes$panel == 1 &
-                              tubemap$shapes$track_id %in% (which(steps) - 1L), ,
+                              tubemap$shapes$track_id %in% (branch$tracks[[1]] - 1L), ,
                             drop = FALSE]
     across <- vapply(split(tubes, tubes$group), function(tube) {
       if (min(tube$x) <= mean(gap) && max(tube$x) >= mean(gap)) min(tube$y) else NA_real_
@@ -284,12 +280,16 @@ branch_anchor <- function(branch, tubemap, tracks) {
   }
 }
 
-# Which way each straight piece of a folded graph's tubes runs, 1 with the
-# reference and -1 against it. A walk with no reverse step runs with it
-# throughout; one with a reverse step is told piece by piece, from the nodes
-# the piece crosses, and a piece that crosses none, or nodes the walk takes
-# both ways, has no row. Neither has a walk the layout turned around
-tube_directions <- function(tubemap, tracks) {
+# The straight pieces of a folded graph's tubes, cut where they enter and
+# leave the nodes their walk steps on: `reads` where a piece is inside such a
+# node and not where it passes outside one, and `direction` 1 with the
+# reference, -1 against it and NA where it is not known. A walk with no
+# reverse step runs with the reference throughout; one with a reverse step is
+# told rectangle by rectangle from the nodes it reads, and not at all where
+# those disagree or the layout turned the walk around. A stretch outside its
+# own nodes passes a node only where it runs `stub` pixels or more beside
+# one; the stretch between two neighbouring nodes passes none and has no row
+tube_pieces <- function(tubemap, tracks, stub = 20) {
   shapes <- tubemap$shapes[tubemap$shapes$panel == 1 & tubemap$shapes$shape == "rectangle", ,
                            drop = FALSE]
   boxes <- tubemap$outlines[tubemap$outlines$panel == 1, , drop = FALSE]
@@ -300,14 +300,30 @@ tube_directions <- function(tubemap, tracks) {
     reverse <- startsWith(steps, "-")
     x <- range(piece$x)
     y <- range(piece$y)
-    crossed <- vapply(box[sub("^-", "", steps)], function(b) {
+    stepped <- box[sub("^-", "", steps)]
+    read <- vapply(stepped, function(b) {
       !is.null(b) && x[1] < b[2] && x[2] > b[1] && y[1] >= b[3] && y[2] <= b[4]
     }, logical(1))
-    way <- if (!any(reverse)) 1 else unique(ifelse(reverse[crossed], -1, 1))
-    if (length(way) == 1 && !piece$track_id[1] %in% turned) {
-      data.frame(track_id = piece$track_id[1], xmin = x[1], xmax = x[2],
-                 ymin = y[1], ymax = y[2], direction = way)
-    }
+    way <- if (!any(reverse)) 1 else unique(ifelse(reverse[read], -1, 1))
+    inside <- unique(do.call(rbind, c(list(matrix(numeric(), ncol = 2)),
+                                      lapply(stepped[read], function(b) {
+      c(max(x[1], b[1]), min(x[2], b[2]))
+    }))))
+    inside <- inside[order(inside[, 1]), , drop = FALSE]
+    cuts <- c(x[1], t(inside), x[2])
+    spans <- data.frame(xmin = cuts[-length(cuts)], xmax = cuts[-1],
+                        reads = rep(c(FALSE, TRUE), length.out = length(cuts) - 1))
+    beside <- vapply(seq_len(nrow(spans)), function(i) {
+      any(vapply(box, function(b) min(spans$xmax[i], b[2]) - max(spans$xmin[i], b[1]) > stub,
+                 logical(1)))
+    }, logical(1))
+    spans <- spans[spans$xmax > spans$xmin & (spans$reads | beside), , drop = FALSE]
+    cbind(
+      track_id = rep(piece$track_id[1], nrow(spans)), spans,
+      ymin = rep(y[1], nrow(spans)), ymax = rep(y[2], nrow(spans)),
+      direction = rep(if (length(way) == 1 && !piece$track_id[1] %in% turned) way else NA_real_,
+                      nrow(spans))
+    )
   })
   out <- do.call(rbind, rows)
   rownames(out) <- NULL
@@ -322,7 +338,7 @@ place_branches <- function(tubemap, graph) {
   if (!is.null(branches)) {
     b <- tubemap$bounds
     anchors <- vapply(seq_len(nrow(branches)), function(i) {
-      branch_anchor(branches[i, , drop = FALSE], tubemap, graph$tracks)
+      branch_anchor(branches[i, , drop = FALSE], tubemap)
     }, numeric(3))
     branches$xmin <- anchors[1, ]
     branches$xmax <- anchors[2, ]
@@ -344,7 +360,7 @@ place_branches <- function(tubemap, graph) {
     tubemap$branches <- branches
     tubemap$branch_size <- size
     tubemap$tubes <- graph$tubes
-    tubemap$directions <- tube_directions(tubemap, graph$tracks)
+    tubemap$pieces <- tube_pieces(tubemap, graph$tracks)
     if (length(row_end)) {
       tubemap$bounds$minY <- b$minY - size * 1.6 * length(row_end)
     }
@@ -417,7 +433,7 @@ new_tubemap <- function(out, node_width, left_out = NULL) {
       branches = NULL,
       branch_size = NULL,
       tubes = NULL,
-      directions = NULL
+      pieces = NULL
     ),
     class = "tubemap"
   )

@@ -43,8 +43,8 @@ reference passes a node more than once, as a pggb graph's can, is not
 folded: a warning says so and the graph comes back as it is.}
 
 \item{cluster}{With \code{fold}, draw insertions or deletions at one site whose
-lengths differ by at most 5\% as one branch, which says how many lengths
-it stands for and their range.}
+lengths differ by at most 5\% as one branch, whose label gives the range
+of lengths it stands for and how many.}
 }
 \value{
 A list of \code{nodes} (a data frame of \code{name} and \code{seq}, or
@@ -61,22 +61,28 @@ order:
 \code{description}, which names an \code{other}, such as \code{replacement}
 \item \code{length}, \code{inserted_bp} and \code{deleted_bp}
 \item \code{ref_start} and \code{ref_end}, on the reference
-\item \code{haplotypes}, how many of the \code{total} carry it
+\item \code{haplotypes}, how many of the \code{total} carry it, and \code{tracks}, which
+of the folded tracks do
+\item \code{anchored}, \code{FALSE} for a branch with no node or step of its own to
+label, such as a walk that ends inside the window
 \item \code{open}, for an inversion the cut runs through
-\item \code{nodes}, the nodes that are its box, and \code{from} and \code{to}, the nodes an
-insertion or deletion lies between
+\item \code{nodes}, the nodes that are its box, and \code{from} and \code{to}, the nodes on
+either side of it
 \item \code{cluster}, and for a cluster \code{cluster_members}, \code{cluster_min_length}
 and \code{cluster_max_length}
-\item \code{label}, as \code{\link[=geom_tubemap_branches]{geom_tubemap_branches()}} prints it
+\item \code{label}, graph-fold's text for it, which \code{\link[=geom_tubemap_branches]{geom_tubemap_branches()}}
+prints
 }
 
 A folded track stands for every haplotype that takes its steps, and
-lists them in \code{haplotypes}. They share its route and orientation and
-nothing under the threshold, which \code{tubes} counts, a row per track:
-\code{haplotypes}, the distinct \code{walks} they took before folding, and the
-least, median and most bp a haplotype had inserted or skipped where it
-was merged (\code{inserted_bp_min}, \code{inserted_bp_median}, \code{inserted_bp_max},
-\code{skipped_bp_min}, \code{skipped_bp_median}, \code{skipped_bp_max}).
+lists them in \code{haplotypes}; its \code{name} is their count. They share its
+route and orientation and nothing under the threshold, which \code{tubes}
+counts, a row per track: \code{haplotypes}, the distinct \code{walks} they took
+before folding, and the least, median and most bp by which a haplotype
+differs from the nodes drawn (\code{folded_away_bp_min},
+\code{folded_away_bp_median}, \code{folded_away_bp_max}), with its two halves, the
+bp inserted and skipped, in the \code{inserted_bp_} and \code{skipped_bp_} columns,
+and a \code{label} that says so in words.
 }
 \description{
 Reads the segments and the paths (\code{P} lines) and walks (\code{W} lines) of a GFA
