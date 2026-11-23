@@ -201,10 +201,10 @@ autoplot(tubemap_layout(inv))
 
 ![21 kb of chr16 folded at 1 kb: three nodes, and the tube of 439 haplotypes looping back through the 16.6 kb block in the middle, its arrowheads pointing left there](man/figures/fold-inversion.png)
 
-Before folding, this window is 1,653 nodes and 83,329 pixels wide. Its first
+Before folding, this window is 1,653 nodes and 85,576 pixels wide. Its first
 1,250 pixels are about 300 bp:
 
-![The first 1,250 of the 83,329 layout pixels of the chr16 window before folding](man/figures/fold-inversion-before-crop.png)
+![The first 1,250 of the 85,576 layout pixels of the chr16 window before folding](man/figures/fold-inversion-before-crop.png)
 
 `inv$tubes` says what that tube hides: 439 haplotypes on 356 distinct walks,
 8 bp to 795 bp folded away in each. 26 of them carry a 584 bp deletion that
@@ -226,6 +226,8 @@ What `fold` does not do:
   for is drawn stopping, as the branch `walk ends inside the window`
 - Variants are not nested: one inside a kept insertion makes that insertion
   another allele
+- An inversion the window cuts through is labelled as continuing past the
+  window, and its length is the part inside
 - `fold` needs `region` and a walk file, and folds onto the file's reference
 
 ### Colour by anything

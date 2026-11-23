@@ -268,14 +268,12 @@ geom_tubemap_branches <- function(tubemap, mapping = NULL, ...) {
 
 #' @describeIn tubemap_layers Arrowheads along the tubes of a folded graph,
 #'   pointing the way each walk runs, so the pass through an inversion reads
-#'   against the reference. A piece of tube whose direction is not known has
-#'   none.
+#'   against the reference.
 #' @param spacing Layout pixels between arrowheads.
 #' @export
 geom_tubemap_direction <- function(tubemap, spacing = 60, ...) {
   d <- tubemap$pieces
-  d <- d[!is.na(d$direction) & d$ymax - d$ymin >= 8 & d$xmax - d$xmin >= spacing / 2, ,
-         drop = FALSE]
+  d <- d[d$ymax - d$ymin >= 8 & d$xmax - d$xmin >= spacing / 2, , drop = FALSE]
   if (NROW(d) == 0) {
     return(list())
   }

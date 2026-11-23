@@ -129,9 +129,9 @@ compact <- function(x) x[!vapply(x, is.null, logical(1))]
 #' @param facet_by Stack one panel per `"sample_name"`, `"read_group"` or
 #'   `"haplotype_sample"` (the PanSN sample of each haplotype).
 #' @param curve_steps Straight pieces per Bézier when curves are flattened.
-#' @param bases_per_px On a folded graph at `"small"` width, the bases a layout
-#'   pixel stands for. By default enough for the reference to span about
-#'   1,100 pixels.
+#' @param bases_per_px At `"small"` width, the bases a layout pixel stands
+#'   for. By default 1% of a character's width to the base, and on a folded
+#'   graph enough for the reference to span about 1,100 pixels.
 #' @return A `tubemap` object: a list of data frames (`shapes`, `tracks`,
 #'   `nodes`, `outlines`, `bases`, `mismatches`, `panels`, `ruler`) and the
 #'   `bounds`. For a folded graph, `branches` is the graph's `branches` with
@@ -140,8 +140,8 @@ compact <- function(x) x[!vapply(x, is.null, logical(1))]
 #'   and the `bounds` hold the labels; `tubes` is the graph's `tubes`; and
 #'   `pieces` has a row for each straight piece of a tube, cut where it
 #'   enters and leaves the nodes its walk steps on: whether it `reads` a node
-#'   or passes outside one, and its `direction`, 1 with the reference, -1
-#'   against it and `NA` where it is not known. `ruler` holds each node visit of the ruler track, the first
+#'   or passes outside one, and its `direction`, 1 left to right and -1
+#'   right to left. `ruler` holds each node visit of the ruler track, the first
 #'   track with an `index_of_first_base`, in coordinate order; it is empty
 #'   when no track has one. `left_out` is the graph's `left_out`, the
 #'   haplotypes [read_gfa()] drew no track for, which [autoplot.tubemap()]
@@ -168,7 +168,7 @@ tubemap_layout <- function(graph, reads = graph$reads,
     )
     reads <- NULL
   }
-  scale <- fold_scale(graph, folded && node_width == "small", bases_per_px)
+  bases_per_px <- small_scale(graph, folded, node_width, bases_per_px)
   freq_width <- match.arg(freq_width)
   if (!is.null(facet_by)) {
     facet_by <- match.arg(facet_by, c("sample_name", "read_group", "haplotype_sample"))
@@ -177,11 +177,12 @@ tubemap_layout <- function(graph, reads = graph$reads,
   reads <- if (is.null(reads)) list() else normalize_tracks(reads, "read")
   all <- fill_ids(c(tracks, reads))
   request <- list(
-    nodes = normalize_nodes(scale_nodes(graph$nodes, scale)),
+    nodes = normalize_nodes(graph$nodes),
     tracks = all[seq_along(tracks)],
     reads = all[length(tracks) + seq_along(reads)],
     topology = compact(list(
       nodeWidthOption = node_width,
+      basesPerPixel = bases_per_px,
       mergeNodes = merge_nodes,
       trackWidth = track_width,
       freqWidth = freq_width,
@@ -201,54 +202,25 @@ tubemap_layout <- function(graph, reads = graph$reads,
   if (is.null(out)) {
     stop("No visible track is left to lay out.", call. = FALSE)
   }
-  place_branches(
-    true_lengths(new_tubemap(out, node_width, graph$left_out), graph$nodes, scale),
-    graph
-  )
+  tubemap <- new_tubemap(out, node_width, graph$left_out)
+  tubemap$bases_per_px <- bases_per_px
+  place_branches(tubemap, graph)
 }
 
-# tubemap-core's character width, which its small node width counts in: a node
-# is a 100th of its length in characters
-char_width <- 8.401
-
-# The bases a layout pixel stands for on a folded graph at small width: those
-# asked for, or enough for the reference to span about 1,100 pixels, and never
-# fewer than small's own 1%
-fold_scale <- function(graph, scaled, bases_per_px) {
-  if (!is.null(bases_per_px) && !scaled) {
-    stop("`bases_per_px` sets the scale of a folded graph at `node_width = \"small\"`.",
-         call. = FALSE)
+# The bases a layout pixel stands for at small width: those asked for, or on
+# a folded graph enough for the reference to span about 1,100 pixels and
+# never fewer than small's own 1% of a character; otherwise the layout's
+small_scale <- function(graph, folded, node_width, bases_per_px) {
+  if (!is.null(bases_per_px) && node_width != "small") {
+    stop("`bases_per_px` sets the scale of `node_width = \"small\"`.", call. = FALSE)
   }
-  if (scaled) {
+  if (is.null(bases_per_px) && folded && node_width == "small") {
     on_reference <- sub("^-", "", graph$tracks[[1]]$sequence)
     span <- sum(graph$nodes$sequence_length[match(on_reference, graph$nodes$name)])
-    if (is.null(bases_per_px)) max(100 / char_width, ceiling(span / 1100)) else bases_per_px
+    max(100 / 8.401, ceiling(span / 1100))
+  } else {
+    bases_per_px
   }
-}
-
-# The released layout draws small at 1% alone, so another scale goes in as
-# node lengths that 1% turns into the widths wanted; true_lengths() puts the
-# lengths back
-scale_nodes <- function(nodes, bases_per_px) {
-  if (!is.null(bases_per_px)) {
-    nodes$sequence_length <- nodes$sequence_length * 100 / (bases_per_px * char_width)
-  }
-  nodes
-}
-
-true_lengths <- function(tubemap, nodes, bases_per_px) {
-  if (!is.null(bases_per_px)) {
-    length_of <- function(name) nodes$sequence_length[match(name, nodes$name)]
-    tubemap$nodes$sequence_length <- length_of(tubemap$nodes$name)
-    ruler <- tubemap$ruler
-    if (nrow(ruler)) {
-      ruler$length <- length_of(ruler$node)
-      ruler$start <- ruler$start[1] + cumsum(c(0, ruler$length[-nrow(ruler)]))
-      tubemap$ruler <- ruler
-    }
-    tubemap$bases_per_px <- bases_per_px
-  }
-  tubemap
 }
 
 x_range <- function(shapes) {
@@ -282,29 +254,24 @@ branch_anchor <- function(branch, tubemap) {
 
 # The straight pieces of a folded graph's tubes, cut where they enter and
 # leave the nodes their walk steps on: `reads` where a piece is inside such a
-# node and not where it passes outside one, and `direction` 1 with the
-# reference, -1 against it and NA where it is not known. A walk with no
-# reverse step runs with the reference throughout; one with a reverse step is
-# told rectangle by rectangle from the nodes it reads, and not at all where
-# those disagree or the layout turned the walk around. A stretch outside its
-# own nodes passes a node only where it runs `stub` pixels or more beside
-# one; the stretch between two neighbouring nodes passes none and has no row
+# node and not where it passes outside one, and `direction` 1 where the
+# layout says the walk runs left to right and -1 right to left. A stretch
+# outside its own nodes passes a node only where it runs `stub` pixels or more
+# beside one; the stretch between two neighbouring nodes passes none and has
+# no row
 tube_pieces <- function(tubemap, tracks, stub = 20) {
   shapes <- tubemap$shapes[tubemap$shapes$panel == 1 & tubemap$shapes$shape == "rectangle", ,
                            drop = FALSE]
   boxes <- tubemap$outlines[tubemap$outlines$panel == 1, , drop = FALSE]
   box <- lapply(split(boxes, boxes$name), function(o) c(range(o$x), range(o$y)))
-  turned <- tubemap$tracks$id[tubemap$tracks$is_reverse %in% TRUE]
   rows <- lapply(split(shapes, shapes$group), function(piece) {
     steps <- tracks[[piece$track_id[1] + 1]]$sequence
-    reverse <- startsWith(steps, "-")
     x <- range(piece$x)
     y <- range(piece$y)
     stepped <- box[sub("^-", "", steps)]
     read <- vapply(stepped, function(b) {
       !is.null(b) && x[1] < b[2] && x[2] > b[1] && y[1] >= b[3] && y[2] <= b[4]
     }, logical(1))
-    way <- if (!any(reverse)) 1 else unique(ifelse(reverse[read], -1, 1))
     inside <- unique(do.call(rbind, c(list(matrix(numeric(), ncol = 2)),
                                       lapply(stepped[read], function(b) {
       c(max(x[1], b[1]), min(x[2], b[2]))
@@ -321,8 +288,7 @@ tube_pieces <- function(tubemap, tracks, stub = 20) {
     cbind(
       track_id = rep(piece$track_id[1], nrow(spans)), spans,
       ymin = rep(y[1], nrow(spans)), ymax = rep(y[2], nrow(spans)),
-      direction = rep(if (length(way) == 1 && !piece$track_id[1] %in% turned) way else NA_real_,
-                      nrow(spans))
+      direction = rep(if (piece$reverse[1] %in% TRUE) -1 else 1, nrow(spans))
     )
   })
   out <- do.call(rbind, rows)

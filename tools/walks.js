@@ -157,37 +157,16 @@ function tubeTable(tracks, names) {
   }
 }
 
-// One input track per distinct walk, counting in `freq` and naming in
-// `members` the haplotypes that take it, since graph-fold's count of distinct
-// walks is of the tracks it is given. The reference stays a track of its own
-function distinctWalks(tracks) {
-  const groups = new Map()
-  tracks.forEach((t, i) => {
-    const key = i === 0 ? '' : t.sequence.join()
-    const group = groups.get(key)
-    if (group) {
-      group.freq += 1
-      group.members.push(t.name)
-    } else {
-      groups.set(key, {
-        name: t.name,
-        sequence: t.sequence,
-        indexOfFirstBase: t.index_of_first_base,
-        freq: 1,
-        members: [t.name],
-      })
-    }
-  })
-  return [...groups.values()]
-}
-
 // The window with its small variation merged into the reference by
 // @jbrowse/graph-fold, or as it came with the reason it cannot be folded
 function foldedWindow(nodes, tracks, options) {
-  const walks = distinctWalks(tracks)
   const result = foldGraph(
     nodes.name.map((name, i) => ({ name, sequenceLength: nodes.sequence_length[i] })),
-    walks,
+    tracks.map(t => ({
+      name: t.name,
+      sequence: t.sequence,
+      indexOfFirstBase: t.index_of_first_base,
+    })),
     options,
   )
   const fold = {
@@ -212,9 +191,7 @@ function foldedWindow(nodes, tracks, options) {
             ? {}
             : { index_of_first_base: t.indexOfFirstBase }),
           freq: t.freq,
-          haplotypes: result.walks.flatMap((walk, w) =>
-            walk.track === t.id ? walks[w].members : [],
-          ),
+          haplotypes: t.names,
         })),
         fold,
         branches: branchTable(result.branches, result.haplotypes),

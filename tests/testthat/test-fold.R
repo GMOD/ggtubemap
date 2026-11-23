@@ -151,8 +151,11 @@ test_that("a folded graph is laid out small, to scale, with its nodes unmerged",
                rep(1, 5), tolerance = 0.15)
   wide <- tubemap_layout(g, bases_per_px = 50)
   expect_gt(tm$bounds$maxX, 2 * wide$bounds$maxX)
-  expect_error(tubemap_layout(g, node_width = "compressed", bases_per_px = 50), "folded graph")
-  expect_error(tubemap_layout(tubemap_example("example-6"), bases_per_px = 50), "folded graph")
+  expect_error(tubemap_layout(g, node_width = "compressed", bases_per_px = 50), "small")
+  expect_error(tubemap_layout(tubemap_example("example-6"), bases_per_px = 50), "small")
+  example <- tubemap_example("micb-kir3dl1")
+  expect_gt(tubemap_layout(example, node_width = "small")$bounds$maxX,
+            tubemap_layout(example, node_width = "small", bases_per_px = 100)$bounds$maxX)
   expect_equal(tubemap_layout(g, node_width = "compressed")$node_width, "compressed")
 })
 

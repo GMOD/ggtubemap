@@ -8723,31 +8723,14 @@
       label: tracks.map((t) => variationLabel(t))
     };
   }
-  function distinctWalks(tracks) {
-    const groups = /* @__PURE__ */ new Map();
-    tracks.forEach((t, i) => {
-      const key = i === 0 ? "" : t.sequence.join();
-      const group = groups.get(key);
-      if (group) {
-        group.freq += 1;
-        group.members.push(t.name);
-      } else {
-        groups.set(key, {
-          name: t.name,
-          sequence: t.sequence,
-          indexOfFirstBase: t.index_of_first_base,
-          freq: 1,
-          members: [t.name]
-        });
-      }
-    });
-    return [...groups.values()];
-  }
   function foldedWindow(nodes, tracks, options) {
-    const walks = distinctWalks(tracks);
     const result = foldGraph(
       nodes.name.map((name, i) => ({ name, sequenceLength: nodes.sequence_length[i] })),
-      walks,
+      tracks.map((t) => ({
+        name: t.name,
+        sequence: t.sequence,
+        indexOfFirstBase: t.index_of_first_base
+      })),
       options
     );
     const fold = {
@@ -8769,9 +8752,7 @@
         sequence: t.sequence,
         ...t.indexOfFirstBase === void 0 ? {} : { index_of_first_base: t.indexOfFirstBase },
         freq: t.freq,
-        haplotypes: result.walks.flatMap(
-          (walk, w) => walk.track === t.id ? walks[w].members : []
-        )
+        haplotypes: t.names
       })),
       fold,
       branches: branchTable(result.branches, result.haplotypes),
@@ -10981,7 +10962,7 @@
     for (const type of ["haplotype", "read"]) {
       for (const r of rectangles) {
         if (r.type === type) {
-          emit(r.id, type, "rectangle", rectPoints(r));
+          emit(r.id, type, "rectangle", rectPoints(r), r.reverse === true);
         }
       }
       for (const c of curvePaths(curves, type)) {
@@ -11043,7 +11024,7 @@
       return JSON.stringify(null);
     }
     const faceted = placeFacets(arranged, placement);
-    const shapes = columns(["panel", "group", "track_id", "type", "shape", "n"]);
+    const shapes = columns(["panel", "group", "track_id", "type", "shape", "n", "reverse"]);
     const shapeXY = { x: [], y: [] };
     const trackTable = columns([
       "id",
@@ -11095,9 +11076,9 @@
       const panel = i + 1;
       const { layout, offsetY } = p;
       const dy = (y) => y + offsetY;
-      trackShapes(layout, steps, (id, type, shape, points) => {
+      trackShapes(layout, steps, (id, type, shape, points, reverse2) => {
         group += 1;
-        pushRow(shapes, { panel, group, track_id: id, type, shape, n: points.length });
+        pushRow(shapes, { panel, group, track_id: id, type, shape, n: points.length, reverse: reverse2 });
         pushVertices(shapeXY, points, dy);
       });
       for (const t of layout.tracks) {

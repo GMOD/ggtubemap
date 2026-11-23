@@ -104,8 +104,7 @@ graph that was not folded.
 
 \item \code{geom_tubemap_direction()}: Arrowheads along the tubes of a folded graph,
 pointing the way each walk runs, so the pass through an inversion reads
-against the reference. A piece of tube whose direction is not known has
-none.
+against the reference.
 
 \item \code{geom_tubemap_passes()}: A veil over each tube of a folded graph where
 it passes outside the nodes its walk steps on, so a tube is solid where

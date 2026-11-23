@@ -58,9 +58,9 @@ one band per edge.}
 
 \item{curve_steps}{Straight pieces per Bézier when curves are flattened.}
 
-\item{bases_per_px}{On a folded graph at \code{"small"} width, the bases a layout
-pixel stands for. By default enough for the reference to span about
-1,100 pixels.}
+\item{bases_per_px}{At \code{"small"} width, the bases a layout pixel stands
+for. By default 1\% of a character's width to the base, and on a folded
+graph enough for the reference to span about 1,100 pixels.}
 }
 \value{
 A \code{tubemap} object: a list of data frames (\code{shapes}, \code{tracks},
@@ -71,8 +71,8 @@ box or tube of its own) and where its label goes (\code{label_x}, \code{label_y}
 and the \code{bounds} hold the labels; \code{tubes} is the graph's \code{tubes}; and
 \code{pieces} has a row for each straight piece of a tube, cut where it
 enters and leaves the nodes its walk steps on: whether it \code{reads} a node
-or passes outside one, and its \code{direction}, 1 with the reference, -1
-against it and \code{NA} where it is not known. \code{ruler} holds each node visit of the ruler track, the first
+or passes outside one, and its \code{direction}, 1 left to right and -1
+right to left. \code{ruler} holds each node visit of the ruler track, the first
 track with an \code{index_of_first_base}, in coordinate order; it is empty
 when no track has one. \code{left_out} is the graph's \code{left_out}, the
 haplotypes \code{\link[=read_gfa]{read_gfa()}} drew no track for, which \code{\link[=autoplot.tubemap]{autoplot.tubemap()}}

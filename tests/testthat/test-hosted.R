@@ -69,7 +69,7 @@ test_that("the README's deletion and inversion fold to the branches it shows", {
   expect_true(del$fold$folded)
   expect_equal(del$fold$haplotypes, 464)
   expect_true("deletion 45.5 kb, 306 of 464" %in% del$branches$label)
-  expect_true("insertion 8.9 kb to 9.5 kb (56 lengths), 129 of 464" %in%
+  expect_true("insertion 8.9 kb to 9.5 kb (cluster of 56 lengths), 129 of 464" %in%
                 del$branches$label)
   expect_equal(nrow(del$nodes), 8)
   expect_length(del$tracks, 6)

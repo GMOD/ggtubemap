@@ -73,7 +73,7 @@ function trackShapes(layout, steps, emit) {
   for (const type of ['haplotype', 'read']) {
     for (const r of rectangles) {
       if (r.type === type) {
-        emit(r.id, type, 'rectangle', rectPoints(r))
+        emit(r.id, type, 'rectangle', rectPoints(r), r.reverse === true)
       }
     }
     for (const c of curvePaths(curves, type)) {
@@ -145,7 +145,7 @@ globalThis.tubemapLayout = function (requestJson) {
 
   // one row per polygon, its vertices in `x` and `y`, `n` of them each, so
   // R repeats a polygon's fields rather than parsing them once per vertex
-  const shapes = columns(['panel', 'group', 'track_id', 'type', 'shape', 'n'])
+  const shapes = columns(['panel', 'group', 'track_id', 'type', 'shape', 'n', 'reverse'])
   const shapeXY = { x: [], y: [] }
   const trackTable = columns([
     'id',
@@ -198,9 +198,9 @@ globalThis.tubemapLayout = function (requestJson) {
     const panel = i + 1
     const { layout, offsetY } = p
     const dy = y => y + offsetY
-    trackShapes(layout, steps, (id, type, shape, points) => {
+    trackShapes(layout, steps, (id, type, shape, points, reverse) => {
       group += 1
-      pushRow(shapes, { panel, group, track_id: id, type, shape, n: points.length })
+      pushRow(shapes, { panel, group, track_id: id, type, shape, n: points.length, reverse })
       pushVertices(shapeXY, points, dy)
     })
     for (const t of layout.tracks) {
