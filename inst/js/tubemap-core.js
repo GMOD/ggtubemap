@@ -161,7 +161,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@1.0.0/node_modules/@jbrowse/graph-fold/esm/chain.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.1.0/node_modules/@jbrowse/graph-fold/esm/chain.js
   function runsOf(anchors) {
     const runs = [];
     for (const anchor of anchors) {
@@ -226,7 +226,7 @@
     return runs;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@1.0.0/node_modules/@jbrowse/graph-fold/esm/cluster.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.1.0/node_modules/@jbrowse/graph-fold/esm/cluster.js
   function siteKey({ left, right, inserted }) {
     return `${left}:${right}:${inserted}`;
   }
@@ -249,7 +249,22 @@
     return leaderOf;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@1.0.0/node_modules/@jbrowse/graph-fold/esm/labels.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.1.0/node_modules/@jbrowse/graph-fold/esm/haplotypes.js
+  function haplotypeKey(tracks, index) {
+    return tracks[index]?.haplotype ?? index;
+  }
+  function haplotypeCounter(tracks) {
+    return (indices) => {
+      const weights = /* @__PURE__ */ new Map();
+      for (const index of indices) {
+        const key = haplotypeKey(tracks, index);
+        weights.set(key, Math.max(weights.get(key) ?? 0, tracks[index]?.freq ?? 1));
+      }
+      return [...weights.values()].reduce((sum, weight) => sum + weight, 0);
+    };
+  }
+
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.1.0/node_modules/@jbrowse/graph-fold/esm/labels.js
   function bpLabel(bp) {
     return bp >= 1e3 ? `${(bp / 1e3).toFixed(bp >= 1e5 ? 0 : 1).replace(/\.0$/, "")} kb` : `${bp} bp`;
   }
@@ -265,21 +280,47 @@
     const cut = branch.open ? ", continues past the window" : "";
     return `${branch.description} ${size}${lengths}, ${branch.haplotypes} of ${haplotypes}${cut}`;
   }
-  function trackLabel(freq, names) {
-    return freq === 1 && names[0] !== void 0 ? names[0] : plural(freq, "haplotype");
+  function trackLabel(haplotypes, names) {
+    return haplotypes === 1 && names[0] !== void 0 ? names[0] : plural(haplotypes, "haplotype");
   }
-  function referenceLabel(name, freq) {
-    return freq > 1 ? `${name} and ${plural(freq - 1, "identical haplotype")}` : name;
+  function referenceLabel(name, haplotypes) {
+    return haplotypes > 1 ? `${name} and ${plural(haplotypes - 1, "identical haplotype")}` : name;
   }
-  function variationLabel({ freq, variation }) {
+  function variationLabel({ haplotypes, variation }) {
     const { walks, foldedAwayBp } = variation;
     const least = bpLabel(foldedAwayBp.min);
     const most = bpLabel(foldedAwayBp.max);
     const hidden = foldedAwayBp.max === 0 ? "nothing folded away" : foldedAwayBp.min === foldedAwayBp.max ? `${most} folded away in each` : least === most ? `about ${most} folded away in each` : `${least} to ${most} folded away in each`;
-    return `${plural(freq, "haplotype")} on ${plural(walks, "distinct walk")}, ${hidden}`;
+    return `${plural(haplotypes, "haplotype")} on ${plural(walks, "distinct walk")}, ${hidden}`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@1.0.0/node_modules/@jbrowse/graph-fold/esm/fold.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.1.0/node_modules/@jbrowse/graph-fold/esm/fold.js
+  function times(count2) {
+    return count2 === 1 ? "once" : count2 === 2 ? "twice" : `${count2} times`;
+  }
+  function repeatDescription(passes) {
+    const totals = passes.map((p) => p.total);
+    const against = new Set(passes.map((p) => p.against));
+    const least = Math.min(...totals);
+    const most = Math.max(...totals);
+    const walked = least === most ? times(most) : `${least} to ${most} times`;
+    const reversed = against.size > 1 ? ", reversed on some passes" : against.has(0) ? "" : `, ${times(passes[0].against)} reversed`;
+    return `reference walked ${walked}${reversed}`;
+  }
+  function stretchesOf(keys) {
+    const stretches = [];
+    keys.forEach((key, s) => {
+      if (key !== void 0) {
+        const last = stretches.at(-1);
+        if (last?.to === s && keys[s - 1] === key) {
+          last.to = s + 1;
+        } else {
+          stretches.push({ from: s, to: s + 1 });
+        }
+      }
+    });
+    return stretches;
+  }
   function parseStep(step) {
     return step.startsWith("-") ? { name: step.slice(1), reversed: true } : { name: step, reversed: false };
   }
@@ -323,7 +364,7 @@
   }
   var noVariation = variationOf([{ insertedBp: 0, skippedBp: 0, freq: 1 }]);
   function haplotypesOf(tracks) {
-    return tracks.reduce((sum, track) => sum + (track.freq ?? 1), 0);
+    return haplotypeCounter(tracks)(tracks.keys());
   }
   function unfolded(nodes, tracks, threshold, reason) {
     const result = {
@@ -353,6 +394,7 @@
     return sequence.length === 0 ? `there is no reference walk at track ${reference}` : missing ?? (referenceRevisits !== void 0 && referenceRevisits > 0 ? `the reference passes ${referenceRevisits} nodes of the graph more than once, so a run off it may be a copy of reference sequence and not a variant` : repeats > 0 ? `the reference passes ${repeats} nodes of this window more than once, so a run off it may be a copy of reference sequence and not a variant` : void 0);
   }
   function foldWindow(nodes, tracks, reference, threshold, cluster, tolerance, boxed) {
+    const haplotypesIn = haplotypeCounter(tracks);
     const lengths = new Map(nodes.map((n) => [n.name, lengthOfNode(n)]));
     const lengthOf = (name) => lengths.get(name) ?? 0;
     const refTrack = tracks[reference];
@@ -407,17 +449,20 @@
       });
       return index === reference ? [] : [{ index, name, freq: track.freq ?? 1, steps, prefix, runs }];
     });
-    const siteTally = /* @__PURE__ */ new Map();
-    for (const { runs, freq } of walks) {
+    const siteWalks = /* @__PURE__ */ new Map();
+    for (const { runs, index } of walks) {
       for (const { detours } of runs) {
         for (const { left, right, inserted } of detours) {
           const site = { left, right, inserted };
-          const seen = siteTally.get(siteKey(site)) ?? { site, haplotypes: 0 };
-          seen.haplotypes += freq;
-          siteTally.set(siteKey(site), seen);
+          const seen = siteWalks.get(siteKey(site)) ?? { site, walks: /* @__PURE__ */ new Set() };
+          siteWalks.set(siteKey(site), { site, walks: seen.walks.add(index) });
         }
       }
     }
+    const siteTally = new Map([...siteWalks].map(([key, { site, walks: carried }]) => [
+      key,
+      { site, haplotypes: haplotypesIn(carried) }
+    ]));
     const leaderOf = cluster ? clusterLeaders(siteTally, offsets, tolerance) : /* @__PURE__ */ new Map();
     const inRefOrder = (run, items) => run.reversed ? [...items].reverse() : items;
     const drawnDetours = (run) => {
@@ -517,13 +562,26 @@
     const carriers = /* @__PURE__ */ new Map();
     const tallies = /* @__PURE__ */ new Map();
     const carry = (key, walk, branch) => {
-      const seen = branches.get(key) ?? branch();
-      seen.haplotypes += walk.freq;
-      branches.set(key, seen);
+      branches.set(key, branches.get(key) ?? branch());
       carriers.set(key, (carriers.get(key) ?? /* @__PURE__ */ new Set()).add(walk.index));
     };
+    const repeats = /* @__PURE__ */ new Map();
+    const piecesOf = (run) => {
+      const detours = inRefOrder(run, run.drawn);
+      const cuts = [
+        run.start,
+        ...detours.flatMap((d) => [d.left, d.right]),
+        run.end
+      ];
+      return detours.map((_, k) => k).concat(detours.length).map((k) => ({
+        from: cuts[2 * k],
+        to: cuts[2 * k + 1],
+        detour: detours[k]
+      }));
+    };
+    const segmentsIn = (from, to) => from < to ? segments.slice(segmentOf[from], segmentOf[to - 1] + 1).map((_, k) => segmentOf[from] + k) : [];
     const foldedWalks = drawn.map((walk) => {
-      const { steps, prefix, runs, freq } = walk;
+      const { steps, prefix, runs } = walk;
       const visits = [];
       const absorb = (visit, from, to) => {
         const bp = prefix[to] - prefix[from];
@@ -564,7 +622,6 @@
             deletedBp: 0,
             refStart: refPos(boundary),
             refEnd: refPos(boundary),
-            haplotypes: 0,
             nodes: [node]
           }));
         } else {
@@ -591,11 +648,92 @@
             deletedBp: 0,
             refStart: refPos(boundary),
             refEnd: refPos(boundary),
-            haplotypes: 0,
             nodes: []
           }));
         }
       };
+      const against = (run) => run.reversed !== mostlyReversed;
+      const passes = segments.map(() => ({ total: 0, against: 0 }));
+      for (const run of runs) {
+        for (const { from, to } of piecesOf(run)) {
+          for (const s of segmentsIn(from, to)) {
+            passes[s].total += 1;
+            passes[s].against += Number(against(run));
+          }
+        }
+      }
+      const reportDetour = (drawnSite, original, node) => {
+        const key = `detour:${siteKey(drawnSite)}`;
+        const deletedBp = refBp(drawnSite.left, drawnSite.right);
+        const listed = branches.get(key);
+        if (listed !== void 0 && node !== void 0 && !listed.nodes.includes(node)) {
+          listed.nodes.push(node);
+        }
+        carry(key, walk, () => ({
+          kind: drawnSite.inserted > 0 && deletedBp > 0 ? "other" : drawnSite.inserted > 0 ? "insertion" : "deletion",
+          description: drawnSite.inserted > 0 && deletedBp > 0 ? "replacement" : drawnSite.inserted > 0 ? "insertion" : "deletion",
+          length: Math.max(drawnSite.inserted, deletedBp),
+          insertedBp: drawnSite.inserted,
+          deletedBp,
+          refStart: refPos(drawnSite.left),
+          refEnd: refPos(drawnSite.right),
+          nodes: node === void 0 ? [] : [node],
+          from: segments[segmentOf[drawnSite.left - 1]].name,
+          to: segments[segmentOf[drawnSite.right]].name
+        }));
+        const tally = tallies.get(key) ?? {
+          walks: /* @__PURE__ */ new Set(),
+          alleles: /* @__PURE__ */ new Map()
+        };
+        const seen = tally.alleles.get(siteKey(original)) ?? {
+          allele: {
+            refStart: refPos(original.left),
+            refEnd: refPos(original.right),
+            insertedBp: original.inserted,
+            deletedBp: refBp(original.left, original.right)
+          },
+          walks: /* @__PURE__ */ new Set()
+        };
+        tally.walks.add(walk.index);
+        tally.alleles.set(siteKey(original), {
+          ...seen,
+          walks: seen.walks.add(walk.index)
+        });
+        tallies.set(key, tally);
+      };
+      for (const stretch2 of stretchesOf(passes.map((p) => p.total > 1 ? `${p.total}:${p.against}` : void 0))) {
+        const from = segments[stretch2.from].start;
+        const to = segments[stretch2.to - 1].end;
+        const walked = passes[stretch2.from];
+        const names = segmentNames(from, to);
+        const key = `repeat:${from}:${to}:${walked.against > 0}`;
+        if (refBp(from, to) >= threshold) {
+          repeats.set(key, (repeats.get(key) ?? /* @__PURE__ */ new Map()).set(walk.index, walked));
+          carry(key, walk, () => ({
+            kind: "other",
+            description: "reference walked twice",
+            length: refBp(from, to),
+            insertedBp: 0,
+            deletedBp: 0,
+            refStart: refPos(from),
+            refEnd: refPos(to),
+            nodes: boxed && walked.against > 0 ? [...names, ...names.map(invertedCopy)] : names
+          }));
+        }
+      }
+      const junctions = new Set(runs.flatMap((run, r) => [
+        ...r > 0 ? [run.reversed ? run.end : run.start] : [],
+        ...r < runs.length - 1 ? [run.reversed ? run.start : run.end] : []
+      ]));
+      const jumped = runs.flatMap((run) => run.drawn.filter((detour) => detour.right > detour.left));
+      for (const stretch2 of stretchesOf(passes.map((p) => p.total === 0 ? "unwalked" : void 0))) {
+        const left = segments[stretch2.from].start;
+        const right = segments[stretch2.to - 1].end;
+        const site = { left, right, inserted: 0 };
+        if (refBp(left, right) >= threshold && junctions.has(left) && junctions.has(right) && jumped.every((detour) => detour.right <= left || detour.left >= right)) {
+          reportDetour(site, site);
+        }
+      }
       runs.forEach((run, r) => {
         const first = run.anchors[0];
         const before = runs[r - 1];
@@ -609,67 +747,63 @@
           if (before.reversed === run.reversed) {
             const from = Math.min(entered, reached);
             const to = Math.max(entered, reached);
-            carry(`repeat:${from}:${to}:${run.reversed}`, walk, () => ({
-              kind: "other",
-              description: "reference walked twice",
-              length: refBp(from, to),
-              insertedBp: 0,
-              deletedBp: 0,
-              refStart: refPos(from),
-              refEnd: refPos(to),
-              haplotypes: 0,
-              nodes: segmentNames(from, to)
-            }));
+            if (segmentsIn(from, to).every((s) => passes[s].total < 2)) {
+              carry(`back:${from}:${to}:${run.reversed}`, walk, () => ({
+                kind: "other",
+                description: "reference walked out of order",
+                length: refBp(from, to),
+                insertedBp: 0,
+                deletedBp: 0,
+                refStart: refPos(from),
+                refEnd: refPos(to),
+                nodes: segmentNames(from, to)
+              }));
+            }
           }
         }
-        const boxing = boxed && run.reversed !== mostlyReversed;
-        if (run.reversed !== mostlyReversed) {
+        const boxing = boxed && against(run);
+        const pieces = piecesOf(run);
+        const passed = pieces.flatMap(({ from, to }) => segmentsIn(from, to));
+        const alone = passed.filter((s) => passes[s].total === 1);
+        const whole = alone.length === passed.length;
+        const start = whole ? run.start : segments[alone[0] ?? 0]?.start ?? 0;
+        const end = whole ? run.end : segments[alone.at(-1) ?? 0]?.end ?? 0;
+        const aloneBp = alone.reduce((bp, s) => bp + segments[s].length, 0);
+        if (against(run) && (whole || aloneBp >= threshold)) {
           const open = r === 0 || r === runs.length - 1;
-          carry(`inversion:${run.start}:${run.end}:${open}`, walk, () => ({
+          carry(`inversion:${start}:${end}:${open}`, walk, () => ({
             kind: "inversion",
             description: "inversion",
-            length: refBp(run.start, run.end),
+            length: refBp(start, end),
             insertedBp: 0,
             deletedBp: 0,
-            refStart: refPos(run.start),
-            refEnd: refPos(run.end),
-            haplotypes: 0,
-            nodes: boxed ? segmentNames(run.start, run.end).map(invertedCopy) : segmentNames(run.start, run.end),
-            ...run.start > 0 ? { from: segments[segmentOf[run.start - 1]].name } : {},
-            ...run.end < refSteps.length ? { to: segments[segmentOf[run.end]].name } : {},
+            refStart: refPos(start),
+            refEnd: refPos(end),
+            nodes: boxed ? segmentNames(start, end).map(invertedCopy) : segmentNames(start, end),
+            ...start > 0 ? { from: segments[segmentOf[start - 1]].name } : {},
+            ...end < refSteps.length ? { to: segments[segmentOf[end]].name } : {},
             ...open ? { open } : {}
           }));
         }
-        const detours = inRefOrder(run, run.drawn);
-        const cuts = [
-          run.start,
-          ...detours.flatMap((d) => [d.left, d.right]),
-          run.end
-        ];
         const bySegment = /* @__PURE__ */ new Map();
         const byPair = /* @__PURE__ */ new Map();
         const elements = [];
         const covered = [];
-        for (let k = 0; k < cuts.length; k += 2) {
-          const from = cuts[k];
-          const to = cuts[k + 1];
+        for (const { from, to, detour } of pieces) {
           covered.push([from, to]);
-          if (from < to) {
-            for (let s = segmentOf[from]; s <= segmentOf[to - 1]; s++) {
-              const segment = segments[s];
-              const visit = {
-                node: boxing ? invertedCopy(segment.name) : segment.name,
-                reversed: boxing ? mostlyReversed : run.reversed,
-                length: segment.length,
-                walked: 0,
-                extra: 0,
-                clipped: segment.length - refBp(Math.max(from, segment.start), Math.min(to, segment.end))
-              };
-              bySegment.set(s, visit);
-              elements.push(visit);
-            }
+          for (const s of segmentsIn(from, to)) {
+            const segment = segments[s];
+            const visit = {
+              node: boxing ? invertedCopy(segment.name) : segment.name,
+              reversed: boxing ? mostlyReversed : run.reversed,
+              length: segment.length,
+              walked: 0,
+              extra: 0,
+              clipped: segment.length - refBp(Math.max(from, segment.start), Math.min(to, segment.end))
+            };
+            bySegment.set(s, visit);
+            elements.push(visit);
           }
-          const detour = detours[k / 2];
           if (detour !== void 0 && detour.inserted > 0) {
             const name = detour.right > detour.left ? `ins:${refNameAt(detour.left - 1)}:${detour.inserted}:${refNameAt(detour.right)}` : `ins:${refNameAt(detour.left - 1)}:${detour.inserted}`;
             const node = boxing ? insideInversion(name, detour.inserted, detour) : branchNode(name, detour.inserted, detour);
@@ -694,39 +828,7 @@
           }
         });
         run.drawn.forEach((detour) => {
-          const original = run.detours.find((d) => d.pair === detour.pair);
-          const key = `detour:${siteKey(detour)}`;
-          const deletedBp = refBp(detour.left, detour.right);
-          const node = byPair.get(detour.pair)?.node;
-          const listed = branches.get(key);
-          if (listed !== void 0 && node !== void 0 && !listed.nodes.includes(node)) {
-            listed.nodes.push(node);
-          }
-          carry(key, walk, () => ({
-            kind: detour.inserted > 0 && deletedBp > 0 ? "other" : detour.inserted > 0 ? "insertion" : "deletion",
-            description: detour.inserted > 0 && deletedBp > 0 ? "replacement" : detour.inserted > 0 ? "insertion" : "deletion",
-            length: Math.max(detour.inserted, deletedBp),
-            insertedBp: detour.inserted,
-            deletedBp,
-            refStart: refPos(detour.left),
-            refEnd: refPos(detour.right),
-            haplotypes: 0,
-            nodes: node === void 0 ? [] : [node],
-            from: segments[segmentOf[detour.left - 1]].name,
-            to: segments[segmentOf[detour.right]].name
-          }));
-          const tally = tallies.get(key) ?? { haplotypes: 0, alleles: /* @__PURE__ */ new Map() };
-          const allele = tally.alleles.get(siteKey(original)) ?? {
-            refStart: refPos(original.left),
-            refEnd: refPos(original.right),
-            insertedBp: original.inserted,
-            deletedBp: refBp(original.left, original.right),
-            haplotypes: 0
-          };
-          allele.haplotypes += freq;
-          tally.haplotypes += freq;
-          tally.alleles.set(siteKey(original), allele);
-          tallies.set(key, tally);
+          reportDetour(detour, run.detours.find((d) => d.pair === detour.pair), byPair.get(detour.pair)?.node);
         });
         if (r === runs.length - 1) {
           const last = run.anchors.at(-1);
@@ -763,13 +865,16 @@
     });
     const clusterOf = (key) => {
       const tally = tallies.get(key);
-      const alleles = [...tally?.alleles.values() ?? []];
+      const alleles = [...tally?.alleles.values() ?? []].map(({ allele, walks: carried }) => ({
+        ...allele,
+        haplotypes: haplotypesIn(carried)
+      }));
       const sizes = alleles.map((a) => Math.max(a.insertedBp, a.deletedBp));
       const info = tally !== void 0 && alleles.length > 1 ? {
         members: alleles.length,
         minLength: Math.min(...sizes),
         maxLength: Math.max(...sizes),
-        haplotypes: tally.haplotypes
+        haplotypes: haplotypesIn(tally.walks)
       } : void 0;
       return info === void 0 ? void 0 : {
         cluster: info,
@@ -782,13 +887,15 @@
       groups.set(key, [...groups.get(key) ?? [], w]);
     });
     const trackOfWalk = /* @__PURE__ */ new Map();
+    const refHaplotypes = haplotypesIn([reference]);
     const refFolded = {
       ...refTrack,
       id: 0,
       name: refName,
-      label: referenceLabel(refName, refTrack.freq ?? 1),
+      label: referenceLabel(refName, refHaplotypes),
       sequence: segments.map((segment) => segment.name),
       freq: refTrack.freq ?? 1,
+      haplotypes: refHaplotypes,
       sourceTrackID: refTrack.sourceTrackID ?? 0,
       names: [refName],
       variation: noVariation
@@ -801,21 +908,35 @@
         trackOfWalk.set(walk.index, id);
       }
       const freq = held.reduce((sum, { walk }) => sum + walk.freq, 0);
+      const haplotypes = haplotypesIn(held.map(({ walk }) => walk.index));
       const names = held.map(({ walk }) => walk.name);
+      const byHaplotype = /* @__PURE__ */ new Map();
+      for (const { walk, insertedBp, skippedBp } of held) {
+        const key = haplotypeKey(tracks, walk.index);
+        const seen = byHaplotype.get(key);
+        byHaplotype.set(key, seen === void 0 ? {
+          name: tracks[walk.index].haplotype ?? walk.name,
+          insertedBp,
+          skippedBp,
+          freq: walk.freq
+        } : {
+          ...seen,
+          insertedBp: seen.insertedBp + insertedBp,
+          skippedBp: seen.skippedBp + skippedBp,
+          freq: Math.max(seen.freq, walk.freq)
+        });
+      }
       const track = {
         ...tracks[first.walk.index],
         id,
         name: first.walk.name,
-        label: trackLabel(freq, names),
+        label: trackLabel(haplotypes, held.length === 1 ? names : [...byHaplotype.values()].map((h) => h.name)),
         sequence: first.sequence,
         freq,
+        haplotypes,
         sourceTrackID: tracks[first.walk.index].sourceTrackID ?? id,
         names,
-        variation: variationOf(held.map((h) => ({
-          insertedBp: h.insertedBp,
-          skippedBp: h.skippedBp,
-          freq: h.walk.freq
-        })), new Set(held.map((h) => tracks[h.walk.index].sequence.join())).size)
+        variation: variationOf([...byHaplotype.values()], new Set(held.map((h) => tracks[h.walk.index].sequence.join())).size)
       };
       return track;
     });
@@ -840,6 +961,30 @@
       };
       return [walk.index, folded];
     }));
+    const copiesOf = (key) => {
+      const walked = [...repeats.get(key) ?? []];
+      const counts = /* @__PURE__ */ new Map();
+      for (const [index, passes] of walked) {
+        const key2 = `${passes.total}:${passes.against}`;
+        counts.set(key2, {
+          passes,
+          walks: [...counts.get(key2)?.walks ?? [], index]
+        });
+      }
+      const copies = [...counts.values()].map(({ passes, walks: held }) => {
+        const count2 = {
+          passes: passes.total,
+          reversed: passes.against,
+          haplotypes: haplotypesIn(held),
+          tracks: [...new Set(held.map((w) => trackOfWalk.get(w) ?? 0))].sort((a, b) => a - b)
+        };
+        return count2;
+      });
+      return walked.length > 0 ? {
+        description: repeatDescription(walked.map(([, p]) => p)),
+        copies: copies.sort((a, b) => a.passes - b.passes || a.reversed - b.reversed)
+      } : {};
+    };
     const branchList = [...branches].map(([key, draft]) => {
       const clustered = clusterOf(key);
       if (clustered !== void 0) {
@@ -852,7 +997,9 @@
       }
       const branch = {
         ...draft,
+        haplotypes: haplotypesIn(carriers.get(key) ?? []),
         ...clustered,
+        ...copiesOf(key),
         tracks: [
           ...new Set([...carriers.get(key) ?? []].map((w) => trackOfWalk.get(w) ?? 0))
         ].sort((a, b) => a - b),
@@ -8714,7 +8861,7 @@
     return {
       name: names,
       track: tracks.map((t) => t.id + 1),
-      haplotypes: tracks.map((t) => t.freq),
+      haplotypes: tracks.map((t) => t.haplotypes),
       walks: tracks.map((t) => t.variation.walks),
       folded_away_bp_min: spread2("foldedAwayBp", "min"),
       folded_away_bp_median: spread2("foldedAwayBp", "median"),
@@ -8734,7 +8881,8 @@
       tracks.map((t) => ({
         name: t.name,
         sequence: t.sequence,
-        indexOfFirstBase: t.index_of_first_base
+        indexOfFirstBase: t.index_of_first_base,
+        ...t.name === void 0 ? {} : { haplotype: t.name.split("#", 2).join("#") }
       })),
       options
     );
@@ -8756,7 +8904,7 @@
         name: names[i],
         sequence: t.sequence,
         ...t.indexOfFirstBase === void 0 ? {} : { index_of_first_base: t.indexOfFirstBase },
-        freq: t.freq,
+        freq: t.haplotypes,
         haplotypes: t.names
       })),
       fold,

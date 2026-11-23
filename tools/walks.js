@@ -142,7 +142,7 @@ function tubeTable(tracks, names) {
   return {
     name: names,
     track: tracks.map(t => t.id + 1),
-    haplotypes: tracks.map(t => t.freq),
+    haplotypes: tracks.map(t => t.haplotypes),
     walks: tracks.map(t => t.variation.walks),
     folded_away_bp_min: spread('foldedAwayBp', 'min'),
     folded_away_bp_median: spread('foldedAwayBp', 'median'),
@@ -166,6 +166,7 @@ function foldedWindow(nodes, tracks, options) {
       name: t.name,
       sequence: t.sequence,
       indexOfFirstBase: t.index_of_first_base,
+      ...(t.name === undefined ? {} : { haplotype: t.name.split('#', 2).join('#') }),
     })),
     options,
   )
@@ -190,7 +191,7 @@ function foldedWindow(nodes, tracks, options) {
           ...(t.indexOfFirstBase === undefined
             ? {}
             : { index_of_first_base: t.indexOfFirstBase }),
-          freq: t.freq,
+          freq: t.haplotypes,
           haplotypes: t.names,
         })),
         fold,

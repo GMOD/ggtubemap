@@ -216,6 +216,26 @@ test_that("a folded graph draws no reads, and says so", {
   expect_no_warning(tubemap_layout(g, reads = NULL))
 })
 
+test_that("two walks of one haplotype count as one haplotype", {
+  cut <- jsonlite::toJSON(list(
+    threshold = 500, cluster = FALSE, referenceRevisits = 0,
+    nodes = list(name = c("1", "2", "3"), seq = list(NULL, NULL, NULL),
+                 sequence_length = c(1000, 4000, 1000)),
+    tracks = list(
+      list(name = "REF#0#chr1", sequence = c("1", "2", "3"), index_of_first_base = 0),
+      list(name = "HG1#1#contigA", sequence = c("1", "3")),
+      list(name = "HG1#1#contigB", sequence = c("1", "3")),
+      list(name = "HG2#1#chr1", sequence = c("1", "3"))
+    ),
+    absent = list()
+  ), auto_unbox = TRUE, null = "null")
+  out <- jsonlite::fromJSON(js_call("foldCut", as.character(cut)), simplifyVector = FALSE)
+  expect_equal(out$fold$haplotypes, 3)
+  expect_equal(out$branches$label[[1]], "deletion 4 kb, 2 of 3")
+  expect_equal(unlist(out$tubes$haplotypes), c(1, 2))
+  expect_equal(out$tracks[[2]]$freq, 2)
+})
+
 test_that("tubes counts what each folded track stands for and what the fold hid in it", {
   g <- read_gfa(stepless, region = "chr1:1-7000", fold = 1500)
   expect_equal(g$tubes$name, vapply(g$tracks, `[[`, "", "name"))
