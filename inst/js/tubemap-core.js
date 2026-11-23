@@ -1,5 +1,5 @@
 /*
- * @jbrowse/tubemap-core 2.1.1, bundled by tools/bridge.js
+ * @jbrowse/tubemap-core 2.2.0, bundled by tools/bridge.js
  *
  * MIT License
  *
@@ -251,16 +251,19 @@
 
   // node_modules/.pnpm/@jbrowse+graph-fold@file+..+..+graph-fold+jbrowse-graph-fold-0.0.0.tgz/node_modules/@jbrowse/graph-fold/esm/labels.js
   function bpLabel(bp) {
-    return bp >= 1e3 ? `${(bp / 1e3).toFixed(bp >= 1e5 ? 0 : 1)} kb` : `${bp} bp`;
+    return bp >= 1e3 ? `${(bp / 1e3).toFixed(bp >= 1e5 ? 0 : 1).replace(/\.0$/, "")} kb` : `${bp} bp`;
   }
   function plural(count2, noun) {
     return `${count2.toLocaleString("en-US")} ${noun}${count2 === 1 ? "" : "s"}`;
   }
   function branchLabel(branch, haplotypes) {
     const { cluster, insertedBp, deletedBp, length } = branch;
-    const size = cluster && cluster.minLength !== cluster.maxLength ? `${bpLabel(cluster.minLength)} to ${bpLabel(cluster.maxLength)}` : insertedBp > 0 && deletedBp > 0 ? `${bpLabel(insertedBp)} for ${bpLabel(deletedBp)}` : bpLabel(length);
-    const lengths = cluster ? ` (${plural(cluster.members, "length")})` : "";
-    return `${branch.description} ${size}${lengths}, ${branch.haplotypes} of ${haplotypes}`;
+    const shortest = cluster ? bpLabel(cluster.minLength) : "";
+    const longest = cluster ? bpLabel(cluster.maxLength) : "";
+    const size = cluster ? shortest === longest ? `about ${longest}` : `${shortest} to ${longest}` : insertedBp > 0 && deletedBp > 0 ? `${bpLabel(insertedBp)} for ${bpLabel(deletedBp)}` : bpLabel(length);
+    const lengths = cluster ? ` (cluster of ${plural(cluster.members, "length")})` : "";
+    const cut = branch.open ? ", continues past the window" : "";
+    return `${branch.description} ${size}${lengths}, ${branch.haplotypes} of ${haplotypes}${cut}`;
   }
   function trackLabel(freq, names) {
     return freq === 1 && names[0] !== void 0 ? names[0] : plural(freq, "haplotype");
@@ -304,9 +307,9 @@
     };
     return result;
   }
-  function variationOf(walks) {
+  function variationOf(walks, distinct = walks.length) {
     const result = {
-      walks: walks.length,
+      walks: distinct,
       foldedAwayBp: spread(walks.map((w) => ({ bp: w.insertedBp + w.skippedBp, freq: w.freq }))),
       insertedBp: spread(walks.map((w) => ({ bp: w.insertedBp, freq: w.freq }))),
       skippedBp: spread(walks.map((w) => ({ bp: w.skippedBp, freq: w.freq })))
@@ -807,7 +810,7 @@
           insertedBp: h.insertedBp,
           skippedBp: h.skippedBp,
           freq: h.walk.freq
-        })))
+        })), new Set(held.map((h) => tracks[h.walk.index].sequence.join())).size)
       };
       return track;
     });
@@ -8788,7 +8791,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/groupBy.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.2.0/node_modules/@jbrowse/tubemap-core/esm/groupBy.js
   function groupBy(items, key) {
     const groups = /* @__PURE__ */ new Map();
     for (const item of items) {
@@ -8803,7 +8806,7 @@
     return groups;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/minHeap.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.2.0/node_modules/@jbrowse/tubemap-core/esm/minHeap.js
   var MinHeap = class {
     constructor(key) {
       __publicField(this, "items", []);
@@ -8847,7 +8850,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/panSN.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.2.0/node_modules/@jbrowse/tubemap-core/esm/panSN.js
   var NOT_SAMPLES = /* @__PURE__ */ new Set(["_gbwt_ref", "unknown"]);
   function parsePanSN(name) {
     const [sample, haplotype, contig] = name?.split("#") ?? [];
@@ -8857,7 +8860,7 @@
     return { sample, haplotype: Number(haplotype), contig };
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/layout.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.2.0/node_modules/@jbrowse/tubemap-core/esm/layout.js
   var READ_FACET_FIELDS = ["read_group", "sample_name"];
   var FACET_FIELDS = [...READ_FACET_FIELDS, "haplotype_sample"];
   var DEFAULT_CHAR_WIDTH = 8.401;
@@ -8884,6 +8887,7 @@
       ignoreStrand: options.ignoreStrand ?? false,
       nodeWidthOption: options.nodeWidthOption ?? "normal",
       charWidth: options.charWidth ?? DEFAULT_CHAR_WIDTH,
+      basesPerPixel: options.basesPerPixel ?? 100 / DEFAULT_CHAR_WIDTH,
       trackWidth: options.trackWidth ?? 15,
       freqWidth: options.freqWidth ?? "log"
     };
@@ -10250,7 +10254,7 @@
     state.tracks.sort(compareTrackByInitialOrdering);
     state.tracks.forEach((track) => {
       const { id, name, type, width, path } = track;
-      const rectangle = (xStart2, xEnd2, yStart2) => {
+      const rectangle = (xStart2, xEnd2, yStart2, isForward) => {
         state.shapes.rectangles.push({
           xStart: Math.min(xStart2, xEnd2),
           yStart: yStart2,
@@ -10258,7 +10262,8 @@
           yEnd: yStart2 + width - 1,
           id,
           name,
-          type
+          type,
+          ...isForward ? {} : { reverse: true }
         });
       };
       const exitX = (seg) => seg.isForward ? orderEndX[seg.order] : orderStartX[seg.order];
@@ -10273,7 +10278,7 @@
         }
         const xEnd2 = exitX(prev);
         if (xEnd2 !== xStart) {
-          rectangle(xStart, xEnd2, yStart);
+          rectangle(xStart, xEnd2, yStart, prev.isForward);
         }
         const yEnd = seg.y;
         const step = seg.order - prev.order;
@@ -10303,7 +10308,7 @@
       }
       const last = path[path.length - 1];
       const xEnd = type === "read" ? readBaseX(state, last, track.finalNodeCoverLength ?? 0) : exitX(last) + (last.isForward ? 20 : -20);
-      rectangle(xStart, xEnd, yStart);
+      rectangle(xStart, xEnd, yStart, last.isForward);
     });
   }
   var COARSENED_ID_BASE = 1e9;
@@ -10406,8 +10411,8 @@
     const refIndex = rulerIndex === -1 ? 0 : rulerIndex;
     const ref = state.tracks[refIndex];
     const refDuplicates = (ref.freq ?? 1) - 1;
-    const refSigns = firstVisitSigns(state, ref);
-    const altHaplotypes = state.tracks.filter((_, i) => i !== refIndex).map((walk) => orientedLike(refSigns, walk));
+    const refVisits = firstVisits(state, ref);
+    const altHaplotypes = state.tracks.filter((_, i) => i !== refIndex).map((walk) => orientedLike(refVisits, walk));
     if (refDuplicates > 0) {
       altHaplotypes.push({ ...ref, freq: refDuplicates });
     }
@@ -10417,29 +10422,28 @@
     const { bands, total } = buildCoarsenedSyntheticBands(state, altHaplotypes, "haplotype", firstId);
     return bands.length > 0 ? { ref, bands, total } : void 0;
   }
-  function orientedLike(refSigns, walk) {
-    let agreement = 0;
-    for (const visit of walk.indexSequence) {
-      const sign = refSigns[Math.abs(visit)];
-      if (sign !== void 0 && sign !== 0) {
-        agreement += sign === Math.sign(visit) ? 1 : -1;
-      }
-    }
-    return agreement >= 0 ? walk : {
+  function orientedLike(refVisits, walk) {
+    const shared = walk.indexSequence.filter((visit) => refVisits[Math.abs(visit)] !== 0);
+    const refStep = (visit) => visit === void 0 ? 0 : Math.abs(refVisits[Math.abs(visit)]);
+    const progress = refStep(shared[shared.length - 1]) - refStep(shared[0]);
+    const agreement = shared.reduce((sum, visit) => sum + (Math.sign(refVisits[Math.abs(visit)]) === Math.sign(visit) ? 1 : -1), 0);
+    const oneWay = Math.abs(agreement) === shared.length;
+    const direction = progress === 0 || oneWay ? agreement : progress;
+    return direction >= 0 ? walk : {
       ...walk,
       sequence: walk.sequence.map(flip).reverse(),
       indexSequence: walk.indexSequence.map((visit) => -visit).reverse()
     };
   }
-  function firstVisitSigns(state, ref) {
-    const signs = new Int8Array(state.nodes.length);
-    for (const visit of ref.indexSequence) {
+  function firstVisits(state, ref) {
+    const visits = new Int32Array(state.nodes.length);
+    for (const [step, visit] of ref.indexSequence.entries()) {
       const node = Math.abs(visit);
-      if (signs[node] === 0) {
-        signs[node] = Math.sign(visit);
+      if (visits[node] === 0) {
+        visits[node] = Math.sign(visit) * (step + 1);
       }
     }
-    return signs;
+    return visits;
   }
   function formatShare({ count: count2, total }) {
     const share = count2 / total;
@@ -10513,12 +10517,14 @@
           node.pixelWidth = Math.round((node.width - 1) * DEFAULT_CHAR_WIDTH);
         });
         break;
-      case "small":
+      case "small": {
+        const basesPerCharacter = state.config.basesPerPixel * DEFAULT_CHAR_WIDTH;
         state.nodes.forEach((node) => {
-          node.width = node.sequenceLength / 100;
+          node.width = node.sequenceLength / basesPerCharacter;
           node.pixelWidth = Math.max(Math.round((node.width - 1) * DEFAULT_CHAR_WIDTH), 0);
         });
         break;
+      }
       case "fixed":
         state.nodes.forEach((node) => {
           node.width = 10;
@@ -10708,7 +10714,7 @@
     return successor !== 0 && soleNeighbor(pred, successor) !== 0;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/geometry.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.2.0/node_modules/@jbrowse/tubemap-core/esm/geometry.js
   function compareCurvesByXYStartValue(a, b) {
     return b.xStart - a.xStart || a.yStart - b.yStart;
   }
@@ -10864,7 +10870,7 @@
     return d;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.2.0/node_modules/@jbrowse/tubemap-core/esm/mismatches.js
   function readMismatches(layout) {
     const { nodes, nodeMap } = layout;
     const out = [];
@@ -10911,7 +10917,7 @@
     return out;
   }
 
-  // node_modules/.pnpm/@jbrowse+tubemap-core@2.1.1/node_modules/@jbrowse/tubemap-core/esm/readColors.js
+  // node_modules/.pnpm/@jbrowse+tubemap-core@2.2.0/node_modules/@jbrowse/tubemap-core/esm/readColors.js
   var FORWARD_READ_COLORS = Object.freeze([
     "#fb6a4a",
     "#ef3b2c",

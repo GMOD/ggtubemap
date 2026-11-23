@@ -13,7 +13,7 @@
   "devDependencies": {
     "@jbrowse/graph-fold": "file:../../graph-fold/jbrowse-graph-fold-0.0.0.tgz",
     "@jbrowse/graph-walks": "^9.1.0",
-    "@jbrowse/tubemap-core": "2.1.1",
+    "@jbrowse/tubemap-core": "2.2.0",
     "esbuild": "^0.28.2"
   }
 }

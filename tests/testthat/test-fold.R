@@ -44,9 +44,9 @@ test_that("fold keeps the variants of its size or more as branches, in reference
                c("DEL#1#chr1", "INS#1#chr1", "SNP#1#chr1"))
   expect_false(any(b$cluster))
   expect_true(all(is.na(b$cluster_members)))
-  expect_equal(b$label, c("deletion 4.0 kb, 1 of 4",
-                          "replacement 2.0 kb for 4.0 kb, 1 of 4",
-                          "deletion 1.0 kb, 1 of 4"))
+  expect_equal(b$label, c("deletion 4 kb, 1 of 4",
+                          "replacement 2 kb for 4 kb, 1 of 4",
+                          "deletion 1 kb, 1 of 4"))
 })
 
 test_that("the folded nodes are the reference between breakpoints, and every step is on one", {
@@ -62,8 +62,8 @@ test_that("the folded nodes are the reference between breakpoints, and every ste
 
 test_that("walks that fold to the same steps are one track that counts and lists them", {
   g <- read_gfa(stepless, region = "chr1:1-7000", fold = 1500)
-  expect_equal(g$branches$label, c("deletion 4.0 kb, 1 of 4",
-                                   "replacement 2.0 kb for 4.0 kb, 1 of 4"))
+  expect_equal(g$branches$label, c("deletion 4 kb, 1 of 4",
+                                   "replacement 2 kb for 4 kb, 1 of 4"))
   freq <- vapply(g$tracks, `[[`, 0, "freq")
   expect_equal(sum(freq), 4)
   expect_equal(lengths(lapply(g$tracks, `[[`, "haplotypes")), freq)
@@ -224,7 +224,7 @@ test_that("tubes counts what each folded track stands for and what the fold hid 
                       use.names = FALSE), c(1000, 1000, 1000))
   expect_equal(snp$inserted_bp_max, 0)
   expect_equal(snp$folded_away_bp_max, 1000)
-  expect_equal(snp$label, "1 haplotype on 1 distinct walk, 1.0 kb folded away in each")
+  expect_equal(snp$label, "1 haplotype on 1 distinct walk, 1 kb folded away in each")
   expect_equal(tubemap_layout(g)$tubes, g$tubes)
 })
 
