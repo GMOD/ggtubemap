@@ -161,7 +161,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@0.1.0/node_modules/@jbrowse/graph-fold/esm/chain.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.0.0/node_modules/@jbrowse/graph-fold/esm/chain.js
   function runsOf(anchors) {
     const runs = [];
     for (const anchor of anchors) {
@@ -226,7 +226,7 @@
     return runs;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@0.1.0/node_modules/@jbrowse/graph-fold/esm/cluster.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.0.0/node_modules/@jbrowse/graph-fold/esm/cluster.js
   function siteKey({ left, right, inserted }) {
     return `${left}:${right}:${inserted}`;
   }
@@ -249,7 +249,7 @@
     return leaderOf;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@0.1.0/node_modules/@jbrowse/graph-fold/esm/labels.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.0.0/node_modules/@jbrowse/graph-fold/esm/labels.js
   function bpLabel(bp) {
     return bp >= 1e3 ? `${(bp / 1e3).toFixed(bp >= 1e5 ? 0 : 1).replace(/\.0$/, "")} kb` : `${bp} bp`;
   }
@@ -268,13 +268,18 @@
   function trackLabel(freq, names) {
     return freq === 1 && names[0] !== void 0 ? names[0] : plural(freq, "haplotype");
   }
+  function referenceLabel(name, freq) {
+    return freq > 1 ? `${name} and ${plural(freq - 1, "identical haplotype")}` : name;
+  }
   function variationLabel({ freq, variation }) {
     const { walks, foldedAwayBp } = variation;
-    const hidden = foldedAwayBp.max === 0 ? "nothing folded away" : foldedAwayBp.min === foldedAwayBp.max ? `${bpLabel(foldedAwayBp.max)} folded away in each` : `${bpLabel(foldedAwayBp.min)} to ${bpLabel(foldedAwayBp.max)} folded away in each`;
+    const least = bpLabel(foldedAwayBp.min);
+    const most = bpLabel(foldedAwayBp.max);
+    const hidden = foldedAwayBp.max === 0 ? "nothing folded away" : foldedAwayBp.min === foldedAwayBp.max ? `${most} folded away in each` : least === most ? `about ${most} folded away in each` : `${least} to ${most} folded away in each`;
     return `${plural(freq, "haplotype")} on ${plural(walks, "distinct walk")}, ${hidden}`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@0.1.0/node_modules/@jbrowse/graph-fold/esm/fold.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.0.0/node_modules/@jbrowse/graph-fold/esm/fold.js
   function parseStep(step) {
     return step.startsWith("-") ? { name: step.slice(1), reversed: true } : { name: step, reversed: false };
   }
@@ -781,7 +786,7 @@
       ...refTrack,
       id: 0,
       name: refName,
-      label: refName,
+      label: referenceLabel(refName, refTrack.freq ?? 1),
       sequence: segments.map((segment) => segment.name),
       freq: refTrack.freq ?? 1,
       sourceTrackID: refTrack.sourceTrackID ?? 0,
