@@ -161,7 +161,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@1.1.0/node_modules/@jbrowse/graph-fold/esm/chain.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.2.0/node_modules/@jbrowse/graph-fold/esm/chain.js
   function runsOf(anchors) {
     const runs = [];
     for (const anchor of anchors) {
@@ -226,7 +226,7 @@
     return runs;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@1.1.0/node_modules/@jbrowse/graph-fold/esm/cluster.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.2.0/node_modules/@jbrowse/graph-fold/esm/cluster.js
   function siteKey({ left, right, inserted }) {
     return `${left}:${right}:${inserted}`;
   }
@@ -249,7 +249,7 @@
     return leaderOf;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@1.1.0/node_modules/@jbrowse/graph-fold/esm/haplotypes.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.2.0/node_modules/@jbrowse/graph-fold/esm/haplotypes.js
   function haplotypeKey(tracks, index) {
     return tracks[index]?.haplotype ?? index;
   }
@@ -264,7 +264,7 @@
     };
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@1.1.0/node_modules/@jbrowse/graph-fold/esm/labels.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.2.0/node_modules/@jbrowse/graph-fold/esm/labels.js
   function bpLabel(bp) {
     return bp >= 1e3 ? `${(bp / 1e3).toFixed(bp >= 1e5 ? 0 : 1).replace(/\.0$/, "")} kb` : `${bp} bp`;
   }
@@ -275,7 +275,8 @@
     const { cluster, insertedBp, deletedBp, length } = branch;
     const shortest = cluster ? bpLabel(cluster.minLength) : "";
     const longest = cluster ? bpLabel(cluster.maxLength) : "";
-    const size = cluster ? shortest === longest ? `about ${longest}` : `${shortest} to ${longest}` : insertedBp > 0 && deletedBp > 0 ? `${bpLabel(insertedBp)} for ${bpLabel(deletedBp)}` : bpLabel(length);
+    const replaced = insertedBp > 0 && deletedBp > 0 ? ` for ${bpLabel(deletedBp)}` : "";
+    const size = cluster ? shortest === longest ? `about ${longest}${replaced}` : `${shortest} to ${longest}${replaced}` : insertedBp > 0 && deletedBp > 0 ? `${bpLabel(insertedBp)} for ${bpLabel(deletedBp)}` : bpLabel(length);
     const lengths = cluster ? ` (cluster of ${plural(cluster.members, "length")})` : "";
     const cut = branch.open ? ", continues past the window" : "";
     return `${branch.description} ${size}${lengths}, ${branch.haplotypes} of ${haplotypes}${cut}`;
@@ -294,7 +295,7 @@
     return `${plural(haplotypes, "haplotype")} on ${plural(walks, "distinct walk")}, ${hidden}`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-fold@1.1.0/node_modules/@jbrowse/graph-fold/esm/fold.js
+  // node_modules/.pnpm/@jbrowse+graph-fold@1.2.0/node_modules/@jbrowse/graph-fold/esm/fold.js
   function times(count2) {
     return count2 === 1 ? "once" : count2 === 2 ? "twice" : `${count2} times`;
   }
@@ -595,6 +596,10 @@
           visit.original += bp;
         }
       };
+      const hide = (visit, from, to) => {
+        absorb(visit, from, to);
+        visit.largestHidden = Math.max(visit.largestHidden, prefix[to] - prefix[from]);
+      };
       const ownVisit = (node, length, reversed) => {
         const visit = {
           node,
@@ -603,7 +608,9 @@
           walked: 0,
           extra: 0,
           clipped: 0,
-          original: 0
+          original: 0,
+          largestHidden: 0,
+          largestSkipped: 0
         };
         return visit;
       };
@@ -626,7 +633,7 @@
           }));
         } else {
           if (fallback !== void 0 && to > from) {
-            absorb(fallback, from, to);
+            hide(fallback, from, to);
           }
         }
       };
@@ -799,7 +806,9 @@
               length: segment.length,
               walked: 0,
               extra: 0,
-              clipped: segment.length - refBp(Math.max(from, segment.start), Math.min(to, segment.end))
+              clipped: segment.length - refBp(Math.max(from, segment.start), Math.min(to, segment.end)),
+              largestHidden: 0,
+              largestSkipped: 0
             };
             bySegment.set(s, visit);
             elements.push(visit);
@@ -817,7 +826,22 @@
         let home = runVisits[0];
         run.anchors.forEach((anchor, pair) => {
           if (pair > 0) {
-            absorb(byPair.get(pair) ?? home, run.anchors[pair - 1].step + 1, anchor.step);
+            const before2 = run.anchors[pair - 1];
+            const drawnAs = byPair.get(pair);
+            if (drawnAs === void 0) {
+              hide(home, before2.step + 1, anchor.step);
+            } else {
+              absorb(drawnAs, before2.step + 1, anchor.step);
+            }
+            const left = Math.min(before2.ref, anchor.ref) + 1;
+            const right = Math.max(before2.ref, anchor.ref);
+            const skipDrawn = run.drawn.some((d) => d.pair === pair && d.right > d.left);
+            if (!skipDrawn && right > left) {
+              for (const s of segmentsIn(left, right)) {
+                const visit2 = bySegment.get(s) ?? home;
+                visit2.largestSkipped = Math.max(visit2.largestSkipped, refBp(left, right));
+              }
+            }
           }
           const visit = covered.some(([from, to]) => anchor.ref >= from && anchor.ref < to) ? bySegment.get(segmentOf[anchor.ref]) : void 0;
           if (visit === void 0) {
@@ -847,9 +871,20 @@
       }
       const foldedSteps = visits.flatMap((visit, step) => {
         const { node, length, walked, extra, clipped, original } = visit;
+        const { largestHidden, largestSkipped } = visit;
         const insertedBp = original === void 0 ? extra : Math.max(0, original - length);
         const skippedBp = original === void 0 ? length - clipped - walked : Math.max(0, length - original);
-        return insertedBp > 0 || skippedBp > 0 || clipped > 0 ? [{ step, node, insertedBp, skippedBp, clippedBp: clipped }] : [];
+        return insertedBp > 0 || skippedBp > 0 || clipped > 0 || largestHidden > 0 || largestSkipped > 0 ? [
+          {
+            step,
+            node,
+            insertedBp,
+            skippedBp,
+            clippedBp: clipped,
+            largestInsertedBp: largestHidden,
+            largestSkippedBp: largestSkipped
+          }
+        ] : [];
       });
       const total = (pick) => foldedSteps.reduce((sum, step) => sum + pick(step), 0);
       return {
@@ -869,7 +904,7 @@
         ...allele,
         haplotypes: haplotypesIn(carried)
       }));
-      const sizes = alleles.map((a) => Math.max(a.insertedBp, a.deletedBp));
+      const sizes = alleles.map((a) => a.insertedBp > 0 ? a.insertedBp : a.deletedBp);
       const info = tally !== void 0 && alleles.length > 1 ? {
         members: alleles.length,
         minLength: Math.min(...sizes),
@@ -1025,7 +1060,7 @@
     return reason === void 0 ? foldWindow(nodes, tracks, reference, threshold, cluster, clusterTolerance, inversions === "box") : unfolded(nodes, tracks, threshold, reason);
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/util.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.2.0/node_modules/@jbrowse/graph-walks/esm/util.js
   var RegionTooLargeError = class extends Error {
     constructor(message, limit, windowBp, fitsBp, overBytes) {
       super(message);
@@ -1065,7 +1100,7 @@
     return mb >= 1 ? `${mb.toLocaleString("en-US")}Mbp` : bp >= 1e3 ? `${precise(bp / 1e3).toLocaleString("en-US")}Kbp` : `${Math.floor(bp)}bp`;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.2.0/node_modules/@jbrowse/graph-walks/esm/walkChunk.js
   var NONE = -1;
   var idOf = (handle) => (handle - (handle & 1)) / 2;
   var ID_LIMIT = 2 ** 31;
@@ -1940,6 +1975,58 @@
     }
     return sound ? tally : void 0;
   }
+  var takes = (cols, keep, expand) => {
+    var _a;
+    return cols[3] === "abridged" && ((_a = keep === null || keep === void 0 ? void 0 : keep(cols[4])) !== null && _a !== void 0 ? _a : true) && (expand === null || expand === void 0 ? void 0 : expand(cols[4])) !== true;
+  };
+  function statedAbridgedSteps(lines, keep, expand) {
+    let steps = 0;
+    for (const line of lines) {
+      const cols = line.split("	", 9);
+      const stated = takes(cols, keep, expand) ? Number(cols[8]) : 0;
+      steps += Number.isFinite(stated) ? stated : 0;
+    }
+    return steps;
+  }
+  function blocksSteps(lines, blocksLines, drawn, keep, expand) {
+    const kinds = /* @__PURE__ */ new Set(["ref", "abridged"]);
+    const rows = lines.filter((line) => {
+      var _a;
+      return kinds.has((_a = line.split("	", 4)[3]) !== null && _a !== void 0 ? _a : "");
+    }).map((line) => line.split("	"));
+    const listed = new Map(blocksLines.map((line) => {
+      const cols = line.split("	");
+      return [`${cols[4]}	${cols[5]}	${cols[6]}`, cols];
+    }));
+    const inside = (blocks, k) => blockLow(blocks, k) >= drawn.start && blockLow(blocks, k) + blocks.lengths[k] <= drawn.end;
+    let steps = 0;
+    let sound = true;
+    try {
+      const { path } = chunkRef(rows);
+      for (const cols of rows.filter((row) => takes(row, keep, expand))) {
+        const piece = abridgedPiece(cols, 0);
+        const row = listed.get(`${piece.name}	${piece.fragStart}	${piece.piece}`);
+        const blocks = row ? parseBlocks(row) : void 0;
+        if (blocks && blocks.before + blocks.bp + blocks.after === piece.hapBp) {
+          const { from, to } = blockPositions(piece, blocks, path);
+          for (let k = 0; k < from.length; k++) {
+            if (inside(blocks, k)) {
+              steps += to[k] - from[k];
+              steps += k > 0 && blocks.off[k] > 0 && inside(blocks, k - 1) ? 1 : 0;
+            }
+          }
+        } else {
+          sound = false;
+        }
+      }
+    } catch (error) {
+      if (!(error instanceof WalkRowError)) {
+        throw error;
+      }
+      sound = false;
+    }
+    return sound ? steps : void 0;
+  }
   var deltaIds = (field, previous) => field === "." ? [] : field.split(",").map((token) => {
     const delta = Number.parseInt(token, 10);
     previous.id += (delta - (delta & 1)) / 2;
@@ -2140,7 +2227,7 @@
     return nodes;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.2.0/node_modules/@jbrowse/graph-walks/esm/walkDeparture.js
   var ATTACH_BP = 65536;
   function squeezer(holes, refName) {
     const spans = holes.filter((h) => h.refName === refName).sort((a, b) => a.start - b.start);
@@ -2217,7 +2304,7 @@
     });
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.2.0/node_modules/@jbrowse/graph-walks/esm/walkGaps.js
   var GAP_KINDS = ["steps", "read", "own", "unread"];
   function groupByName(items, refName) {
     const out = /* @__PURE__ */ new Map();
@@ -2514,7 +2601,7 @@
     return gaps;
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.2.0/node_modules/@jbrowse/graph-walks/esm/walkRows.js
   var isPlaceholder = (id) => id < 0;
   function integerTag(line, tag) {
     const match = new RegExp(`(?:^|\\t)${tag}:i:(\\d+)`).exec(line);
@@ -3300,7 +3387,7 @@
     bounds.push(run.ids.length);
     return bounds;
   }
-  function surelyKept(chunk, nodes, { contained, start, end }, into) {
+  function surelyKept(chunk, nodes, { contained, start, end }, into, placeholders) {
     var _a;
     for (const id of chunk.nodes.keys()) {
       if (((_a = nodes.get(id)) === null || _a === void 0 ? void 0 : _a.onWindow) === true) {
@@ -3317,8 +3404,11 @@
         if ((node === null || node === void 0 ? void 0 : node.onWindow) === true && onR && at < end && at + node.end - node.start > start) {
           if (last >= 0) {
             for (let j = last + 1; j < i; j++) {
-              if (!isPlaceholder(ids[j])) {
-                into.add(ids[j]);
+              const id = ids[j];
+              if (!isPlaceholder(id)) {
+                into.add(id);
+              } else if (id !== SKIPPED) {
+                placeholders === null || placeholders === void 0 ? void 0 : placeholders.add(id);
               }
             }
           }
@@ -3729,11 +3819,14 @@
     return new RegionTooLargeError(`Zoom in to about ${bpString(fits)}${filtered ? "" : ", or choose fewer haplotypes,"} to see the graph`, limit, window.end - window.start, fits);
   }
   function surelyKeptError(tiles, budget, window, context, filtered) {
+    var _a;
     let steps = 0;
+    let likely = 0;
     let bp = 0;
     for (const tile of tiles) {
       if (tile.steps !== void 0) {
         steps += tile.steps;
+        likely += Math.max(tile.steps, (_a = tile.likely) !== null && _a !== void 0 ? _a : 0);
         bp += tile.end - tile.start;
       }
     }
@@ -3741,7 +3834,10 @@
       start: Math.max(0, window.start - context),
       end: window.end + context
     };
-    return steps > budget ? zoomInError(budgetReach(tiles, bp > 0 ? steps / bp : 0, budget, drawn) - context - window.start, budget, window, filtered) : void 0;
+    return steps > budget ? zoomInError(budgetReach(tiles.map((tile) => {
+      var _a2;
+      return tile.steps === void 0 ? tile : { ...tile, steps: Math.max(tile.steps, (_a2 = tile.likely) !== null && _a2 !== void 0 ? _a2 : 0) };
+    }), bp > 0 ? likely / bp : 0, budget, drawn) - context - window.start, budget, window, filtered) : void 0;
   }
   function budgetReach(tiles, perBp, budget, drawn) {
     let held = 0;
@@ -4024,7 +4120,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.2.0/node_modules/@jbrowse/graph-walks/esm/refNames.js
   function qualifiedKey(assemblyName, refName) {
     return `${assemblyName}	${refName}`;
   }
@@ -4068,7 +4164,7 @@
     return held === null || held === void 0 ? void 0 : held[0];
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.2.0/node_modules/@jbrowse/graph-walks/esm/tabixSource.js
   function checkRange(refName, start, end) {
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
       throw new Error(`${refName}:${start}-${end} is not a finite range to query the graph's index for`);
@@ -6861,7 +6957,7 @@
     }
   }
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkFile.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.2.0/node_modules/@jbrowse/graph-walks/esm/walkFile.js
   var WALK_FORMAT = 8;
   var WalkFormatError = class extends Error {
     constructor() {
@@ -7163,7 +7259,7 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkCounts.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.2.0/node_modules/@jbrowse/graph-walks/esm/walkCounts.js
   var COUNT_REASONS = Object.freeze({
     unloaded: 1,
     unattached: 2,
@@ -7694,10 +7790,11 @@
     }
   };
 
-  // node_modules/.pnpm/@jbrowse+graph-walks@9.1.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
+  // node_modules/.pnpm/@jbrowse+graph-walks@9.2.0/node_modules/@jbrowse/graph-walks/esm/walkReader.js
   var READ_STEPS_PER_KEPT = 8;
   var WALK_CONTEXT = 1e3;
   var DETAIL_READS = 16;
+  var DETAIL_READ_BYTES = 2e6;
   var WALK_BUDGETS = Object.freeze({
     stepBudget: 4e6,
     byteBudget: 8e6,
@@ -7747,6 +7844,24 @@
       signal.throwIfAborted();
       use(items[i], await reads[i]);
     }
+  }
+  function touchingRuns(items, maxBytes) {
+    var _a;
+    const runs = [];
+    const place2 = new Map(items.map((item, k) => [item, k]));
+    for (const item of [...items].sort((a, b) => a.unit.offset - b.unit.offset)) {
+      const run = runs.at(-1);
+      const last = run === null || run === void 0 ? void 0 : run.items.at(-1);
+      const at = (_a = place2.get(item)) !== null && _a !== void 0 ? _a : 0;
+      if (run && last && last.unit.offset + last.unit.length === item.unit.offset && run.bytes + item.unit.length <= maxBytes) {
+        run.items.push(item);
+        run.bytes += item.unit.length;
+        run.first = Math.min(run.first, at);
+      } else {
+        runs.push({ items: [item], bytes: item.unit.length, first: at });
+      }
+    }
+    return runs.sort((a, b) => a.first - b.first).map((run) => run.items);
   }
   var piecesJoined = (ends) => {
     var _a;
@@ -7963,8 +8078,8 @@
       return referenceNodes(read.flat().map((line) => line.split("	"))).filter((node) => node.refName === refName && node.end > region.start && node.start < region.end).sort((a, b) => a.start - b.start || a.end - b.end);
     }
     async cut(refName, region, opts = {}) {
-      var _a, _b, _c, _d, _e;
-      const { signal, keep, context = WALK_CONTEXT, stepBudget = WALK_BUDGETS.stepBudget, byteBudget = WALK_BUDGETS.byteBudget, departureByteBudget = WALK_BUDGETS.departureByteBudget, attachBp = ATTACH_BP, links = "walked", contained = false, nodeLimit = Infinity, expand } = opts;
+      var _a, _b, _c, _d, _e, _f;
+      const { signal, keep, context = WALK_CONTEXT, stepBudget = WALK_BUDGETS.stepBudget, byteBudget = WALK_BUDGETS.byteBudget, departureByteBudget = WALK_BUDGETS.departureByteBudget, attachBp = ATTACH_BP, links = "walked", contained = false, nodeLimit = Infinity, placeholderLimit = Infinity, expand } = opts;
       checkRange(refName, region.start, region.end);
       const [header, units] = await Promise.all([
         this.header({ signal }),
@@ -8005,6 +8120,7 @@
         return ((_a2 = decodedBy.get(unit.offset)) === null || _a2 === void 0 ? void 0 : _a2.some((took) => took(name))) === true;
       };
       const surely = /* @__PURE__ */ new Set();
+      const surelyPlaceholders = Number.isFinite(placeholderLimit) ? /* @__PURE__ */ new Set() : void 0;
       const bounds = {
         contained,
         start: region.start - context,
@@ -8037,13 +8153,15 @@
       const over = { ...drawn };
       const ownRecords = /* @__PURE__ */ new Map();
       const checkNodes = (chunk, readTo) => {
-        if (Number.isFinite(nodeLimit)) {
-          surelyKept(chunk, graph.nodes, bounds, surely);
-          if (surely.size > nodeLimit) {
+        var _a2, _b2, _c2;
+        if (Number.isFinite(nodeLimit) || Number.isFinite(placeholderLimit)) {
+          surelyKept(chunk, graph.nodes, bounds, surely, surelyPlaceholders);
+          if (surely.size > nodeLimit || ((_a2 = surelyPlaceholders === null || surelyPlaceholders === void 0 ? void 0 : surelyPlaceholders.size) !== null && _a2 !== void 0 ? _a2 : 0) > placeholderLimit) {
             surely.clear();
-            surelyKept({ nodes: graph.nodes, rows }, graph.nodes, bounds, surely);
+            surelyPlaceholders === null || surelyPlaceholders === void 0 ? void 0 : surelyPlaceholders.clear();
+            surelyKept({ nodes: graph.nodes, rows }, graph.nodes, bounds, surely, surelyPlaceholders);
           }
-          const tooMany2 = keptNodesError(surely.size, nodeLimit, region, filtered, readTo);
+          const tooMany2 = (_b2 = keptNodesError(surely.size, nodeLimit, region, filtered, readTo)) !== null && _b2 !== void 0 ? _b2 : keptNodesError((_c2 = surelyPlaceholders === null || surelyPlaceholders === void 0 ? void 0 : surelyPlaceholders.size) !== null && _c2 !== void 0 ? _c2 : 0, placeholderLimit, region, filtered, readTo);
           if (tooMany2) {
             throw tooMany2;
           }
@@ -8057,8 +8175,8 @@
           }
         }
       };
-      const placeNodes = (nodes) => {
-        for (const [id, node] of nodes) {
+      const placeNodes = (nodes2) => {
+        for (const [id, node] of nodes2) {
           graph.placeNode(id, node);
         }
       };
@@ -8097,10 +8215,7 @@
         }
         place2(tileCut, unit.end);
       };
-      const readDetail = async ({ unit }) => {
-        const [lines = []] = await this.file.read([unit], reads.signal);
-        return lines.map((line) => line.split("	"));
-      };
+      const readDetails = (run) => this.file.read(run.map((detail) => detail.unit), reads.signal);
       const decodeDetail = ({ unit, ref, piece, into, pieces }, held) => {
         const tileCut = decodeChunk(held, piece.chunkStart, (name) => name === piece.name, opts.sequences, ref);
         const taken = tileCut.rows.filter((row) => pieces.has(keyOf(row)));
@@ -8169,6 +8284,14 @@
           ] : [];
         });
       };
+      const readBlocks = async (wanted) => {
+        const unread = wanted.filter((w) => !blocksRead.has(w.unit));
+        const fetched = await this.file.read(unread.map((w) => w.unit), reads.signal);
+        unread.forEach((w, k) => {
+          extra.push(w);
+          blocksRead.set(w.unit, fetched[k]);
+        });
+      };
       const blocksOf = async (items, attaching) => {
         var _a2, _b2, _c2, _d2;
         const tilesMet = /* @__PURE__ */ new Map();
@@ -8186,11 +8309,7 @@
         if (unread.length > 0) {
           checkBytes(bytesWith(unread), attaching);
         }
-        const fetched = await this.file.read(unread.map((w) => w.unit), reads.signal);
-        unread.forEach((w, k) => {
-          extra.push(w);
-          blocksRead.set(w.unit, fetched[k]);
-        });
+        await readBlocks(unread);
         const listed = /* @__PURE__ */ new Map();
         for (const [k, tileUnit] of [...tilesMet.keys()].entries()) {
           const byPiece = /* @__PURE__ */ new Map();
@@ -8237,7 +8356,7 @@
         const batch = met;
         met = [];
         const lines = attaching ? [] : linesOf(batch.map(bySpan));
-        const drawnPieces = new Set(betweenDrawn(lines).map((held) => held.item));
+        const drawnPieces = new Set(betweenDrawn(lines).map((held2) => held2.item));
         const reached = new Set(contained && context > 0 && !attaching ? beforeDrawn(lines) : []);
         const ownRuns = new Map(batch.map((item) => [item, ownRunsOf(item.piece)]));
         const built = batch.filter((item) => {
@@ -8259,7 +8378,21 @@
           return read ? [{ read, runs: (_a3 = ownRuns.get(item)) !== null && _a3 !== void 0 ? _a3 : [] }] : [];
         });
         const cores = coresOf(fromBlocks.map(({ read }) => read), built.filter(expanding));
-        await readInOrder([...details.values()], DETAIL_READS, reads.signal, readDetail, decodeDetail);
+        const wanted = [...details.values()];
+        const held = /* @__PURE__ */ new Map();
+        let decoded = 0;
+        await readInOrder(touchingRuns(wanted, DETAIL_READ_BYTES), DETAIL_READS, reads.signal, readDetails, (run, fetched) => {
+          var _a3;
+          run.forEach((detail, k) => {
+            var _a4;
+            return held.set(detail, (_a4 = fetched[k]) !== null && _a4 !== void 0 ? _a4 : []);
+          });
+          while (decoded < wanted.length && held.has(wanted[decoded])) {
+            const detail = wanted[decoded++];
+            decodeDetail(detail, split((_a3 = held.get(detail)) !== null && _a3 !== void 0 ? _a3 : []));
+            held.delete(detail);
+          }
+        });
         const starts = attaching ? pieceStarts(attachRows) : pieceStarts(rows);
         for (const { piece } of batch) {
           starts.set(keyOf(piece), piece.hapOffset);
@@ -8299,12 +8432,8 @@
         }
       };
       const overBytes = (more, attach) => Number.isFinite(byteBudget) && byteBudgetError(bytesWith(more), byteBudget, region, tile, opts.budgetNames, attach) !== void 0;
-      const noEarlierRefusal = (read, counted2, records, ownTiles) => {
+      const noEarlierRefusal = (read, all, records, ownTiles) => {
         var _a2, _b2, _c2, _d2;
-        const all = tiles.map((_, k) => {
-          const tally = counted2[k];
-          return tally === "edge" ? tileSteps(read[k], keep, expand) : tally;
-        });
         const blocks = tiles.filter((_, k) => {
           var _a3;
           return ((_a3 = all[k]) === null || _a3 === void 0 ? void 0 : _a3.blocks) === true;
@@ -8333,6 +8462,7 @@
         }
         const fetching = [...attaching].map(([unit, from]) => ({ unit, from }));
         const nodesFit = () => !Number.isFinite(nodeLimit) || fetching.length === 0 && all.every((t) => (t === null || t === void 0 ? void 0 : t.expanded) === false) && read.slice(0, tiles.length).reduce((ids, lines) => tileNodeIds(lines, ids), /* @__PURE__ */ new Set()).size <= nodeLimit;
+        const placeholdersFit = !Number.isFinite(placeholderLimit) || fetching.length === 0 && all.every((t) => (t === null || t === void 0 ? void 0 : t.blocks) === false);
         const held = all.reduce((sum, t) => {
           var _a3, _b3;
           return {
@@ -8340,18 +8470,52 @@
             interior: sum.interior + ((_b3 = t === null || t === void 0 ? void 0 : t.interior) !== null && _b3 !== void 0 ? _b3 : 0)
           };
         }, { n: 0, interior: 0 });
-        return all.every((t) => t !== void 0) && blocks.every(({ unit }) => unit !== void 0) && readSteps(held) <= stepBudget * READ_STEPS_PER_KEPT && !(unread.length > 0 && overBytes(unread, false)) && !(fetching.length > 0 && overBytes([...unread, ...fetching], true)) && nodesFit();
+        return all.every((t) => t !== void 0) && blocks.every(({ unit }) => unit !== void 0) && readSteps(held) <= stepBudget * READ_STEPS_PER_KEPT && !(unread.length > 0 && overBytes(unread, false)) && !(fetching.length > 0 && overBytes([...unread, ...fetching], true)) && placeholdersFit && nodesFit();
       };
-      const earlyRefusal = (read, records, ownTiles) => {
+      const earlyRefusal = async (read, records, ownTiles) => {
         const counted2 = tiles.map((unit, k) => unit.start > drawn.start && unit.end < drawn.end ? tileSteps(read[k], keep, expand) : "edge");
-        const kept2 = counted2.reduce((sum, tally) => {
-          var _a2;
-          return sum + (tally === "edge" ? 0 : (_a2 = tally === null || tally === void 0 ? void 0 : tally.kept) !== null && _a2 !== void 0 ? _a2 : 0);
-        }, 0);
-        return kept2 > stepBudget && noEarlierRefusal(read, counted2, records, ownTiles) ? surelyKeptError(tiles.map((unit, k) => {
+        const rowSteps = counted2.map((tally) => tally === "edge" ? void 0 : tally === null || tally === void 0 ? void 0 : tally.kept);
+        const kept2 = rowSteps.reduce((sum, n) => sum + (n !== null && n !== void 0 ? n : 0), 0);
+        const all = () => tiles.map((_, k) => {
           const tally = counted2[k];
-          return tally === "edge" ? unit : { ...unit, steps: tally === null || tally === void 0 ? void 0 : tally.kept };
-        }), stepBudget, region, context, filtered) : void 0;
+          return tally === "edge" ? tileSteps(read[k], keep, expand) : tally;
+        });
+        const refusal = (steps, whole = []) => surelyKeptError(tiles.map((unit, k) => {
+          var _a2;
+          const start = Math.max(unit.start, drawn.start);
+          const end = Math.min(unit.end, drawn.end);
+          const drawnShare = unit.end > unit.start ? (end - start) / (unit.end - unit.start) : 1;
+          const count2 = steps[k];
+          return count2 === void 0 ? unit : counted2[k] === "edge" ? {
+            start,
+            end,
+            steps: count2,
+            likely: count2 + ((_a2 = whole[k]) !== null && _a2 !== void 0 ? _a2 : 0) * drawnShare
+          } : { ...unit, steps: count2 };
+        }), stepBudget, region, context, filtered);
+        const fromBlocks = async () => {
+          const tallies = all();
+          const abridging = tiles.flatMap((windowTile, k) => {
+            var _a2;
+            const unit = blocksUnits.get(windowTile.name);
+            return ((_a2 = tallies[k]) === null || _a2 === void 0 ? void 0 : _a2.blocks) === true && unit ? [{ unit, from: windowTile.start, k }] : [];
+          });
+          const builtOf = async () => {
+            await readBlocks(abridging);
+            return abridging.map(({ unit, k }) => {
+              var _a2;
+              return blocksSteps(read[k], (_a2 = blocksRead.get(unit)) !== null && _a2 !== void 0 ? _a2 : [], bounds, keep, expand);
+            });
+          };
+          const built = noEarlierRefusal(read, tallies, records, ownTiles) ? await builtOf() : void 0;
+          const steps = [...rowSteps];
+          abridging.forEach(({ k }, i) => {
+            var _a2, _b2;
+            steps[k] = ((_a2 = steps[k]) !== null && _a2 !== void 0 ? _a2 : 0) + ((_b2 = built === null || built === void 0 ? void 0 : built[i]) !== null && _b2 !== void 0 ? _b2 : 0);
+          });
+          return (built === null || built === void 0 ? void 0 : built.every((n) => n !== void 0)) === true ? refusal(steps, tallies.map((tally) => tally === null || tally === void 0 ? void 0 : tally.kept)) : void 0;
+        };
+        return kept2 > stepBudget ? noEarlierRefusal(read, all(), records, ownTiles) ? refusal(rowSteps) : void 0 : kept2 + tiles.reduce((sum, _, k) => sum + statedAbridgedSteps(read[k], keep, expand), 0) > stepBudget ? fromBlocks() : void 0;
       };
       let cut;
       try {
@@ -8374,7 +8538,7 @@
             held.push(d);
           }
         }
-        const early = Number.isFinite(stepBudget) ? earlyRefusal(read, records, ownTiles) : void 0;
+        const early = Number.isFinite(stepBudget) ? await earlyRefusal(read, records, ownTiles) : void 0;
         if (early) {
           throw early;
         }
@@ -8442,7 +8606,9 @@
       } finally {
         signal === null || signal === void 0 ? void 0 : signal.removeEventListener("abort", stop);
       }
-      const tooMany = (_e = keptStepsError(cut.fragments, cut.departures, stepBudget, region, filtered)) !== null && _e !== void 0 ? _e : keptNodesError(keptNodes(cut.kept), nodeLimit, region, filtered);
+      const nodes = keptNodes(cut.kept);
+      const placeholders = cut.kept.size - nodes;
+      const tooMany = (_f = (_e = keptStepsError(cut.fragments, cut.departures, stepBudget, region, filtered)) !== null && _e !== void 0 ? _e : keptNodesError(nodes, nodeLimit, region, filtered)) !== null && _f !== void 0 ? _f : keptNodesError(placeholders, placeholderLimit, region, filtered);
       if (tooMany) {
         throw tooMany;
       }
@@ -8457,7 +8623,7 @@
         get gaps() {
           return cut.gapsOf();
         },
-        placeholders: kept.size - keptNodes(kept)
+        placeholders
       };
     }
     /**

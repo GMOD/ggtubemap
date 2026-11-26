@@ -11,8 +11,8 @@
     "update-deps": "tools/update-deps.sh"
   },
   "devDependencies": {
-    "@jbrowse/graph-fold": "^1.1.0",
-    "@jbrowse/graph-walks": "^9.1.0",
+    "@jbrowse/graph-fold": "^1.2.0",
+    "@jbrowse/graph-walks": "^9.2.0",
     "@jbrowse/tubemap-core": "2.2.0",
     "esbuild": "^0.28.2"
   }

@@ -9,11 +9,11 @@ importers:
   .:
     devDependencies:
       '@jbrowse/graph-fold':
-        specifier: ^1.1.0
-        version: 1.1.0
+        specifier: ^1.2.0
+        version: 1.2.0
       '@jbrowse/graph-walks':
-        specifier: ^9.1.0
-        version: 9.1.0
+        specifier: ^9.2.0
+        version: 9.2.0
       '@jbrowse/tubemap-core':
         specifier: 2.2.0
         version: 2.2.0
@@ -182,12 +182,13 @@ packages:
   '@gmod/bgzf-filehandle@6.8.5':
     resolution: {integrity: sha512-kVM/7/OSMkUba9PEokm7kZ3jZqXxZdtYNFjZe6S2a48Xpci7SL74dTBwyFAYCoLm5/ynd8Pr9S2Ycy7Fbvjs2A==}
 
-  '@jbrowse/graph-fold@1.1.0':
-    resolution: {integrity: sha512-Oa9rp055ACkD52R8IeEjAONlitEkxHj6Fot48VIggt4xUy4U8bwTS3LcP7Lbmi6+5seNQm512PtwK6IEG+dPZA==}
+  '@jbrowse/graph-fold@1.2.0':
+    resolution: {integrity: sha512-rTjerGvVBeJt9Y85U904bzzwZsfEHYd7b0N3M73LmAToMECovCJgBnY3HmwUJob0dOsmcZ2mPDE7nMgHidaXxw==}
 
-  '@jbrowse/graph-walks@9.1.0':
-    resolution: {integrity: sha512-H+G7WQNjaypsjJB1xwFxIMf14gSC0G7t3uckjl8LNVN44edqGlxS4YDuju3VbAyYHUHjbh22HtaUhfFvykipVA==}
+  '@jbrowse/graph-walks@9.2.0':
+    resolution: {integrity: sha512-Rc+rxC6i/CEh0OcUkZGLXYV5Z0Q+LdfiXJUF3T1qhqY9sl7Sye72g3/2HjtQ5x2hasztLIv06gzCeQuDCulzJQ==}
     engines: {node: '>=20'}
+    deprecated: 'Renamed to @gmod/gfa-tabix: https://github.com/GMOD/gfa-tabix-js/blob/main/docs/migrating-to-10.md'
 
   '@jbrowse/tubemap-core@2.2.0':
     resolution: {integrity: sha512-rzryd+LA7ZY0JU4EjEgGyPGUsstRm3fIFD9E1QF2uAH9+LwDnJM1nMEP/xXSdLfAbYDjom3kh/VxyD9oxJ5Eag==}
@@ -288,9 +289,9 @@ snapshots:
       generic-filehandle2: 2.5.1
       pako-esm2: 2.0.2
 
-  '@jbrowse/graph-fold@1.1.0': {}
+  '@jbrowse/graph-fold@1.2.0': {}
 
-  '@jbrowse/graph-walks@9.1.0':
+  '@jbrowse/graph-walks@9.2.0':
     dependencies:
       '@gmod/bgzf-filehandle': 6.8.5
       generic-filehandle2: 2.5.1
